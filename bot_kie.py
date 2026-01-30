@@ -4413,6 +4413,11 @@ def load_json_file(filename: str, default: dict = None) -> dict:
     if default is None:
         default = {}
     
+    # AUDIT: Log file being loaded
+    storage_filename = os.path.basename(filename)
+    if storage_filename in ("user_registry.json", "user_balances.json"):
+        logger.info("LOAD_JSON_FILE_AUDIT filename=%s", storage_filename)
+    
     cache_key = get_cache_key(filename)
     current_time = time.time()
     
@@ -4449,6 +4454,11 @@ def load_json_file(filename: str, default: dict = None) -> dict:
                 storage.read_json_file(storage_filename, default),
                 label=f"read:{storage_filename}",
             )
+            # AUDIT: Log what we got from storage for critical files
+            if storage_filename in ("user_registry.json", "user_balances.json"):
+                data_keys = list(data.keys())[:10] if isinstance(data, dict) else "NOT_DICT"
+                logger.info("STORAGE_READ_AUDIT file=%s keys_count=%d sample_keys=%s storage_type=%s",
+                           storage_filename, len(data) if isinstance(data, dict) else 0, data_keys, type(storage).__name__)
             data = _normalize_storage_payload(
                 data,
                 filename=filename,
@@ -4531,6 +4541,7 @@ async def _persist_user_registry_batch(batch: Dict[int, Dict[str, Any]]) -> None
             storage.update_json_file(storage_filename, updater),
             timeout=USER_REGISTRY_PERSIST_TIMEOUT_SECONDS,
         )
+        logger.info("USER_REGISTRY_PERSIST_SUCCESS batch_size=%s user_ids=%s", len(batch), list(batch.keys())[:5])
     except asyncio.TimeoutError:
         logger.warning(
             "USER_REGISTRY_PERSIST_TIMEOUT batch_size=%s timeout_s=%s",
@@ -6418,11 +6429,21 @@ def get_all_users() -> list:
     """Get list of all user IDs from various sources."""
     user_ids = set()
     
+    # AUDIT: Log storage backend info
+    try:
+        from app.storage.factory import get_storage
+        storage = get_storage()
+        storage_type = type(storage).__name__
+        logger.info("GET_ALL_USERS_AUDIT storage_backend=%s", storage_type)
+    except Exception as e:
+        logger.warning("GET_ALL_USERS_AUDIT storage_check_failed error=%s", e)
+    
     # From user registry (primary source - all users who used /start)
     registry = load_json_file(USER_REGISTRY_FILE, {})
     registry_users = [int(uid) for uid in registry.keys() if uid.isdigit()]
     user_ids.update(registry_users)
-    logger.info("GET_ALL_USERS source=user_registry count=%d keys=%s", len(registry_users), list(registry.keys())[:5])
+    logger.info("GET_ALL_USERS source=user_registry count=%d keys=%s raw_keys=%s", 
+                len(registry_users), list(registry.keys())[:5], list(registry.keys())[:10])
     
     # From user balances
     balances = load_json_file(BALANCES_FILE, {})
