@@ -7061,7 +7061,7 @@ def get_extended_admin_stats() -> dict:
     top_models = sorted(model_usage.items(), key=lambda x: x[1], reverse=True)[:5]
     top_models_list = []
     for model_id, count in top_models:
-        model_info = get_model_by_id(model_id)
+        model_info = get_model_by_id_from_registry(model_id)
         model_name = model_info.get('name', model_id) if model_info else model_id
         top_models_list.append({'name': model_name, 'id': model_id, 'count': count})
     
