@@ -3512,6 +3512,9 @@ ADMIN_TEST_OCR = 5
 WAITING_BROADCAST_MESSAGE = 6
 WAITING_CURRENCY_RATE = 7
 
+# Admin add balance state
+ADMIN_ADD_BALANCE = 8
+
 # Store user sessions - now supports multiple concurrent generations per user
 # Structure: user_sessions[user_id] = {session_data} for input/parameter collection
 # Once task is created, it moves to active_generations
@@ -7255,6 +7258,8 @@ async def render_admin_panel(update_or_query, context: ContextTypes.DEFAULT_TYPE
 
     keyboard = [
         [InlineKeyboardButton("📊 Обновить статистику", callback_data="admin_stats")],
+        [InlineKeyboardButton("💳 Платежи", callback_data="admin_payments")],
+        [InlineKeyboardButton("💰 Начислить баланс", callback_data="admin_add_balance")],
         [InlineKeyboardButton("📚 Просмотр генераций", callback_data="admin_view_generations")],
         [InlineKeyboardButton("⚙️ Настройки", callback_data="admin_settings")],
         [InlineKeyboardButton("🔍 Поиск", callback_data="admin_search")],
@@ -15691,6 +15696,86 @@ async def _button_callback_impl(
             )
             return ConversationHandler.END
         
+        if data == "admin_payments":
+            # Check admin access
+            if not is_admin(user_id):
+                await query.answer("Эта функция доступна только администратору.")
+                return ConversationHandler.END
+            
+            # Get all payments
+            payments_data = load_json_file(PAYMENTS_FILE, {})
+            payments_list = list(payments_data.values()) if isinstance(payments_data, dict) else []
+            
+            # Sort by timestamp (newest first)
+            payments_list.sort(key=lambda x: x.get('timestamp', 0), reverse=True)
+            
+            # Take last 20 payments
+            recent_payments = payments_list[:20]
+            
+            if not recent_payments:
+                text = (
+                    "💳 <b>ПЛАТЕЖИ</b>\n\n"
+                    "📭 Платежей пока нет.\n\n"
+                    "Здесь будут отображаться все платежи пользователей."
+                )
+            else:
+                text = "💳 <b>ПОСЛЕДНИЕ ПЛАТЕЖИ</b>\n\n"
+                for i, payment in enumerate(recent_payments, 1):
+                    user_id_pay = payment.get('user_id', 'N/A')
+                    amount = payment.get('amount', 0)
+                    status = payment.get('status', 'pending')
+                    timestamp = payment.get('timestamp', 0)
+                    
+                    # Format timestamp
+                    from datetime import datetime
+                    dt = datetime.fromtimestamp(timestamp) if timestamp else None
+                    date_str = dt.strftime('%d.%m.%Y %H:%M') if dt else 'N/A'
+                    
+                    # Status emoji
+                    status_emoji = "✅" if status == 'completed' else "⏳" if status == 'pending' else "❌"
+                    
+                    text += f"{i}. {status_emoji} <code>{user_id_pay}</code> — {format_rub_amount(amount)} ({date_str})\n"
+                
+                text += f"\n📊 Всего платежей: {len(payments_list)}"
+            
+            keyboard = [
+                [InlineKeyboardButton("🔄 Обновить", callback_data="admin_payments")],
+                [InlineKeyboardButton("◀️ Назад", callback_data="admin_back_to_admin")]
+            ]
+            
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='HTML'
+            )
+            return ConversationHandler.END
+        
+        if data == "admin_add_balance":
+            # Check admin access
+            if not is_admin(user_id):
+                await query.answer("Эта функция доступна только администратору.")
+                return ConversationHandler.END
+            
+            await query.edit_message_text(
+                "💰 <b>НАЧИСЛЕНИЕ БАЛАНСА</b>\n\n"
+                "Отправьте сообщение в формате:\n"
+                "<code>@username сумма</code>\n\n"
+                "Примеры:\n"
+                "• <code>@ferixdiii 50</code> — начислить 50₽\n"
+                "• <code>@user123 100</code> — начислить 100₽\n\n"
+                "Или отправьте ID пользователя:\n"
+                "<code>123456789 50</code>\n\n"
+                "Нажмите /cancel для отмены.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("◀️ Назад", callback_data="admin_back_to_admin")]
+                ]),
+                parse_mode='HTML'
+            )
+            user_sessions[user_id] = {
+                'waiting_for': 'admin_add_balance'
+            }
+            return ADMIN_ADD_BALANCE
+        
         if data == "admin_test_ocr":
             # Check admin access
             if not is_admin(user_id):
@@ -20396,6 +20481,100 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
             return await send_confirmation_message(update, context, user_id, source="text_input")
         return next_param_result
 
+    # Handle admin add balance
+    if user_id == ADMIN_ID and user_id in user_sessions and user_sessions[user_id].get('waiting_for') == 'admin_add_balance':
+        text = update.message.text.strip()
+        
+        # Parse input: @username amount OR user_id amount
+        parts = text.split()
+        if len(parts) < 2:
+            await update.message.reply_text(
+                "❌ Неверный формат.\n\n"
+                "Используйте: <code>@username сумма</code> или <code>user_id сумма</code>",
+                parse_mode='HTML'
+            )
+            return ADMIN_ADD_BALANCE
+        
+        target = parts[0]
+        try:
+            amount = float(parts[1].replace(',', '.'))
+            if amount <= 0 or amount > 100000:
+                raise ValueError("Invalid amount")
+        except:
+            await update.message.reply_text(
+                "❌ Неверная сумма. Введите число от 1 до 100000.",
+                parse_mode='HTML'
+            )
+            return ADMIN_ADD_BALANCE
+        
+        # Find user by username or ID
+        target_user_id = None
+        target_username = None
+        
+        if target.startswith('@'):
+            # Search by username
+            target_username = target[1:].lower()
+            registry = load_json_file(USER_REGISTRY_FILE, {})
+            for uid, data in registry.items():
+                if isinstance(data, dict):
+                    stored_username = data.get('username', '').lower()
+                    if stored_username == target_username:
+                        target_user_id = int(uid)
+                        break
+            
+            if not target_user_id:
+                await update.message.reply_text(
+                    f"❌ Пользователь @{target_username} не найден в базе.\n\n"
+                    "Попробуйте использовать user_id вместо username.",
+                    parse_mode='HTML'
+                )
+                return ADMIN_ADD_BALANCE
+        else:
+            # Assume it's a user_id
+            try:
+                target_user_id = int(target)
+            except:
+                await update.message.reply_text(
+                    "❌ Неверный формат. Используйте @username или числовой user_id.",
+                    parse_mode='HTML'
+                )
+                return ADMIN_ADD_BALANCE
+        
+        # Add balance to user
+        try:
+            old_balance = await get_user_balance_async(target_user_id)
+            await add_user_balance_async(target_user_id, amount)
+            new_balance = await get_user_balance_async(target_user_id)
+            
+            # Log the manual balance addition
+            logger.info(f"ADMIN_MANUAL_BALANCE_ADD admin_id={user_id} target_user={target_user_id} amount={amount} old_balance={old_balance} new_balance={new_balance}")
+            
+            # Clear session
+            if user_id in user_sessions:
+                del user_sessions[user_id]
+            
+            await update.message.reply_text(
+                f"✅ <b>БАЛАНС НАЧИСЛЕН</b>\n\n"
+                f"👤 Пользователь: <code>{target_user_id}</code>{f' (@{target_username})' if target_username else ''}\n"
+                f"💰 Начислено: <b>{format_rub_amount(amount)}</b>\n"
+                f"💵 Было: {format_rub_amount(old_balance)}\n"
+                f"💵 Стало: <b>{format_rub_amount(new_balance)}</b>",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("💰 Начислить еще", callback_data="admin_add_balance")],
+                    [InlineKeyboardButton("◀️ Назад", callback_data="admin_back_to_admin")]
+                ]),
+                parse_mode='HTML'
+            )
+            return ConversationHandler.END
+            
+        except Exception as e:
+            logger.error(f"Error adding balance: {e}", exc_info=True)
+            await update.message.reply_text(
+                f"❌ Ошибка при начислении баланса: {str(e)}",
+                parse_mode='HTML'
+            )
+            return ADMIN_ADD_BALANCE
+    
     # Handle admin OCR test
     if user_id == ADMIN_ID and user_id in user_sessions and user_sessions[user_id].get('waiting_for') == 'admin_test_ocr':
         if update.message.photo:
@@ -27571,6 +27750,8 @@ async def _register_all_handlers_internal(application: Application):
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_create_broadcast$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast_stats$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_test_ocr$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_payments$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_add_balance$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_user_mode$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_back_to_admin$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^back_to_menu$'),
@@ -27641,6 +27822,8 @@ async def _register_all_handlers_internal(application: Application):
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_create_broadcast$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast_stats$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_test_ocr$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_payments$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_add_balance$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_user_mode$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_back_to_admin$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^cancel(:.*)?$'),
@@ -27689,6 +27872,8 @@ async def _register_all_handlers_internal(application: Application):
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_create_broadcast$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast_stats$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_test_ocr$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_payments$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_add_balance$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_user_mode$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_back_to_admin$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^cancel(:.*)?$'),
@@ -27745,6 +27930,8 @@ async def _register_all_handlers_internal(application: Application):
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_create_broadcast$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast_stats$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_test_ocr$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_payments$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_add_balance$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_user_mode$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_back_to_admin$')
             ]
