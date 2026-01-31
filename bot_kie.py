@@ -7034,6 +7034,12 @@ def get_extended_admin_stats() -> dict:
     for user_key, user_history in history.items():
         for gen in user_history:
             timestamp = gen.get('timestamp', 0)
+            # Convert timestamp to int if it's a string
+            if isinstance(timestamp, str):
+                try:
+                    timestamp = int(float(timestamp))
+                except (ValueError, TypeError):
+                    timestamp = 0
             user_id = int(user_key) if user_key.isdigit() else None
             if user_id:
                 if timestamp >= today_start:
@@ -15698,7 +15704,7 @@ async def _button_callback_impl(
         
         if data == "admin_payments":
             # Check admin access
-            if not is_admin(user_id):
+            if user_id != ADMIN_ID:
                 await query.answer("Эта функция доступна только администратору.")
                 return ConversationHandler.END
             
@@ -15752,7 +15758,7 @@ async def _button_callback_impl(
         
         if data == "admin_add_balance":
             # Check admin access
-            if not is_admin(user_id):
+            if user_id != ADMIN_ID:
                 await query.answer("Эта функция доступна только администратору.")
                 return ConversationHandler.END
             
@@ -15778,7 +15784,7 @@ async def _button_callback_impl(
         
         if data == "admin_test_ocr":
             # Check admin access
-            if not is_admin(user_id):
+            if user_id != ADMIN_ID:
                 await query.answer("Эта функция доступна только администратору.")
                 return ConversationHandler.END
             
