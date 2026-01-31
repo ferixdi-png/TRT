@@ -7483,6 +7483,8 @@ async def analyze_payment_screenshot(image_data: bytes, expected_amount: float, 
             'переведено',  # Transferred (STRONGEST)
             'отправлено',  # Sent (STRONGEST)
             'сбп',  # SBP system name
+            'итого',  # Total (receipt header - STRONG indicator)
+            'квитанция',  # Receipt (STRONG indicator)
         ]
         
         # Additional keywords: Weaker but supporting
@@ -7506,14 +7508,19 @@ async def analyze_payment_screenshot(image_data: bytes, expected_amount: float, 
         
         # Extract amount from text - STRICT MATCHING
         amount_patterns = [
-            # HIGHEST PRIORITY: Numbers with currency symbols (most reliable)
-            (r'(\d{2,6})[.,]?(\d{0,2})\s*[₽рубрубль]', 'с рублём'),
-            (r'[₽рубрубль]\s*(\d{2,6})[.,]?(\d{0,2})', 'рубль перед'),
+            # HIGHEST PRIORITY: "Итого" pattern (receipt total - most reliable for bank receipts)
+            (r'итого\s*(\d{1,6})\s*[₽рp]', 'итого'),
+            (r'итого\s*(\d{1,6})[.,](\d{0,2})\s*[₽рp]?', 'итого с копейками'),
+            # HIGH PRIORITY: Numbers with currency symbols (most reliable)
+            (r'(\d{1,6})[.,]?(\d{0,2})\s*[₽рp]', 'с рублём'),
+            (r'[₽рp]\s*(\d{1,6})[.,]?(\d{0,2})', 'рубль перед'),
+            # HIGH PRIORITY: "Сумма" pattern
+            (r'сумма\s*(\d{1,6})\s*[₽рp]?', 'сумма'),
+            (r'сумма\s*(\d{1,6})[.,](\d{0,2})', 'сумма с копейками'),
             # HIGH PRIORITY: Near payment keywords
-            (r'(?:сумма|переведено?|перевел|amount)\s*[=:]\s*(\d{2,6})[.,]?(\d{0,2})\s*[₽рубрубль]?', 'сумма='),
-            (r'(?:сумма|переведено?|перевел|amount)[=:]\s*(\d{2,6})', 'ключевое слово'),
-            # MEDIUM PRIORITY: Standalone large numbers
-            (r'\b(\d{3,6})[.,]?(\d{0,2})\b', 'большое число'),
+            (r'(?:сумма|переведено?|перевел|amount)\s*[=:]?\s*(\d{1,6})[.,]?(\d{0,2})\s*[₽рp]?', 'ключевое слово'),
+            # MEDIUM PRIORITY: Standalone numbers (2+ digits to avoid noise)
+            (r'\b(\d{2,6})[.,]?(\d{0,2})\b', 'число'),
         ]
         
         amount_found = False
