@@ -7264,6 +7264,7 @@ async def render_admin_panel(update_or_query, context: ContextTypes.DEFAULT_TYPE
 
     keyboard = [
         [InlineKeyboardButton("📊 Обновить статистику", callback_data="admin_stats")],
+        [InlineKeyboardButton("👥 Пользователи", callback_data="admin_users")],
         [InlineKeyboardButton("💳 Платежи", callback_data="admin_payments")],
         [InlineKeyboardButton("💰 Начислить баланс", callback_data="admin_add_balance")],
         [InlineKeyboardButton("📚 Просмотр генераций", callback_data="admin_view_generations")],
@@ -15698,6 +15699,53 @@ async def _button_callback_impl(
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("◀️ Назад", callback_data="admin_back_to_admin")]
                 ]),
+                parse_mode='HTML'
+            )
+            return ConversationHandler.END
+        
+        if data == "admin_users":
+            # Check admin access
+            if user_id != ADMIN_ID:
+                await query.answer("Эта функция доступна только администратору.")
+                return ConversationHandler.END
+            
+            # Get user registry with usernames
+            registry = load_json_file(USER_REGISTRY_FILE, {})
+            balances = load_json_file(BALANCES_FILE, {})
+            
+            if not registry:
+                text = (
+                    "👥 <b>ПОЛЬЗОВАТЕЛИ</b>\n\n"
+                    "📭 Пользователей пока нет."
+                )
+            else:
+                # Sort by user_id (newest first - higher IDs)
+                sorted_users = sorted(registry.items(), key=lambda x: int(x[0]) if x[0].isdigit() else 0, reverse=True)
+                
+                text = f"👥 <b>ПОЛЬЗОВАТЕЛИ</b> ({len(sorted_users)})\n\n"
+                
+                # Show first 20 users
+                for i, (uid, data) in enumerate(sorted_users[:20], 1):
+                    username = data.get('username', '') if isinstance(data, dict) else ''
+                    first_name = data.get('first_name', '') if isinstance(data, dict) else ''
+                    balance = balances.get(uid, 0)
+                    if isinstance(balance, dict):
+                        balance = balance.get('balance', 0)
+                    
+                    user_display = f"@{username}" if username else first_name or f"ID:{uid}"
+                    text += f"{i}. <code>{uid}</code> {user_display} — {format_rub_amount(balance)}\n"
+                
+                if len(sorted_users) > 20:
+                    text += f"\n... и ещё {len(sorted_users) - 20} пользователей"
+            
+            keyboard = [
+                [InlineKeyboardButton("🔄 Обновить", callback_data="admin_users")],
+                [InlineKeyboardButton("◀️ Назад", callback_data="admin_back_to_admin")]
+            ]
+            
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='HTML'
             )
             return ConversationHandler.END
@@ -27756,6 +27804,7 @@ async def _register_all_handlers_internal(application: Application):
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_create_broadcast$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast_stats$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_test_ocr$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_users$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_payments$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_add_balance$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_user_mode$'),
@@ -27828,6 +27877,7 @@ async def _register_all_handlers_internal(application: Application):
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_create_broadcast$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast_stats$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_test_ocr$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_users$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_payments$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_add_balance$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_user_mode$'),
@@ -27878,6 +27928,7 @@ async def _register_all_handlers_internal(application: Application):
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_create_broadcast$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast_stats$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_test_ocr$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_users$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_payments$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_add_balance$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_user_mode$'),
@@ -27936,6 +27987,7 @@ async def _register_all_handlers_internal(application: Application):
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_create_broadcast$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast_stats$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_test_ocr$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_users$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_payments$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_add_balance$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_user_mode$'),
