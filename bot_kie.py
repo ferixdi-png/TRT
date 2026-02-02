@@ -18251,6 +18251,7 @@ async def _button_callback_impl(
                     await query.edit_message_text(
                         _build_insufficient_funds_text(user_lang, min_price, user_balance),
                         reply_markup=_build_insufficient_funds_keyboard(user_lang),
+                        parse_mode='HTML',
                     )
                     return ConversationHandler.END
                 await query.edit_message_text(
