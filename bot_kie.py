@@ -7595,12 +7595,13 @@ async def analyze_payment_screenshot(image_data: bytes, expected_amount: float, 
                     logger.info(f"✅ AMOUNT MATCHES: {found_amount} RUB (expected {expected_amount})")
                     break
             
-            # If no exact match within 5%, try with 10% tolerance (but log warning)
+            # SECURITY: Removed 10% tolerance - require exact match (within 2% for rounding)
+            # This prevents users from submitting lower payment screenshots
             if not amount_found:
                 for amt in unique_amounts:
                     diff = abs(amt - expected_amount)
                     diff_percent = (diff / expected_amount) if expected_amount > 0 else 1
-                    if diff_percent <= 0.10:  # 10% tolerance - RELAXED
+                    if diff_percent <= 0.02:  # 2% tolerance for rounding only
                         amount_found = True
                         found_amount = amt
                         logger.warning(f"⚠️ AMOUNT APPROXIMATELY MATCHES: {found_amount} RUB (expected {expected_amount}, diff {diff_percent*100:.1f}%)")
@@ -21029,22 +21030,33 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
                     return WAITING_PAYMENT_SCREENSHOT
                 
                 # PAYMENT PASSED VALIDATION - Add balance and credit user
-                logger.info(f"✅ Payment validation PASSED for user {user_id}, amount {amount} RUB")
+                # SECURITY FIX: Use found_amount from screenshot, NOT amount from session
+                # This prevents users from selecting high amount but sending lower payment screenshot
+                found_amount = analysis.get('found_amount', 0)
+                if not found_amount or found_amount <= 0:
+                    # Fallback to session amount only if OCR couldn't extract amount
+                    # This should rarely happen since amount_found is required for valid=True
+                    logger.warning(f"⚠️ SECURITY: found_amount missing, falling back to session amount {amount}")
+                    found_amount = amount
+                
+                # SECURITY: Credit only the amount found on screenshot
+                credit_amount = found_amount
+                logger.info(f"✅ Payment validation PASSED for user {user_id}, credit_amount={credit_amount} RUB (session_amount={amount}, found_amount={found_amount})")
                 
                 # Show success analysis details
                 analysis_msg = await update.message.reply_text(
                     f"{analysis.get('message', '')}\n\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    f"⏳ Начисляю баланс...",
+                    f"⏳ Начисляю баланс: {format_rub_amount(credit_amount)}...",
                     parse_mode='HTML'
                 )
                 
-                # Add payment and auto-credit balance
-                payment = await add_payment_async(user_id, amount, screenshot_file_id)
+                # Add payment and auto-credit balance - USE credit_amount FROM SCREENSHOT
+                payment = await add_payment_async(user_id, credit_amount, screenshot_file_id)
                 new_balance = await get_user_balance_async(user_id)
                 balance_str = format_rub_amount(new_balance)
                 
-                logger.info(f"✅ Balance credited: user={user_id}, added={amount} RUB, new_balance={new_balance} RUB")
+                logger.info(f"✅ Balance credited: user={user_id}, added={credit_amount} RUB (session_requested={amount}), new_balance={new_balance} RUB")
                 
                 # Delete analysis message
                 if analysis_msg:
@@ -21073,7 +21085,7 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
                     payment_success_msg = (
                         f"✅ <b>ОПЛАТА ПОЛУЧЕНА И ПРОВЕРЕНА!</b> ✅\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"💵 <b>Сумма платежа:</b> {format_rub_amount(amount)}\n"
+                        f"💵 <b>Сумма платежа:</b> {format_rub_amount(credit_amount)}\n"
                         f"💰 <b>Новый баланс:</b> {balance_str}\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                         f"🎉 <b>Отлично! Баланс пополнен!</b>\n\n"
@@ -21087,7 +21099,7 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
                     payment_success_msg = (
                         f"✅ <b>PAYMENT RECEIVED AND VERIFIED!</b> ✅\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"💵 <b>Amount:</b> {format_rub_amount(amount)}\n"
+                        f"💵 <b>Amount:</b> {format_rub_amount(credit_amount)}\n"
                         f"💰 <b>New balance:</b> {balance_str}\n\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                         f"🎉 <b>Great! Balance topped up!</b>\n\n"
