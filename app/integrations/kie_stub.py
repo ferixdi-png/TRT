@@ -228,19 +228,31 @@ class KIEStub:
 
 
 def get_kie_client_or_stub():
-    """Получить KIE клиент или stub в зависимости от env."""
+    """Получить KIE клиент или stub в зависимости от env.
+    
+    ВАЖНО: Stub используется ТОЛЬКО в TEST_MODE или при явном KIE_STUB=1.
+    Без KIE_API_KEY возвращается реальный клиент, который вернёт ошибку 401.
+    Партнёры ОБЯЗАНЫ иметь свой KIE_API_KEY!
+    """
     test_mode = os.getenv("TEST_MODE", "0").lower() in ("1", "true", "yes")
     force_stub = os.getenv("KIE_STUB", "0").lower() in ("1", "true", "yes")
     has_api_key = bool(os.getenv("KIE_API_KEY"))
 
-    if force_stub or test_mode or not has_api_key:
+    # Stub только для тестов или явного указания - НЕ для отсутствия ключа!
+    if force_stub or test_mode:
         logger.info(
-            "[STUB] Using KIE stub (force_stub=%s test_mode=%s has_key=%s)",
+            "[STUB] Using KIE stub (force_stub=%s test_mode=%s)",
             force_stub,
             test_mode,
-            has_api_key,
         )
         return KIEStub()
+
+    # Без ключа возвращаем реальный клиент - он вернёт ошибку 401
+    if not has_api_key:
+        logger.warning(
+            "[KIE] KIE_API_KEY not set! Generations will fail with 401 error. "
+            "Partners MUST provide their own KIE_API_KEY!"
+        )
 
     from app.kie.kie_client import get_kie_client
 
