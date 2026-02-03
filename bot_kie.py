@@ -7241,6 +7241,11 @@ async def add_payment_async(user_id: int, amount: float, screenshot_file_id: str
 def get_all_payments() -> list:
     """Get all payments sorted by timestamp (newest first)."""
     payments = load_json_file(PAYMENTS_FILE, {})
+    # CRITICAL AUDIT: Log what we got from storage
+    logger.info("GET_ALL_PAYMENTS_AUDIT raw_keys_count=%d sample_keys=%s payments_type=%s",
+                len(payments) if isinstance(payments, dict) else 0,
+                list(payments.keys())[:5] if isinstance(payments, dict) else [],
+                type(payments).__name__)
     payment_list = []
     invalid_count = 0
     for key, value in payments.items():
