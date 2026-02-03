@@ -26,9 +26,14 @@ def test_kie_env_uses_stub_in_test_mode(monkeypatch):
     assert isinstance(client, KIEStub)
 
 
-def test_kie_env_uses_stub_without_key(monkeypatch):
+def test_kie_env_uses_real_client_without_key(monkeypatch):
+    """Without KIE_API_KEY, real client is returned (will fail with 401).
+    
+    Partners MUST provide their own KIE_API_KEY - no fallback to stub!
+    """
     monkeypatch.delenv("KIE_API_KEY", raising=False)
     monkeypatch.delenv("TEST_MODE", raising=False)
     monkeypatch.delenv("KIE_STUB", raising=False)
     client = get_kie_client_or_stub()
-    assert isinstance(client, KIEStub)
+    # Real client is returned - it will fail with 401 "KIE_API_KEY not configured"
+    assert isinstance(client, KIEClient)
