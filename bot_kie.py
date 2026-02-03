@@ -166,6 +166,9 @@ GEN_TYPE_MENU_TIMEOUT_SECONDS = float(os.getenv("GEN_TYPE_MENU_TIMEOUT_SECONDS",
 JOB_TIMEOUT_SECONDS = int(os.getenv("JOB_TIMEOUT_SECONDS", "900"))
 JOB_TIMEOUT_MS = JOB_TIMEOUT_SECONDS * 1000
 
+# Название бота для партнёров (отображается в приветствии)
+BOT_NAME = os.getenv("BOT_NAME", "FERIXDI AI — Ultra Creative Suite")
+
 _message_rate_limiter = PerUserRateLimiter(MESSAGE_RATE_LIMIT_PER_SEC, MESSAGE_RATE_LIMIT_BURST)
 _callback_rate_limiter = PerUserRateLimiter(CALLBACK_RATE_LIMIT_PER_SEC, CALLBACK_RATE_LIMIT_BURST)
 _callback_data_rate_limiter = PerKeyRateLimiter(CALLBACK_DATA_RATE_LIMIT_PER_SEC, CALLBACK_DATA_RATE_LIMIT_BURST)
@@ -9087,7 +9090,7 @@ async def _build_main_menu_sections(
         
         header_text = (
             "Привет! 👋\n"
-            "🔥 <b>FERIXDI AI — Ultra Creative Suite</b>\n"
+            f"🔥 <b>{BOT_NAME}</b>\n"
             "Креатив под трафик: фото, ремикс, видео — быстро и чисто.\n\n"
             f"🎁 Бесплатные генерации: {remaining_free}/{FREE_GENERATIONS_PER_DAY}\n"
             f"{balance_lines}\n\n"
@@ -9104,6 +9107,7 @@ async def _build_main_menu_sections(
                 "welcome_new",
                 lang=resolved_lang,
                 name=name,
+                bot_name=BOT_NAME,
                 free=remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY,
                 free_limit=FREE_GENERATIONS_PER_DAY,
                 stars_balance=stars_balance,
@@ -9123,6 +9127,7 @@ async def _build_main_menu_sections(
                 "welcome_returning",
                 lang=resolved_lang,
                 name=name,
+                bot_name=BOT_NAME,
                 free=remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY,
                 free_limit=FREE_GENERATIONS_PER_DAY,
                 stars_balance=stars_balance,
