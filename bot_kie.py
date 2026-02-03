@@ -6462,7 +6462,7 @@ def get_all_users() -> list:
     payments = load_json_file(PAYMENTS_FILE, {})
     payment_users = []
     for payment in payments.values():
-        if 'user_id' in payment:
+        if isinstance(payment, dict) and 'user_id' in payment:
             payment_users.append(payment['user_id'])
             user_ids.add(payment['user_id'])
     logger.info("GET_ALL_USERS source=payments count=%d", len(payment_users))
@@ -6982,7 +6982,8 @@ async def add_payment_async(user_id: int, amount: float, screenshot_file_id: str
 def get_all_payments() -> list:
     """Get all payments sorted by timestamp (newest first)."""
     payments = load_json_file(PAYMENTS_FILE, {})
-    payment_list = list(payments.values())
+    # Filter out invalid records (string instead of dict)
+    payment_list = [p for p in payments.values() if isinstance(p, dict)]
     payment_list.sort(key=lambda x: x.get("timestamp", 0), reverse=True)
     return payment_list
 
