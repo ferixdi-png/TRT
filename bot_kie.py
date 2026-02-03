@@ -25733,12 +25733,21 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             bot_instance = context.bot
             
             async def _inline_poll_task():
+                # КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: начало polling
+                logger.info(
+                    "INLINE_POLL_STARTED correlation_id=%s task_id=%s user_id=%s model_id=%s",
+                    correlation_id, task_id, user_id, model_id
+                )
                 inline_poll_attempts = int(os.getenv("INLINE_POLL_ATTEMPTS", "12"))
                 inline_poll_interval = float(os.getenv("INLINE_POLL_INTERVAL_SECONDS", "2.5"))
                 from app.integrations.kie_stub import get_kie_client_or_stub
                 from app.delivery.reconciler import deliver_job_result, SUCCESS_STATES
                 
                 kie_client = get_kie_client_or_stub()
+                logger.info(
+                    "INLINE_POLL_CLIENT_READY correlation_id=%s kie_client_type=%s",
+                    correlation_id, type(kie_client).__name__
+                )
                 
                 for attempt in range(inline_poll_attempts):
                     await asyncio.sleep(inline_poll_interval)
