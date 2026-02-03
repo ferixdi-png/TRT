@@ -943,6 +943,12 @@ async def reconcile_pending_results(
     jobs = await storage.list_jobs_by_status(list(PENDING_STATES), limit=batch_limit)
     if not jobs:
         return
+    
+    # КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: сколько pending jobs найдено
+    logger.info(
+        "RECONCILER_PROCESSING pending_jobs=%d states=%s",
+        len(jobs), list(PENDING_STATES)
+    )
 
     now_ts = time.time()
     pending_ages = []
