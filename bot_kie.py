@@ -24177,10 +24177,43 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     # Используем адаптер для нормализации параметров
     from kie_input_adapter import normalize_for_generation
     
+    # ============================================================
+    # MODEL_REQUEST_LOG: Детальное логирование запроса к модели
+    # ============================================================
+    logger.info("=" * 60)
+    logger.info("MODEL_REQUEST_START model_id=%s user_id=%s", model_id, user_id)
+    logger.info("MODEL_REQUEST_RAW_PARAMS model_id=%s params_keys=%s", model_id, list(params.keys()))
+    
+    # Логируем ключевые параметры (без полного промпта для краткости)
+    for key, value in params.items():
+        if key == 'prompt':
+            logger.info("MODEL_REQUEST_PARAM model_id=%s param=%s value_len=%d value_preview=%s",
+                       model_id, key, len(str(value)) if value else 0, str(value)[:100] if value else "None")
+        elif key in ('image_input', 'image_urls', 'image_url', 'video_input', 'audio_input'):
+            logger.info("MODEL_REQUEST_PARAM model_id=%s param=%s value_type=%s value=%s",
+                       model_id, key, type(value).__name__, 
+                       f"[{len(value)} items]" if isinstance(value, list) else str(value)[:100])
+        else:
+            logger.info("MODEL_REQUEST_PARAM model_id=%s param=%s value=%s",
+                       model_id, key, str(value)[:100] if value else "None")
+    
     # Нормализуем параметры: применяем дефолты, валидируем, адаптируем к API
     api_params, validation_errors = normalize_for_generation(model_id, params)
     
+    # Логируем результат нормализации
+    logger.info("MODEL_NORMALIZE_RESULT model_id=%s success=%s errors_count=%d api_params_keys=%s",
+               model_id, len(validation_errors) == 0, len(validation_errors), list(api_params.keys()) if api_params else [])
+    
     if validation_errors:
+        # ============================================================
+        # MODEL_VALIDATION_ERROR: Детальное логирование ошибок валидации
+        # ============================================================
+        logger.error("=" * 60)
+        logger.error("MODEL_VALIDATION_FAILED model_id=%s user_id=%s errors_count=%d", model_id, user_id, len(validation_errors))
+        for idx, err in enumerate(validation_errors):
+            logger.error("MODEL_VALIDATION_ERROR model_id=%s error_%d=%s", model_id, idx + 1, err)
+        logger.error("=" * 60)
+        
         # Ошибки валидации - показываем пользователю
         user_lang = get_user_language(user_id) if user_id else 'ru'
         error_text = (
@@ -24200,6 +24233,9 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             reply_markup=build_back_to_menu_keyboard(user_lang),
         )
         return ConversationHandler.END
+    
+    # Логируем успешную валидацию
+    logger.info("MODEL_VALIDATION_OK model_id=%s user_id=%s", model_id, user_id)
     
     # Параметры нормализованы, используем api_params вместо params
     params = api_params

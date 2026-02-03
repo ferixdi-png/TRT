@@ -53,11 +53,18 @@ def validate(model_id: str, input_dict: Dict[str, Any]) -> Tuple[bool, List[str]
     Returns:
         (is_valid, list_of_errors)
     """
+    # ============================================================
+    # VALIDATOR_LOG: Детальное логирование валидации
+    # ============================================================
+    logger.info("VALIDATOR_START model_id=%s input_keys=%s", model_id, list(input_dict.keys()))
+    
     schema = get_model_schema(model_id)
     if not schema:
         # Model not found in registry - allow but warn
-        logger.warning(f"Model {model_id} not found in registry, skipping validation")
+        logger.warning("VALIDATOR_SCHEMA_NOT_FOUND model_id=%s", model_id)
         return True, []
+    
+    logger.info("VALIDATOR_SCHEMA_FOUND model_id=%s schema_params=%s", model_id, list(schema.keys()))
     
     errors = []
     
@@ -65,9 +72,16 @@ def validate(model_id: str, input_dict: Dict[str, Any]) -> Tuple[bool, List[str]
     for param_name, param_schema in schema.items():
         is_required = param_schema.get('required', False)
         param_value = input_dict.get(param_name)
+        param_type = param_schema.get('type', 'string')
+        
+        # Логируем проверку каждого параметра
+        logger.debug("VALIDATOR_CHECK_PARAM model_id=%s param=%s type=%s required=%s value_type=%s",
+                    model_id, param_name, param_type, is_required, 
+                    type(param_value).__name__ if param_value is not None else "None")
         
         if is_required and (param_value is None or param_value == ""):
             errors.append(f"Параметр '{param_name}' обязателен для заполнения")
+            logger.warning("VALIDATOR_REQUIRED_MISSING model_id=%s param=%s", model_id, param_name)
             continue
         
         if param_value is None:
@@ -128,5 +142,11 @@ def validate(model_id: str, input_dict: Dict[str, Any]) -> Tuple[bool, List[str]
                 float(param_value)
             except (ValueError, TypeError):
                 errors.append(f"Параметр '{param_name}' должен быть числом")
+    
+    # Логируем результат валидации
+    if errors:
+        logger.warning("VALIDATOR_FAILED model_id=%s errors_count=%d errors=%s", model_id, len(errors), errors)
+    else:
+        logger.info("VALIDATOR_OK model_id=%s", model_id)
     
     return len(errors) == 0, errors
