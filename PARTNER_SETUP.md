@@ -27,8 +27,7 @@
 
 | Переменная | Описание | Пример | Где получить |
 |------------|----------|--------|--------------|
-| `ADMIN_ID` | Telegram user_id главного админа (автора) | `6913446846` | Оставь как есть |
-| `BOT_OWNER_ID` | **ТВОЙ** Telegram user_id (даёт доступ к /admin) | `123456789` | https://t.me/userinfobot |
+| `ADMIN_ID` | **ТВОЙ** Telegram user_id (даёт доступ к /admin) | `6913446846` | https://t.me/userinfobot |
 | `BOT_INSTANCE_ID` | Уникальный ID инстанса (ОБЯЗАТЕЛЬНО уникальный!) | `partner-ivan-01` | Придумай сам |
 | `BOT_MODE` | Режим работы | `webhook` | Всегда `webhook` |
 | `DATABASE_URL` | Строка подключения к PostgreSQL | `postgresql://user:pass@host/db` | Render PostgreSQL или свой |
