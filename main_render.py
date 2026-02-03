@@ -764,6 +764,19 @@ async def main() -> None:
     application = await _get_initialized_application(settings)
     logger.info("[RENDER] Application initialized")
     
+    # КРИТИЧНО: Устанавливаем webhook в Telegram
+    webhook_base_url = os.getenv("WEBHOOK_BASE_URL", "").rstrip("/")
+    if webhook_base_url:
+        webhook_url = f"{webhook_base_url}/webhook"
+        logger.info("[RENDER] Step 2.5: Setting webhook url=%s", webhook_url)
+        try:
+            await application.bot.set_webhook(url=webhook_url, drop_pending_updates=True)
+            logger.info("[RENDER] ✅ WEBHOOK_SET_OK url=%s", webhook_url)
+        except Exception as webhook_exc:
+            logger.error("[RENDER] ❌ WEBHOOK_SET_FAILED url=%s error=%s", webhook_url, webhook_exc)
+    else:
+        logger.warning("[RENDER] ⚠️ WEBHOOK_BASE_URL not set, webhook not registered!")
+    
     if _early_update_count:
         logger.warning("WEBHOOK early_updates=%s gate=ready", _early_update_count)
 
