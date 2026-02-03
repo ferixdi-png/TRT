@@ -4511,11 +4511,15 @@ def load_json_file(filename: str, default: dict = None) -> dict:
 
 
 def _sanitize_json_payload(data: dict, *, filename: str) -> dict:
+    """Sanitize JSON payload before saving - remove garbage keys and ensure serializable."""
+    # First filter out garbage keys to prevent them from being saved
+    filtered = _filter_garbage_keys(data, filename=filename)
+    
     try:
-        json.dumps(data)
-        return data
+        json.dumps(filtered)
+        return filtered
     except TypeError:
-        sanitized = json.loads(json.dumps(data, default=str))
+        sanitized = json.loads(json.dumps(filtered, default=str))
         logger.warning(
             "STORAGE_JSON_SANITIZED filename=%s reason=non_serializable_payload",
             filename,
@@ -4538,41 +4542,72 @@ async def cleanup_garbage_keys_from_db() -> dict:
         "free_generations.json",
         "generations_history.json",
         "jobs.json",
+        "daily_free_generations.json",
     ]
     
-    summary = {"cleaned": [], "errors": [], "skipped": []}
+    summary = {"cleaned": [], "errors": [], "skipped": [], "total_removed": 0}
+    
+    logger.info("DB_GARBAGE_CLEANUP_START files_count=%d garbage_keys=%s", 
+                len(files_to_clean), list(SYSTEM_GARBAGE_KEYS))
     
     for filename in files_to_clean:
         try:
             data = await storage.read_json_file(filename, {})
             if not isinstance(data, dict):
-                summary["skipped"].append({"file": filename, "reason": "not_dict"})
+                summary["skipped"].append({"file": filename, "reason": "not_dict", "type": type(data).__name__})
                 continue
             
             garbage_found = [k for k in SYSTEM_GARBAGE_KEYS if k in data]
-            if not garbage_found:
-                summary["skipped"].append({"file": filename, "reason": "no_garbage"})
+            # Also find any non-digit keys that look like system keys (all caps)
+            suspicious_keys = [k for k in data.keys() if isinstance(k, str) and k.isupper() and not k.isdigit()]
+            all_garbage = list(set(garbage_found + [k for k in suspicious_keys if k in SYSTEM_GARBAGE_KEYS]))
+            
+            if not all_garbage:
+                valid_count = len([k for k in data.keys() if isinstance(k, str) and k.isdigit()])
+                summary["skipped"].append({
+                    "file": filename, 
+                    "reason": "no_garbage",
+                    "total_keys": len(data),
+                    "valid_user_keys": valid_count,
+                })
                 continue
+            
+            # Log what we're removing with values for debugging
+            for gk in all_garbage:
+                gv = data.get(gk)
+                logger.warning("DB_GARBAGE_CLEANUP_REMOVE file=%s key=%s value_type=%s value_preview=%s",
+                              filename, gk, type(gv).__name__, str(gv)[:100] if gv else "None")
             
             # Remove garbage keys
             cleaned_data = {k: v for k, v in data.items() if k not in SYSTEM_GARBAGE_KEYS}
             await storage.write_json_file(filename, cleaned_data)
             
+            valid_after = len([k for k in cleaned_data.keys() if isinstance(k, str) and k.isdigit()])
+            
             summary["cleaned"].append({
                 "file": filename,
-                "removed_keys": garbage_found,
+                "removed_keys": all_garbage,
                 "before_count": len(data),
                 "after_count": len(cleaned_data),
+                "valid_user_keys_after": valid_after,
             })
+            summary["total_removed"] += len(all_garbage)
+            
             logger.info(
-                "DB_GARBAGE_CLEANUP file=%s removed_keys=%s before=%d after=%d",
-                filename, garbage_found, len(data), len(cleaned_data)
+                "DB_GARBAGE_CLEANUP_FILE file=%s removed_keys=%s before=%d after=%d valid_users=%d",
+                filename, all_garbage, len(data), len(cleaned_data), valid_after
             )
         except Exception as e:
             summary["errors"].append({"file": filename, "error": str(e)})
-            logger.error("DB_GARBAGE_CLEANUP_ERROR file=%s error=%s", filename, e)
+            logger.error("DB_GARBAGE_CLEANUP_ERROR file=%s error=%s", filename, e, exc_info=True)
     
-    logger.info("DB_GARBAGE_CLEANUP_COMPLETE summary=%s", summary)
+    # Final summary
+    logger.info("DB_GARBAGE_CLEANUP_COMPLETE total_removed=%d cleaned_files=%d skipped=%d errors=%d",
+                summary["total_removed"], len(summary["cleaned"]), len(summary["skipped"]), len(summary["errors"]))
+    
+    if summary["cleaned"]:
+        logger.info("DB_GARBAGE_CLEANUP_DETAILS cleaned=%s", summary["cleaned"])
+    
     return summary
 
 
@@ -6601,65 +6636,125 @@ def log_data_load_summary() -> dict:
     summary = {}
     
     try:
-        # 1. User Registry
+        # 1. User Registry - with sample data
         registry = load_json_file(USER_REGISTRY_FILE, {})
-        registry_count = len([k for k in registry.keys() if k.isdigit()])
-        registry_invalid = len([k for k in registry.keys() if not k.isdigit()])
-        summary['user_registry'] = {'valid': registry_count, 'invalid': registry_invalid}
+        registry_valid_keys = [k for k in registry.keys() if k.isdigit()]
+        registry_invalid_keys = [k for k in registry.keys() if not k.isdigit()]
+        summary['user_registry'] = {
+            'valid': len(registry_valid_keys), 
+            'invalid': len(registry_invalid_keys),
+            'sample_valid': registry_valid_keys[:5],
+            'invalid_keys': registry_invalid_keys,
+        }
         
-        # 2. Balances
+        # 2. Balances - with sample data and totals
         balances = load_json_file(BALANCES_FILE, {})
-        balances_count = len([k for k in balances.keys() if k.isdigit()])
-        balances_invalid = len([k for k in balances.keys() if not k.isdigit()])
-        summary['balances'] = {'valid': balances_count, 'invalid': balances_invalid}
+        balances_valid_keys = [k for k in balances.keys() if k.isdigit()]
+        balances_invalid_keys = [k for k in balances.keys() if not k.isdigit()]
+        total_balance = 0.0
+        for k, v in balances.items():
+            if k.isdigit():
+                try:
+                    total_balance += float(v) if not isinstance(v, dict) else float(v.get('balance', 0))
+                except (ValueError, TypeError):
+                    pass
+        summary['balances'] = {
+            'valid': len(balances_valid_keys), 
+            'invalid': len(balances_invalid_keys),
+            'sample_valid': balances_valid_keys[:5],
+            'invalid_keys': balances_invalid_keys,
+            'total_balance': total_balance,
+        }
         
-        # 3. Payments
+        # 3. Payments - with sample data and totals
         payments = load_json_file(PAYMENTS_FILE, {})
-        payments_valid = len([v for v in payments.values() if isinstance(v, dict)])
-        payments_invalid = len([v for v in payments.values() if not isinstance(v, dict)])
-        summary['payments'] = {'valid': payments_valid, 'invalid': payments_invalid}
+        payments_valid = []
+        payments_invalid_keys = []
+        total_payments_amount = 0.0
+        for k, v in payments.items():
+            if isinstance(v, dict):
+                payments_valid.append(k)
+                try:
+                    total_payments_amount += float(v.get('amount', 0))
+                except (ValueError, TypeError):
+                    pass
+            else:
+                payments_invalid_keys.append(k)
+        summary['payments'] = {
+            'valid': len(payments_valid), 
+            'invalid': len(payments_invalid_keys),
+            'sample_valid': payments_valid[:5],
+            'invalid_keys': payments_invalid_keys,
+            'total_amount': total_payments_amount,
+        }
         
         # 4. Free generations
         free_gens = get_free_generations_data()
-        free_gens_count = len([k for k in free_gens.keys() if k.isdigit()])
-        summary['free_generations'] = {'valid': free_gens_count}
+        free_gens_valid = [k for k in free_gens.keys() if k.isdigit()]
+        summary['free_generations'] = {
+            'valid': len(free_gens_valid),
+            'sample': free_gens_valid[:5],
+        }
         
         # 5. Generations history
         history = load_json_file(GENERATIONS_HISTORY_FILE, {})
-        history_users = len([k for k in history.keys() if k.isdigit()])
-        history_invalid = len([k for k in history.keys() if not k.isdigit()])
+        history_valid_keys = [k for k in history.keys() if k.isdigit()]
+        history_invalid_keys = [k for k in history.keys() if not k.isdigit()]
         total_gens = sum(len(v) for v in history.values() if isinstance(v, list))
-        summary['generations_history'] = {'users': history_users, 'invalid_keys': history_invalid, 'total_generations': total_gens}
+        summary['generations_history'] = {
+            'users': len(history_valid_keys), 
+            'invalid_keys': len(history_invalid_keys),
+            'invalid_key_names': history_invalid_keys,
+            'total_generations': total_gens,
+            'sample_users': history_valid_keys[:5],
+        }
         
         # 6. Total unique users
         all_users = get_all_users()
         summary['total_unique_users'] = len(all_users)
+        summary['sample_user_ids'] = all_users[:10]
         
-        # Log summary
+        # Log summary with details
         logger.info("=" * 60)
-        logger.info("DATA_LOAD_SUMMARY user_registry_valid=%d user_registry_invalid=%d",
-                   summary['user_registry']['valid'], summary['user_registry']['invalid'])
-        logger.info("DATA_LOAD_SUMMARY balances_valid=%d balances_invalid=%d",
-                   summary['balances']['valid'], summary['balances']['invalid'])
-        logger.info("DATA_LOAD_SUMMARY payments_valid=%d payments_invalid=%d",
-                   summary['payments']['valid'], summary['payments']['invalid'])
-        logger.info("DATA_LOAD_SUMMARY free_generations=%d", summary['free_generations']['valid'])
-        logger.info("DATA_LOAD_SUMMARY generations_history_users=%d invalid_keys=%d total_gens=%d",
+        logger.info("DATA_LOAD_SUMMARY_START")
+        logger.info("DATA_LOAD_SUMMARY user_registry valid=%d invalid=%d invalid_keys=%s sample=%s",
+                   summary['user_registry']['valid'], summary['user_registry']['invalid'],
+                   summary['user_registry']['invalid_keys'], summary['user_registry']['sample_valid'])
+        logger.info("DATA_LOAD_SUMMARY balances valid=%d invalid=%d total_balance=%.2f invalid_keys=%s sample=%s",
+                   summary['balances']['valid'], summary['balances']['invalid'],
+                   summary['balances']['total_balance'], summary['balances']['invalid_keys'],
+                   summary['balances']['sample_valid'])
+        logger.info("DATA_LOAD_SUMMARY payments valid=%d invalid=%d total_amount=%.2f invalid_keys=%s sample=%s",
+                   summary['payments']['valid'], summary['payments']['invalid'],
+                   summary['payments']['total_amount'], summary['payments']['invalid_keys'],
+                   summary['payments']['sample_valid'])
+        logger.info("DATA_LOAD_SUMMARY free_generations valid=%d sample=%s",
+                   summary['free_generations']['valid'], summary['free_generations']['sample'])
+        logger.info("DATA_LOAD_SUMMARY generations_history users=%d invalid_keys=%d total_gens=%d invalid_key_names=%s",
                    summary['generations_history']['users'],
                    summary['generations_history']['invalid_keys'],
-                   summary['generations_history']['total_generations'])
-        logger.info("DATA_LOAD_SUMMARY total_unique_users=%d", summary['total_unique_users'])
+                   summary['generations_history']['total_generations'],
+                   summary['generations_history']['invalid_key_names'])
+        logger.info("DATA_LOAD_SUMMARY total_unique_users=%d sample_ids=%s",
+                   summary['total_unique_users'], summary['sample_user_ids'])
+        logger.info("DATA_LOAD_SUMMARY_END")
         logger.info("=" * 60)
         
-        # Check for potential issues
+        # Check for potential issues and log warnings
+        issues = []
         if summary['user_registry']['valid'] == 0:
-            logger.warning("DATA_LOAD_WARNING user_registry is empty!")
+            issues.append("user_registry is empty")
         if summary['balances']['valid'] == 0:
-            logger.warning("DATA_LOAD_WARNING balances is empty!")
-        if summary['payments']['invalid'] > 0:
-            logger.warning("DATA_LOAD_WARNING payments has %d invalid records", summary['payments']['invalid'])
-        if summary['generations_history']['invalid_keys'] > 0:
-            logger.warning("DATA_LOAD_WARNING generations_history has %d invalid keys", summary['generations_history']['invalid_keys'])
+            issues.append("balances is empty - users have no balance data!")
+        if summary['payments']['valid'] == 0 and summary['payments']['invalid'] > 0:
+            issues.append(f"ALL payments are invalid ({summary['payments']['invalid']} records)")
+        if summary['generations_history']['total_generations'] == 0:
+            issues.append("no generation history found")
+        
+        if issues:
+            logger.warning("DATA_LOAD_ISSUES count=%d issues=%s", len(issues), issues)
+        else:
+            logger.info("DATA_LOAD_OK no issues detected")
             
     except Exception as e:
         logger.error("DATA_LOAD_SUMMARY_ERROR error=%s", e, exc_info=True)
