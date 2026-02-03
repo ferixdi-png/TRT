@@ -15727,8 +15727,18 @@ async def _button_callback_impl(
                 
                 # Show first 20 users
                 for i, (uid, data) in enumerate(sorted_users[:20], 1):
-                    username = data.get('username', '') if isinstance(data, dict) else ''
-                    first_name = data.get('first_name', '') if isinstance(data, dict) else ''
+                    # Try to get fresh username from Telegram API
+                    username = ""
+                    first_name = ""
+                    try:
+                        chat = await context.bot.get_chat(int(uid))
+                        username = chat.username or ""
+                        first_name = chat.first_name or ""
+                    except Exception:
+                        # Fallback to registry data
+                        username = data.get('username', '') if isinstance(data, dict) else ''
+                        first_name = data.get('first_name', '') if isinstance(data, dict) else ''
+                    
                     balance = balances.get(uid, 0)
                     if isinstance(balance, dict):
                         balance = balance.get('balance', 0)
@@ -15781,6 +15791,18 @@ async def _button_callback_impl(
                     status = payment.get('status', 'pending')
                     timestamp = payment.get('timestamp', 0)
                     
+                    # Get username via Telegram API
+                    username_str = ""
+                    if user_id_pay and user_id_pay != 'N/A':
+                        try:
+                            chat = await context.bot.get_chat(int(user_id_pay))
+                            if chat.username:
+                                username_str = f" (@{chat.username})"
+                            elif chat.first_name:
+                                username_str = f" ({chat.first_name})"
+                        except Exception:
+                            pass  # User may have blocked the bot or doesn't exist
+                    
                     # Format timestamp
                     from datetime import datetime
                     dt = datetime.fromtimestamp(timestamp) if timestamp else None
@@ -15789,7 +15811,7 @@ async def _button_callback_impl(
                     # Status emoji
                     status_emoji = "✅" if status == 'completed' else "⏳" if status == 'pending' else "❌"
                     
-                    text += f"{i}. {status_emoji} <code>{user_id_pay}</code> — {format_rub_amount(amount)} ({date_str})\n"
+                    text += f"{i}. {status_emoji} <code>{user_id_pay}</code>{username_str} — {format_rub_amount(amount)} ({date_str})\n"
                 
                 text += f"\n📊 Всего платежей: {len(payments_list)}"
             
