@@ -39,6 +39,7 @@
 | `SUPPORT_TEXT` | Текст поддержки | `Пиши, если вопросы` | Твой текст |
 | `TELEGRAM_BOT_TOKEN` | Токен твоего бота | `8564207833:AAEUloa...` | https://t.me/BotFather |
 | `WEBHOOK_BASE_URL` | URL твоего сервиса на Render | `https://my-bot.onrender.com` | Появится после создания сервиса |
+| `BOT_NAME` | Название бота в приветствии (опционально) | `НЕЙРОБОТ` | Придумай своё название |
 
 ### ⚠️ ВАЖНО про WEBHOOK_BASE_URL
 

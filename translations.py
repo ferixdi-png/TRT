@@ -292,7 +292,7 @@ TRANSLATIONS = {
     'en': {
         'welcome_new': (
             'Hi! 👋\n'
-            '🔥 <b>FERIXDI AI — Ultra Creative Suite</b>\n'
+            '🔥 <b>{bot_name}</b>\n'
             'Performance creatives: photo, remix, video — fast output.\n\n'
             '🎁 Free generations: {free}/{free_limit}\n'
             '💳 Balance: {stars_balance} Stars\n\n'
@@ -301,7 +301,7 @@ TRANSLATIONS = {
         ),
         'welcome_returning': (
             'Hi! 👋\n'
-            '🔥 <b>FERIXDI AI — Ultra Creative Suite</b>\n'
+            '🔥 <b>{bot_name}</b>\n'
             'Performance creatives: photo, remix, video — fast output.\n\n'
             '🎁 Free generations: {free}/{free_limit}\n'
             '💳 Balance: {stars_balance} Stars\n\n'
