@@ -4682,6 +4682,32 @@ def save_json_file(filename: str, data: dict, use_cache: bool = True):
         current_time = time.time()
         safe_data = _sanitize_json_payload(data, filename=filename)
         
+        # ============================================================
+        # CRITICAL DATA LOSS PROTECTION (bot_kie layer)
+        # ============================================================
+        CRITICAL_FILES = {"payments.json", "user_registry.json", "user_balances.json"}
+        storage_filename = os.path.basename(filename)
+        
+        if storage_filename in CRITICAL_FILES:
+            new_keys_count = len(safe_data) if safe_data else 0
+            # Get current data from cache or storage
+            cached = _data_cache.get(cache_key)
+            current_keys_count = len(cached) if isinstance(cached, dict) else 0
+            
+            # BLOCK: Refusing to save empty data over non-empty
+            if current_keys_count > 0 and new_keys_count == 0:
+                logger.error(
+                    "CRITICAL_DATA_LOSS_BLOCKED_BOT_KIE file=%s current_keys=%d new_keys=%d "
+                    "reason=REFUSING_TO_SAVE_EMPTY_OVER_DATA",
+                    storage_filename, current_keys_count, new_keys_count
+                )
+                return  # BLOCK THE SAVE!
+            
+            logger.info(
+                "CRITICAL_FILE_SAVE file=%s current_keys=%d new_keys=%d",
+                storage_filename, current_keys_count, new_keys_count
+            )
+        
         # Update cache immediately
         if use_cache and cache_key != filename:
             _data_cache[cache_key] = safe_data.copy()
@@ -4691,7 +4717,6 @@ def save_json_file(filename: str, data: dict, use_cache: bool = True):
             from app.storage.factory import get_storage
 
             storage = get_storage()
-            storage_filename = os.path.basename(filename)
             _run_storage_coro_sync(
                 storage.write_json_file(storage_filename, safe_data),
                 label=f"write:{storage_filename}",
