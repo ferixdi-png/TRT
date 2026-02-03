@@ -23,6 +23,28 @@ from app.observability.structured_logs import log_structured_event
 logger = logging.getLogger(__name__)
 _corr_lock_drop_total = 0
 
+# System garbage keys that should never be stored as user data
+SYSTEM_GARBAGE_KEYS = frozenset({
+    "STATUS", "WARNING", "RESTORE_FEE", "METADATA", "_META",
+    "ERROR", "INFO", "DEBUG", "SYSTEM", "CONFIG",
+})
+
+
+def _filter_garbage_keys_storage(data: dict, filename: str) -> dict:
+    """Filter out garbage system keys from data before saving to storage."""
+    if not isinstance(data, dict):
+        return data
+    
+    garbage_found = [k for k in data.keys() if k in SYSTEM_GARBAGE_KEYS]
+    if garbage_found:
+        filtered = {k: v for k, v in data.items() if k not in SYSTEM_GARBAGE_KEYS}
+        logger.warning(
+            "STORAGE_GARBAGE_FILTERED filename=%s removed_keys=%s before=%d after=%d",
+            filename, garbage_found, len(data), len(filtered)
+        )
+        return filtered
+    return data
+
 
 class PostgresStorage(BaseStorage):
     """PostgreSQL-backed storage that mirrors JsonStorage semantics."""
@@ -220,6 +242,9 @@ class PostgresStorage(BaseStorage):
             return await self._load_json_unlocked(filename)
 
     async def _save_json_unlocked(self, filename: str, data: Dict[str, Any]) -> None:
+        # Filter garbage keys before saving
+        clean_data = _filter_garbage_keys_storage(data, filename)
+        
         pool = await self._get_pool()
         try:
             async with pool.acquire() as conn:
@@ -232,7 +257,7 @@ class PostgresStorage(BaseStorage):
                     """,
                     self.partner_id,
                     filename,
-                    json.dumps(data) if data else "{}",
+                    json.dumps(clean_data) if clean_data else "{}",
                 )
         except Exception as exc:
             self._maybe_open_circuit(exc, context="save_json")
@@ -248,8 +273,10 @@ class PostgresStorage(BaseStorage):
         async with lock:
             current = await self._load_json_unlocked(filename)
             updated = update_fn(dict(current))
-            await self._save_json_unlocked(filename, updated)
-            return updated
+            # Filter garbage keys after update function runs
+            clean_updated = _filter_garbage_keys_storage(updated, filename)
+            await self._save_json_unlocked(filename, clean_updated)
+            return clean_updated
 
     def _advisory_lock_key_pair(self, filename: str):
         from app.utils.pg_advisory_lock import build_advisory_lock_key_pair
@@ -311,6 +338,8 @@ class PostgresStorage(BaseStorage):
                     self.balances_file,
                 )
                 balances = self._coerce_payload(payload, filename=self.balances_file)
+                # Filter garbage keys before processing
+                balances = _filter_garbage_keys_storage(balances, self.balances_file)
                 balance_before = float(balances.get(str(user_id), 0.0))
                 new_balance = balance_before + amount
                 balances[str(user_id)] = new_balance
@@ -350,6 +379,8 @@ class PostgresStorage(BaseStorage):
                     self.balances_file,
                 )
                 balances = self._coerce_payload(payload, filename=self.balances_file)
+                # Filter garbage keys before processing
+                balances = _filter_garbage_keys_storage(balances, self.balances_file)
                 balance_before = float(balances.get(str(user_id), 0.0))
                 
                 if balance_before < amount:
@@ -435,6 +466,9 @@ class PostgresStorage(BaseStorage):
                 )
                 balances = self._coerce_payload(balances_payload, filename=self.balances_file)
                 deductions = self._coerce_payload(deductions_payload, filename=self.balance_deductions_file)
+                # Filter garbage keys
+                balances = _filter_garbage_keys_storage(balances, self.balances_file)
+                deductions = _filter_garbage_keys_storage(deductions, self.balance_deductions_file)
 
                 if task_id in deductions:
                     balance_before = float(balances.get(str(user_id), 0.0))
@@ -611,6 +645,9 @@ class PostgresStorage(BaseStorage):
                 )
                 free_data = self._coerce_payload(free_payload, filename=self.free_generations_file)
                 deductions = self._coerce_payload(deductions_payload, filename=self.free_deductions_file)
+                # Filter garbage keys
+                free_data = _filter_garbage_keys_storage(free_data, self.free_generations_file)
+                deductions = _filter_garbage_keys_storage(deductions, self.free_deductions_file)
 
                 today = datetime.now().strftime("%Y-%m-%d")
                 user_key = str(user_id)
@@ -706,6 +743,8 @@ class PostgresStorage(BaseStorage):
                     self.referral_free_bank_file,
                 )
                 data = self._coerce_payload(payload, filename=self.referral_free_bank_file)
+                # Filter garbage keys
+                data = _filter_garbage_keys_storage(data, self.referral_free_bank_file)
                 current = int(data.get(str(user_id), 0))
                 new_total = current + bonus
                 data[str(user_id)] = new_total
@@ -1337,6 +1376,8 @@ class PostgresStorage(BaseStorage):
                             if isinstance(parsed, dict):
                                 current = parsed
                     updated = update_fn(dict(current))
+                    # Filter garbage keys before saving
+                    clean_updated = _filter_garbage_keys_storage(updated, filename)
                     await conn.execute(
                         """
                         INSERT INTO storage_json (partner_id, filename, payload)
@@ -1346,7 +1387,7 @@ class PostgresStorage(BaseStorage):
                         """,
                         self.partner_id,
                         filename,
-                        json.dumps(updated) if updated else "{}",
+                        json.dumps(clean_updated) if clean_updated else "{}",
                     )
                     if filename == "observability_correlations.json":
                         logger.info(
@@ -1374,7 +1415,7 @@ class PostgresStorage(BaseStorage):
                         param={"filename": filename},
                         skip_correlation_store=True,
                     )
-                    return updated
+                    return clean_updated
         except Exception as exc:
             self._maybe_open_circuit(exc, context="update_json")
             raise
