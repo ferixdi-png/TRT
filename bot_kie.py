@@ -6510,6 +6510,78 @@ def get_all_users() -> list:
     return sorted(list(user_ids))
 
 
+def log_data_load_summary() -> dict:
+    """Log comprehensive data loading summary for diagnostics. Call at startup."""
+    summary = {}
+    
+    try:
+        # 1. User Registry
+        registry = load_json_file(USER_REGISTRY_FILE, {})
+        registry_count = len([k for k in registry.keys() if k.isdigit()])
+        registry_invalid = len([k for k in registry.keys() if not k.isdigit()])
+        summary['user_registry'] = {'valid': registry_count, 'invalid': registry_invalid}
+        
+        # 2. Balances
+        balances = load_json_file(BALANCES_FILE, {})
+        balances_count = len([k for k in balances.keys() if k.isdigit()])
+        balances_invalid = len([k for k in balances.keys() if not k.isdigit()])
+        summary['balances'] = {'valid': balances_count, 'invalid': balances_invalid}
+        
+        # 3. Payments
+        payments = load_json_file(PAYMENTS_FILE, {})
+        payments_valid = len([v for v in payments.values() if isinstance(v, dict)])
+        payments_invalid = len([v for v in payments.values() if not isinstance(v, dict)])
+        summary['payments'] = {'valid': payments_valid, 'invalid': payments_invalid}
+        
+        # 4. Free generations
+        free_gens = get_free_generations_data()
+        free_gens_count = len([k for k in free_gens.keys() if k.isdigit()])
+        summary['free_generations'] = {'valid': free_gens_count}
+        
+        # 5. Generations history
+        history = load_json_file(GENERATIONS_HISTORY_FILE, {})
+        history_users = len([k for k in history.keys() if k.isdigit()])
+        history_invalid = len([k for k in history.keys() if not k.isdigit()])
+        total_gens = sum(len(v) for v in history.values() if isinstance(v, list))
+        summary['generations_history'] = {'users': history_users, 'invalid_keys': history_invalid, 'total_generations': total_gens}
+        
+        # 6. Total unique users
+        all_users = get_all_users()
+        summary['total_unique_users'] = len(all_users)
+        
+        # Log summary
+        logger.info("=" * 60)
+        logger.info("DATA_LOAD_SUMMARY user_registry_valid=%d user_registry_invalid=%d",
+                   summary['user_registry']['valid'], summary['user_registry']['invalid'])
+        logger.info("DATA_LOAD_SUMMARY balances_valid=%d balances_invalid=%d",
+                   summary['balances']['valid'], summary['balances']['invalid'])
+        logger.info("DATA_LOAD_SUMMARY payments_valid=%d payments_invalid=%d",
+                   summary['payments']['valid'], summary['payments']['invalid'])
+        logger.info("DATA_LOAD_SUMMARY free_generations=%d", summary['free_generations']['valid'])
+        logger.info("DATA_LOAD_SUMMARY generations_history_users=%d invalid_keys=%d total_gens=%d",
+                   summary['generations_history']['users'],
+                   summary['generations_history']['invalid_keys'],
+                   summary['generations_history']['total_generations'])
+        logger.info("DATA_LOAD_SUMMARY total_unique_users=%d", summary['total_unique_users'])
+        logger.info("=" * 60)
+        
+        # Check for potential issues
+        if summary['user_registry']['valid'] == 0:
+            logger.warning("DATA_LOAD_WARNING user_registry is empty!")
+        if summary['balances']['valid'] == 0:
+            logger.warning("DATA_LOAD_WARNING balances is empty!")
+        if summary['payments']['invalid'] > 0:
+            logger.warning("DATA_LOAD_WARNING payments has %d invalid records", summary['payments']['invalid'])
+        if summary['generations_history']['invalid_keys'] > 0:
+            logger.warning("DATA_LOAD_WARNING generations_history has %d invalid keys", summary['generations_history']['invalid_keys'])
+            
+    except Exception as e:
+        logger.error("DATA_LOAD_SUMMARY_ERROR error=%s", e, exc_info=True)
+        summary['error'] = str(e)
+    
+    return summary
+
+
 def save_broadcast(broadcast_data: dict):
     """Save broadcast statistics."""
     broadcasts = load_json_file(BROADCASTS_FILE, {})
@@ -29500,6 +29572,16 @@ async def _run_webhook_initialization(
     init_ms = int((time.monotonic() - init_started) * 1000)
     _webhook_app_ready_event.set()
     logger.info("action=WEBHOOK_APP_READY ready=true init_ms=%s", init_ms)
+    
+    # Log data loading summary for diagnostics
+    try:
+        _create_background_task(
+            asyncio.to_thread(log_data_load_summary),
+            action="data_load_summary",
+        )
+    except Exception as e:
+        logger.warning("DATA_LOAD_SUMMARY_SCHEDULE_FAILED error=%s", e)
+    
     _schedule_early_update_drain(application, correlation_id="BOOT")
     _create_background_task(
         _run_webhook_info_probe(webhook_url, label="startup"),
