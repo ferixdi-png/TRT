@@ -478,6 +478,35 @@ async def ready_diag_handler(request):
     )
 
 
+@web.middleware
+async def _log_all_requests_middleware(request: web.Request, handler):
+    """Логируем ВСЕ входящие HTTP запросы для диагностики"""
+    logger.info(
+        "🔵 HTTP_REQUEST_IN method=%s path=%s remote=%s content_length=%s",
+        request.method,
+        request.path,
+        request.remote,
+        request.content_length,
+    )
+    try:
+        response = await handler(request)
+        logger.info(
+            "🟢 HTTP_REQUEST_OUT method=%s path=%s status=%s",
+            request.method,
+            request.path,
+            response.status,
+        )
+        return response
+    except Exception as exc:
+        logger.error(
+            "🔴 HTTP_REQUEST_ERROR method=%s path=%s error=%s",
+            request.method,
+            request.path,
+            exc,
+        )
+        raise
+
+
 async def start_health_server(
     port: int = 8000,
     webhook_handler: Optional[Callable[[web.Request], Awaitable[web.StreamResponse]]] = None,
@@ -504,7 +533,7 @@ async def start_health_server(
         try:
             set_start_time()  # Устанавливаем время старта
 
-            app = web.Application()
+            app = web.Application(middlewares=[_log_all_requests_middleware])
             app.router.add_get('/health', health_handler)
             app.router.add_get('/healthz', health_handler)
             app.router.add_get('/', health_handler)  # Для совместимости
