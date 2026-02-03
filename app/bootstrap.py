@@ -65,27 +65,39 @@ class DependencyContainer:
         for key, filename in items.items():
             try:
                 payload = await storage.read_json_file(filename, default={})
+                records_count = _count_records(payload, history=(key == "history"))
+                sample_keys = list(payload.keys())[:5] if isinstance(payload, dict) else []
                 counts[key] = {
                     "loaded": True,
-                    "records": _count_records(payload, history=(key == "history")),
+                    "records": records_count,
+                    "sample_keys": sample_keys,
                 }
+                # CRITICAL: Alert if critical files are empty
+                if records_count == 0 and key in ("balances", "payments"):
+                    logger.error(
+                        "BOOT_CRITICAL_DATA_EMPTY file=%s records=0 partner_id=%s "
+                        "ACTION_REQUIRED=check_database_or_migration",
+                        filename, getattr(storage, "partner_id", "")
+                    )
             except Exception as exc:
                 logger.warning("BOOT_STATUS preload_failed file=%s error=%s", filename, exc)
-                counts[key] = {"loaded": False, "records": 0}
+                counts[key] = {"loaded": False, "records": 0, "sample_keys": []}
 
         logger.info(
             "BOOT_STATUS STORAGE_BACKEND=postgres partner_id=%s "
-            "balances_loaded=%s balances_records_count=%s "
-            "daily_free_loaded=%s daily_free_records_count=%s "
-            "payments_loaded=%s payments_records_count=%s "
-            "history_loaded=%s history_records_count=%s",
+            "balances_loaded=%s balances_records=%s balances_sample=%s "
+            "daily_free_loaded=%s daily_free_records=%s "
+            "payments_loaded=%s payments_records=%s payments_sample=%s "
+            "history_loaded=%s history_records=%s",
             getattr(storage, "partner_id", ""),
             counts["balances"]["loaded"],
             counts["balances"]["records"],
+            counts["balances"].get("sample_keys", []),
             counts["daily_free"]["loaded"],
             counts["daily_free"]["records"],
             counts["payments"]["loaded"],
             counts["payments"]["records"],
+            counts["payments"].get("sample_keys", []),
             counts["history"]["loaded"],
             counts["history"]["records"],
         )
