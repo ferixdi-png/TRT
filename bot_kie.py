@@ -9071,27 +9071,26 @@ async def _build_main_menu_sections(
         name = user.mention_html() if user else "друг"
 
     if resolved_lang == "ru":
+        balance_lines = ""
+        if user_balance > 0:
+            balance_lines = f"💰 Баланс: {user_balance:.2f} ₽"
+        else:
+            balance_lines = "💳 Баланс: 0 ₽"
+        
         header_text = (
-            "Привет! 👋\n\n"
-            "🔥 FERIXDI AI — Ultra Creative Suite\n"
-            "Премиальная AI-студия в Telegram для маркетинга / SMM / арбитража.\n"
-            "Здесь делают креатив не 'поиграться', а быстро собрать материал под трафик: варианты, стили, усиление качества — и сразу в работу.\n\n"
-            "⚡ Что ты получаешь:\n"
-            "• 🎨 Визуал-пак под рекламу — генерация, стили, вариации, апскейл, фон\n"
-            "• 🧩 Ремикс изображения — прокачать исходник, сменить вайб, усилить детали\n"
-            "• 🎬 Видео-креативы — из идеи в ролик, из изображения в движение, улучшение качества\n"
-            "• 🧼 Ремастер качества — 'поднять' контент так, чтобы выглядел дорого и чисто\n"
-            "• 🚀 Скорость производства — минимум действий, максимум результата\n\n"
-            "🧩 Спец-раздел (доп. категории):\n"
-            "Там живут инструменты под нестандартные задачи — например удаление ватермарки и другие функции, которые будут добавляться дальше.\n\n"
-            "📌 Как работать:\n"
-            "1) Выбираешь раздел\n"
-            "2) Даёшь ТЗ или загружаешь файл\n"
-            "3) Подтверждаешь → забираешь результат ✅\n\n"
-            "👇 Выберите раздел ниже."
+            "Привет! 👋\n"
+            "🔥 <b>FERIXDI AI — Ultra Creative Suite</b>\n"
+            "Креатив под трафик: фото, ремикс, видео — быстро и чисто.\n\n"
+            f"🎁 Бесплатные генерации: {remaining_free}/{FREE_GENERATIONS_PER_DAY}\n"
+            f"{balance_lines}\n\n"
+            "📌 3 шага: выбери режим → ТЗ/файл → результат ✅\n"
+            "👇 Выберите режим ниже."
         )
         referral_bonus_text = ""
     else:
+        # EN: показываем только Stars (0 если баланс пустой)
+        stars_balance = int(user_balance * 10) if user_balance > 0 else 0  # примерная конвертация ₽ → Stars
+        
         if is_new:
             header_text = t(
                 "welcome_new",
@@ -9099,11 +9098,7 @@ async def _build_main_menu_sections(
                 name=name,
                 free=remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY,
                 free_limit=FREE_GENERATIONS_PER_DAY,
-                models=total_models,
-                types=len(generation_types),
-                online=online_count,
-                ref_bonus=REFERRAL_BONUS_GENERATIONS,
-                ref_link=referral_link,
+                stars_balance=stars_balance,
             )
             referral_bonus_text = ""
         else:
@@ -9120,17 +9115,10 @@ async def _build_main_menu_sections(
                 "welcome_returning",
                 lang=resolved_lang,
                 name=name,
-                online=online_count,
                 free=remaining_free if remaining_free > 0 else FREE_GENERATIONS_PER_DAY,
                 free_limit=FREE_GENERATIONS_PER_DAY,
-                models=total_models,
-                types=len(generation_types),
+                stars_balance=stars_balance,
             )
-
-        if resolved_lang == "en":
-            header_text += "\n👇 Select a section from the menu below."
-        else:
-            header_text += "\n👇 Выберите раздел в меню ниже."
 
     from app.utils.singleton_lock import get_lock_admin_notice, get_lock_mode, is_lock_degraded
 
