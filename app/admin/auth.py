@@ -47,34 +47,10 @@ def is_admin(user_id: int) -> bool:
     return user_id in get_admin_ids()
 
 
-_bot_owner_ids_cache: Set[int] | None = None
-
-
-def _load_bot_owner_ids() -> Set[int]:
-    """Load bot owner IDs from BOT_OWNER_ID or BOT_OWNER_IDS env vars."""
-    ids_env = os.getenv("BOT_OWNER_IDS", "").strip()
-    owner_id_env = os.getenv("BOT_OWNER_ID", "").strip()
-    ids: Set[int] = set()
-    if ids_env:
-        ids.update(_parse_ids(ids_env))
-    if owner_id_env:
-        ids.update(_parse_ids(owner_id_env))
-    return ids
-
-
-def get_bot_owner_ids() -> Set[int]:
-    """Return cached bot owner IDs parsed from BOT_OWNER_ID/BOT_OWNER_IDS."""
-    global _bot_owner_ids_cache
-    if _bot_owner_ids_cache is None:
-        _bot_owner_ids_cache = _load_bot_owner_ids()
-    return set(_bot_owner_ids_cache)
-
-
-def is_bot_owner(user_id: int) -> bool:
-    """Check if user is bot owner (partner) - has access to admin panel."""
-    return user_id in get_bot_owner_ids()
-
-
 def is_admin_or_owner(user_id: int) -> bool:
-    """Check if user is admin OR bot owner - both have admin panel access."""
-    return is_admin(user_id) or is_bot_owner(user_id)
+    """Check if user has admin access.
+    
+    Партнёр ставит СВОЙ ADMIN_ID — это даёт ему полный доступ к /admin.
+    Никаких дополнительных переменных типа BOT_OWNER_ID не нужно.
+    """
+    return is_admin(user_id)
