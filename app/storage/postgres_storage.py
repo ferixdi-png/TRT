@@ -1527,6 +1527,34 @@ class PostgresStorage(BaseStorage):
                     updated = update_fn(dict(current))
                     # Filter garbage keys before saving
                     clean_updated = _filter_garbage_keys_storage(updated, filename)
+                    
+                    # ============================================================
+                    # CRITICAL DATA LOSS PROTECTION in update_json_file
+                    # ============================================================
+                    CRITICAL_FILES = {"payments.json", "user_registry.json", "user_balances.json", "generations_history.json"}
+                    current_keys_count = len(current) if isinstance(current, dict) else 0
+                    new_keys_count = len(clean_updated) if isinstance(clean_updated, dict) else 0
+                    
+                    if filename in CRITICAL_FILES:
+                        # BLOCK: Never allow update_fn to return empty when current has data
+                        if current_keys_count > 0 and new_keys_count == 0:
+                            logger.error(
+                                "CRITICAL_DATA_LOSS_BLOCKED_UPDATE_JSON file=%s current_keys=%d new_keys=%d "
+                                "reason=update_fn_returned_empty partner_id=%s",
+                                filename, current_keys_count, new_keys_count, self.partner_id
+                            )
+                            raise ValueError(
+                                f"DATA_LOSS_PROTECTION: update_fn for {filename} returned empty "
+                                f"(current has {current_keys_count} records)!"
+                            )
+                        
+                        # Log all updates to critical files
+                        logger.info(
+                            "CRITICAL_FILE_UPDATE file=%s current_keys=%d new_keys=%d partner_id=%s",
+                            filename, current_keys_count, new_keys_count, self.partner_id
+                        )
+                    
+                    payload_json = json.dumps(clean_updated) if isinstance(clean_updated, dict) else "{}"
                     await conn.execute(
                         """
                         INSERT INTO storage_json (partner_id, filename, payload)
@@ -1536,7 +1564,7 @@ class PostgresStorage(BaseStorage):
                         """,
                         self.partner_id,
                         filename,
-                        json.dumps(clean_updated) if clean_updated else "{}",
+                        payload_json,
                     )
                     if filename == "observability_correlations.json":
                         logger.info(
