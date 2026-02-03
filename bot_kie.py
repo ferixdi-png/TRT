@@ -29319,6 +29319,7 @@ async def _run_webhook_info_probe(webhook_url: str, *, label: str) -> None:
 
 def _schedule_webhook_setter(webhook_url: str) -> None:
     global _webhook_setter_task
+    logger.info("WEBHOOK_SETTER_SCHEDULE_START url=%s", webhook_url[:50] if webhook_url else None)
     try:
         from app.locking.single_instance import is_lock_held
     except Exception:
@@ -30040,7 +30041,16 @@ async def _run_webhook_initialization(
         _run_webhook_info_probe(webhook_url, label="startup"),
         action="webhook_info_probe",
     )
-    if not _auto_set_webhook_enabled() and _require_webhook_registered():
+    
+    # КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: статус webhook при запуске
+    auto_set = _auto_set_webhook_enabled()
+    require_registered = _require_webhook_registered()
+    logger.info(
+        "WEBHOOK_BOOT_STATUS auto_set_webhook=%s require_registered=%s webhook_url=%s bot_mode=%s",
+        auto_set, require_registered, webhook_url[:50] if webhook_url else None, os.getenv("BOT_MODE")
+    )
+    
+    if not auto_set and require_registered:
         await _fail_fast_if_webhook_missing(application.bot, webhook_url)
     _schedule_webhook_setter(webhook_url)
 
