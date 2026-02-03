@@ -4797,6 +4797,10 @@ def _recover_jobs_on_startup() -> None:
     now_ms = _now_ms()
     updated = False
     for job_id, record in data.items():
+        # Skip invalid records (string instead of dict)
+        if not isinstance(record, dict):
+            logger.warning(f"JOBS_RECOVERY skipping invalid record job_id={job_id} type={type(record).__name__}")
+            continue
         state = record.get("state")
         if state not in ACTIVE_JOB_STATES_ACTIVE:
             continue
