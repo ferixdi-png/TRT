@@ -9064,6 +9064,14 @@ async def _build_main_menu_sections(
     else:
         referrals_count = 0
     online_count = get_fake_online_count()
+    
+    # Получаем баланс пользователя для отображения в приветствии
+    user_balance = 0.0
+    if user_id:
+        try:
+            user_balance = await get_user_balance_async(user_id)
+        except Exception:
+            user_balance = 0.0
 
     if resolved_lang == "en":
         name = user.mention_html() if user else "friend"
