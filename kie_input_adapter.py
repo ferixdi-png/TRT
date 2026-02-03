@@ -112,6 +112,12 @@ def validate_params(schema: Dict[str, Any], params: Dict[str, Any]) -> Tuple[boo
     """
     from kie_validator import validate
     
+    # ============================================================
+    # ADAPTER_VALIDATE_LOG: Детальное логирование валидации
+    # ============================================================
+    logger.info("ADAPTER_VALIDATE_START schema_params=%s input_params=%s", 
+               list(schema.keys()), list(params.keys()))
+    
     # Создаем временный словарь model_id -> schema для валидатора
     # Валидатор ожидает model_id, но мы можем обойти это, создав mock модель
     # Для упрощения, используем прямое валидацию по схеме
@@ -122,6 +128,11 @@ def validate_params(schema: Dict[str, Any], params: Dict[str, Any]) -> Tuple[boo
     for param_name, param_schema in schema.items():
         is_required = param_schema.get('required', False)
         param_value = params.get(param_name)
+        param_type = param_schema.get('type', 'string')
+        
+        # Логируем каждый параметр из схемы
+        logger.debug("ADAPTER_VALIDATE_PARAM param=%s type=%s required=%s value_type=%s has_value=%s",
+                    param_name, param_type, is_required, type(param_value).__name__ if param_value else "None", param_value is not None)
         
         if is_required and (param_value is None or param_value == ""):
             errors.append(f"Параметр '{param_name}' обязателен для заполнения")
