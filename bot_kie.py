@@ -4797,10 +4797,6 @@ def _recover_jobs_on_startup() -> None:
     now_ms = _now_ms()
     updated = False
     for job_id, record in data.items():
-        # Skip invalid records (string instead of dict)
-        if not isinstance(record, dict):
-            logger.warning(f"JOBS_RECOVERY skipping invalid record job_id={job_id} type={type(record).__name__}")
-            continue
         state = record.get("state")
         if state not in ACTIVE_JOB_STATES_ACTIVE:
             continue
@@ -6462,7 +6458,7 @@ def get_all_users() -> list:
     payments = load_json_file(PAYMENTS_FILE, {})
     payment_users = []
     for payment in payments.values():
-        if isinstance(payment, dict) and 'user_id' in payment:
+        if 'user_id' in payment:
             payment_users.append(payment['user_id'])
             user_ids.add(payment['user_id'])
     logger.info("GET_ALL_USERS source=payments count=%d", len(payment_users))
@@ -6982,8 +6978,7 @@ async def add_payment_async(user_id: int, amount: float, screenshot_file_id: str
 def get_all_payments() -> list:
     """Get all payments sorted by timestamp (newest first)."""
     payments = load_json_file(PAYMENTS_FILE, {})
-    # Filter out invalid records (string instead of dict)
-    payment_list = [p for p in payments.values() if isinstance(p, dict)]
+    payment_list = list(payments.values())
     payment_list.sort(key=lambda x: x.get("timestamp", 0), reverse=True)
     return payment_list
 
@@ -15747,11 +15742,6 @@ async def _button_callback_impl(
                     balance = balances.get(uid, 0)
                     if isinstance(balance, dict):
                         balance = balance.get('balance', 0)
-                    # Ensure balance is a valid number
-                    try:
-                        balance = float(balance) if balance else 0
-                    except (ValueError, TypeError):
-                        balance = 0
                     
                     user_display = f"@{username}" if username else first_name or f"ID:{uid}"
                     text += f"{i}. <code>{uid}</code> {user_display} — {format_rub_amount(balance)}\n"
