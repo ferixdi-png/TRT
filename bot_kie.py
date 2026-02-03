@@ -25728,6 +25728,29 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         state_resolution = normalize_provider_state(job_result.state)
         immediate_result = state_resolution.canonical_state in CANONICAL_SUCCESS_STATES
         if not immediate_result:
+            # КРИТИЧЕСКАЯ ПРОВЕРКА: task_id должен быть непустым для polling
+            if not task_id:
+                logger.error(
+                    "CRITICAL_NO_TASK_ID correlation_id=%s user_id=%s model_id=%s job_result=%s",
+                    correlation_id, user_id, model_id, job_result
+                )
+                await context.bot.send_message(
+                    chat_id=chat_id_value,
+                    text=(
+                        "⚠️ <b>Ошибка создания задачи</b>\n\n"
+                        "Не удалось получить ID задачи от провайдера.\n"
+                        "Попробуйте ещё раз.\n\n"
+                        f"ID: <code>{correlation_id}</code>"
+                        if user_lang == "ru" else
+                        "⚠️ <b>Task creation error</b>\n\n"
+                        "Failed to get task ID from provider.\n"
+                        "Please try again.\n\n"
+                        f"ID: <code>{correlation_id}</code>"
+                    ),
+                    parse_mode="HTML"
+                )
+                return ConversationHandler.END
+            
             # Launch inline polling as background task (non-blocking)
             # Capture bot reference before creating closure
             bot_instance = context.bot
