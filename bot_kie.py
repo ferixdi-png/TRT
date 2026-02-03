@@ -25910,8 +25910,39 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     poll_attempt=inline_poll_attempts,
                 )
             
-            # Fire and forget - webhook returns immediately
-            asyncio.create_task(_inline_poll_task())
+            # Fire and forget with error handling - webhook returns immediately
+            async def _safe_poll_wrapper():
+                """Wrapper to catch ANY exception and notify user."""
+                try:
+                    await _inline_poll_task()
+                except Exception as fatal_exc:
+                    logger.error(
+                        "FATAL_POLL_CRASH correlation_id=%s task_id=%s user_id=%s error=%s",
+                        correlation_id, task_id, user_id, fatal_exc, exc_info=True
+                    )
+                    # КРИТИЧНО: Уведомляем пользователя о сбое
+                    try:
+                        user_lang = get_user_language(user_id)
+                        crash_msg = (
+                            "⚠️ <b>Произошла ошибка</b>\n\n"
+                            "Не удалось отследить статус генерации.\n"
+                            "Нажмите кнопку 'Статус' чтобы проверить результат.\n\n"
+                            f"ID: <code>{correlation_id}</code>"
+                            if user_lang == "ru" else
+                            "⚠️ <b>Error occurred</b>\n\n"
+                            "Failed to track generation status.\n"
+                            "Press 'Status' button to check result.\n\n"
+                            f"ID: <code>{correlation_id}</code>"
+                        )
+                        await bot_instance.send_message(
+                            chat_id=chat_id_value,
+                            text=crash_msg,
+                            parse_mode="HTML"
+                        )
+                    except Exception as notify_exc:
+                        logger.error("FATAL_POLL_NOTIFY_FAILED user_id=%s error=%s", user_id, notify_exc)
+            
+            asyncio.create_task(_safe_poll_wrapper())
             return ConversationHandler.END
 
         delivered = False
