@@ -307,20 +307,46 @@ class PostgresStorage(BaseStorage):
         clean_data = _filter_garbage_keys_storage(data, filename)
         
         # ============================================================
-        # CRITICAL DATA LOSS PROTECTION v2.0
-        # Comprehensive protection against data loss
+        # CRITICAL DATA LOSS PROTECTION v3.0
+        # Comprehensive protection + automatic backup
         # ============================================================
         CRITICAL_FILES = {"payments.json", "user_registry.json", "user_balances.json", "generations_history.json"}
         
         new_keys_count = len(clean_data) if isinstance(clean_data, dict) else 0
+        current_data = {}
+        current_keys_count = 0
         
         if filename in CRITICAL_FILES:
-            # Load current data to compare
+            # Load current data to compare AND backup
             try:
                 current_data = await self._load_json_unlocked(filename)
                 current_keys_count = len(current_data) if isinstance(current_data, dict) else 0
             except Exception:
                 current_keys_count = 0
+            
+            # AUTO-BACKUP: Save backup before any write to critical files (if data exists)
+            if current_keys_count > 0:
+                backup_filename = f"_backup_{filename}"
+                try:
+                    pool = await self._get_pool()
+                    async with pool.acquire() as conn:
+                        await conn.execute(
+                            """
+                            INSERT INTO storage_json (partner_id, filename, payload)
+                            VALUES ($1, $2, $3::jsonb)
+                            ON CONFLICT (partner_id, filename)
+                            DO UPDATE SET payload = EXCLUDED.payload, updated_at = now()
+                            """,
+                            self.partner_id,
+                            backup_filename,
+                            json.dumps(current_data),
+                        )
+                    logger.info(
+                        "AUTO_BACKUP_SAVED file=%s backup=%s keys=%d partner_id=%s",
+                        filename, backup_filename, current_keys_count, self.partner_id
+                    )
+                except Exception as backup_exc:
+                    logger.warning("AUTO_BACKUP_FAILED file=%s error=%s", filename, backup_exc)
             
             # BLOCK 1: Never overwrite non-empty data with empty data
             if current_keys_count > 0 and new_keys_count == 0:
@@ -335,9 +361,7 @@ class PostgresStorage(BaseStorage):
                 )
             
             # BLOCK 2: Never create new empty critical files (except during legitimate init)
-            # Allow empty only if this is first write AND no data exists
             if current_keys_count == 0 and new_keys_count == 0:
-                # Check if this is from migration or explicit init
                 import traceback
                 stack = ''.join(traceback.format_stack())
                 is_migration = 'migrate_from_github' in stack or 'migrate' in stack.lower()
@@ -354,6 +378,18 @@ class PostgresStorage(BaseStorage):
                         "EMPTY_CRITICAL_FILE_WRITE file=%s current=0 new=0 partner_id=%s",
                         filename, self.partner_id
                     )
+            
+            # BLOCK 3: Never reduce data by more than 80% in single operation
+            if current_keys_count > 10 and new_keys_count < current_keys_count * 0.2:
+                logger.error(
+                    "CRITICAL_DATA_LOSS_BLOCKED file=%s current_keys=%d new_keys=%d "
+                    "reason=EXCESSIVE_DATA_REDUCTION partner_id=%s",
+                    filename, current_keys_count, new_keys_count, self.partner_id
+                )
+                raise ValueError(
+                    f"DATA_LOSS_PROTECTION: Refusing to reduce {filename} by >80% "
+                    f"({current_keys_count} → {new_keys_count} records)!"
+                )
             
             # WARN: Significant data reduction (more than 50% loss)
             if current_keys_count > 5 and new_keys_count < current_keys_count * 0.5:
