@@ -62,6 +62,10 @@ class DependencyContainer:
             "payments": "payments.json",
             "history": "generations_history.json",
         }
+        
+        critical_empty = []
+        partner_id = getattr(storage, "partner_id", "")
+        
         for key, filename in items.items():
             try:
                 payload = await storage.read_json_file(filename, default={})
@@ -72,24 +76,30 @@ class DependencyContainer:
                     "records": records_count,
                     "sample_keys": sample_keys,
                 }
-                # CRITICAL: Alert if critical files are empty
+                # CRITICAL: Track empty critical files
                 if records_count == 0 and key in ("balances", "payments"):
+                    critical_empty.append(filename)
                     logger.error(
                         "BOOT_CRITICAL_DATA_EMPTY file=%s records=0 partner_id=%s "
                         "ACTION_REQUIRED=check_database_or_migration",
-                        filename, getattr(storage, "partner_id", "")
+                        filename, partner_id
                     )
             except Exception as exc:
                 logger.warning("BOOT_STATUS preload_failed file=%s error=%s", filename, exc)
                 counts[key] = {"loaded": False, "records": 0, "sample_keys": []}
 
+        # Summary with health status
+        health_status = "HEALTHY" if not critical_empty else "CRITICAL_DATA_MISSING"
+        
         logger.info(
-            "BOOT_STATUS STORAGE_BACKEND=postgres partner_id=%s "
+            "BOOT_STATUS STORAGE_BACKEND=postgres partner_id=%s health=%s "
             "balances_loaded=%s balances_records=%s balances_sample=%s "
             "daily_free_loaded=%s daily_free_records=%s "
             "payments_loaded=%s payments_records=%s payments_sample=%s "
-            "history_loaded=%s history_records=%s",
-            getattr(storage, "partner_id", ""),
+            "history_loaded=%s history_records=%s "
+            "critical_empty=%s",
+            partner_id,
+            health_status,
             counts["balances"]["loaded"],
             counts["balances"]["records"],
             counts["balances"].get("sample_keys", []),
@@ -100,7 +110,12 @@ class DependencyContainer:
             counts["payments"].get("sample_keys", []),
             counts["history"]["loaded"],
             counts["history"]["records"],
+            critical_empty or "none",
         )
+        
+        # Store health status for monitoring
+        self._data_health_status = health_status
+        self._critical_empty_files = critical_empty
         
     async def initialize(self, settings: Settings):
         """Инициализирует все зависимости"""
