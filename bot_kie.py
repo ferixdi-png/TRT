@@ -4797,6 +4797,10 @@ def _recover_jobs_on_startup() -> None:
     now_ms = _now_ms()
     updated = False
     for job_id, record in data.items():
+        # Skip invalid records (string instead of dict)
+        if not isinstance(record, dict):
+            logger.warning("JOBS_RECOVERY_INVALID_RECORD job_id=%s type=%s", job_id, type(record).__name__)
+            continue
         state = record.get("state")
         if state not in ACTIVE_JOB_STATES_ACTIVE:
             continue
@@ -6457,10 +6461,16 @@ def get_all_users() -> list:
     # From payments
     payments = load_json_file(PAYMENTS_FILE, {})
     payment_users = []
-    for payment in payments.values():
+    invalid_payments = 0
+    for key, payment in payments.items():
+        if not isinstance(payment, dict):
+            invalid_payments += 1
+            continue
         if 'user_id' in payment:
             payment_users.append(payment['user_id'])
             user_ids.add(payment['user_id'])
+    if invalid_payments > 0:
+        logger.warning("GET_ALL_USERS source=payments invalid_records=%d", invalid_payments)
     logger.info("GET_ALL_USERS source=payments count=%d", len(payment_users))
     
     # From referrals
@@ -6978,8 +6988,25 @@ async def add_payment_async(user_id: int, amount: float, screenshot_file_id: str
 def get_all_payments() -> list:
     """Get all payments sorted by timestamp (newest first)."""
     payments = load_json_file(PAYMENTS_FILE, {})
-    payment_list = list(payments.values())
-    payment_list.sort(key=lambda x: x.get("timestamp", 0), reverse=True)
+    payment_list = []
+    invalid_count = 0
+    for key, value in payments.items():
+        if isinstance(value, dict):
+            payment_list.append(value)
+        else:
+            invalid_count += 1
+            logger.warning("GET_ALL_PAYMENTS_INVALID_RECORD key=%s value_type=%s", key, type(value).__name__)
+    if invalid_count > 0:
+        logger.warning("GET_ALL_PAYMENTS_SUMMARY valid=%d invalid=%d", len(payment_list), invalid_count)
+    
+    def safe_timestamp(p):
+        try:
+            ts = p.get("timestamp", 0) if isinstance(p, dict) else 0
+            return int(ts) if ts else 0
+        except (ValueError, TypeError):
+            return 0
+    
+    payment_list.sort(key=safe_timestamp, reverse=True)
     return payment_list
 
 
@@ -6991,14 +7018,21 @@ def get_user_payments(user_id: int) -> list:
 
 def get_payment_stats() -> dict:
     """Get payment statistics."""
+    def safe_amount(p):
+        try:
+            amt = p.get("amount", 0) if isinstance(p, dict) else 0
+            return float(amt) if amt else 0.0
+        except (ValueError, TypeError):
+            return 0.0
+    
     payments = get_all_payments()
-    total_amount = sum(p.get("amount", 0) for p in payments)
+    total_amount = sum(safe_amount(p) for p in payments)
     total_count = len(payments)
     successful_statuses = {"completed", "approved"}
     successful_payments = [
         p for p in payments if p.get("status", "completed") in successful_statuses
     ]
-    successful_amount = sum(p.get("amount", 0) for p in successful_payments)
+    successful_amount = sum(safe_amount(p) for p in successful_payments)
     return {
         "total_amount": total_amount,
         "total_count": total_count,
@@ -7032,7 +7066,14 @@ def get_extended_admin_stats() -> dict:
     active_month = set()
     
     for user_key, user_history in history.items():
+        # Skip invalid user_history (must be list)
+        if not isinstance(user_history, list):
+            logger.warning("ADMIN_STATS_INVALID_HISTORY user_key=%s type=%s", user_key, type(user_history).__name__)
+            continue
         for gen in user_history:
+            # Skip invalid generation records
+            if not isinstance(gen, dict):
+                continue
             timestamp = gen.get('timestamp', 0)
             # Convert timestamp to int if it's a string
             if isinstance(timestamp, str):
@@ -15742,6 +15783,12 @@ async def _button_callback_impl(
                     balance = balances.get(uid, 0)
                     if isinstance(balance, dict):
                         balance = balance.get('balance', 0)
+                    # Safe balance conversion
+                    try:
+                        balance = float(balance) if balance else 0.0
+                    except (ValueError, TypeError):
+                        logger.warning("ADMIN_USERS_INVALID_BALANCE uid=%s balance_value=%s", uid, balance)
+                        balance = 0.0
                     
                     user_display = f"@{username}" if username else first_name or f"ID:{uid}"
                     text += f"{i}. <code>{uid}</code> {user_display} — {format_rub_amount(balance)}\n"
@@ -15771,8 +15818,21 @@ async def _button_callback_impl(
             payments_data = load_json_file(PAYMENTS_FILE, {})
             payments_list = list(payments_data.values()) if isinstance(payments_data, dict) else []
             
-            # Sort by timestamp (newest first)
-            payments_list.sort(key=lambda x: x.get('timestamp', 0), reverse=True)
+            # Filter valid payments and sort by timestamp (newest first)
+            valid_payments = []
+            for p in payments_list:
+                if isinstance(p, dict):
+                    valid_payments.append(p)
+                else:
+                    logger.warning("ADMIN_PAYMENTS_INVALID_RECORD type=%s", type(p).__name__)
+            payments_list = valid_payments
+            
+            def safe_ts(p):
+                try:
+                    return int(p.get('timestamp', 0)) if isinstance(p, dict) else 0
+                except (ValueError, TypeError):
+                    return 0
+            payments_list.sort(key=safe_ts, reverse=True)
             
             # Take last 20 payments
             recent_payments = payments_list[:20]
