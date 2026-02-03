@@ -851,8 +851,7 @@ class PostgresStorage(BaseStorage):
         limit: int = 100,
     ) -> List[Dict[str, Any]]:
         data = await self._load_json(self.jobs_file)
-        # Filter out invalid records (string instead of dict)
-        jobs = [j for j in data.values() if isinstance(j, dict)]
+        jobs = list(data.values())
         if user_id is not None:
             jobs = [j for j in jobs if j.get("user_id") == user_id]
         if status is not None:
@@ -867,10 +866,9 @@ class PostgresStorage(BaseStorage):
     ) -> List[Dict[str, Any]]:
         data = await self._load_json(self.jobs_file)
         wanted = {status.lower() for status in statuses}
-        # Filter out invalid records (string instead of dict)
         jobs = [
             job for job in data.values()
-            if isinstance(job, dict) and (job.get("status") or "").lower() in wanted
+            if (job.get("status") or "").lower() in wanted
         ]
         jobs.sort(key=lambda x: x.get("created_at", ""), reverse=True)
         return jobs[:limit]
