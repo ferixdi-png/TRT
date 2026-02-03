@@ -43,9 +43,9 @@ def _build_dummy_params(model_spec):
 
 def _expected_primary_input(model_mode: str) -> str:
     text_modes = {"text_to_image", "text_to_video", "text_to_audio", "text_to_speech", "text"}
-    image_modes = {"image_to_image", "image_edit", "image_to_video", "outpaint", "upscale", "lip_sync"}
+    image_modes = {"image_to_image", "image_edit", "image_to_video", "outpaint", "upscale"}
     video_modes = {"video_editing", "video_upscale"}
-    audio_modes = {"speech_to_text", "audio_to_audio", "speech_to_video"}
+    audio_modes = {"speech_to_text", "audio_to_audio", "speech_to_video", "lip_sync"}
     if model_mode in text_modes:
         return "prompt"
     if model_mode in image_modes:
