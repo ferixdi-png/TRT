@@ -4349,6 +4349,37 @@ set_constants(FREE_GENERATIONS_PER_DAY, REFERRAL_BONUS_GENERATIONS, ADMIN_ID)
 
 # ==================== Payment System Functions ====================
 
+# System garbage keys that should be filtered from user data JSON files
+# These keys are NOT valid user IDs and corrupt statistics
+SYSTEM_GARBAGE_KEYS = frozenset({"STATUS", "WARNING", "RESTORE_FEE", "METADATA", "_META"})
+
+
+def _filter_garbage_keys(data: dict, *, filename: str) -> dict:
+    """Filter out system garbage keys from data dict.
+    
+    These keys are not valid user data and corrupt statistics.
+    Returns filtered copy of data, logs removed keys.
+    """
+    if not isinstance(data, dict):
+        return data
+    
+    garbage_found = []
+    for key in SYSTEM_GARBAGE_KEYS:
+        if key in data:
+            garbage_found.append(key)
+    
+    if not garbage_found:
+        return data
+    
+    # Create filtered copy
+    filtered = {k: v for k, v in data.items() if k not in SYSTEM_GARBAGE_KEYS}
+    logger.warning(
+        "GARBAGE_KEYS_FILTERED filename=%s removed_keys=%s removed_count=%d remaining_count=%d",
+        os.path.basename(filename), garbage_found, len(garbage_found), len(filtered)
+    )
+    return filtered
+
+
 def get_cache_key(filename: str) -> str:
     """Get cache key for filename."""
     cache_map = {
@@ -4379,14 +4410,16 @@ def _normalize_storage_payload(
     default: Dict[str, Any],
 ) -> Dict[str, Any]:
     if isinstance(payload, dict):
-        return payload
+        # Filter garbage keys from user data files
+        return _filter_garbage_keys(payload, filename=filename)
     if isinstance(payload, str):
         try:
             nested = json.loads(payload)
         except Exception:
             nested = None
         if isinstance(nested, dict):
-            return nested
+            # Filter garbage keys from parsed dict too
+            return _filter_garbage_keys(nested, filename=filename)
     correlation_id = f"storage-{uuid.uuid4().hex[:8]}"
     log_structured_event(
         correlation_id=correlation_id,
@@ -4488,6 +4521,59 @@ def _sanitize_json_payload(data: dict, *, filename: str) -> dict:
             filename,
         )
         return sanitized
+
+
+async def cleanup_garbage_keys_from_db() -> dict:
+    """Clean up garbage system keys from all JSON files in database.
+    
+    Returns summary of cleaned files.
+    """
+    from app.storage.factory import get_storage
+    
+    storage = get_storage()
+    files_to_clean = [
+        "user_registry.json",
+        "user_balances.json", 
+        "payments.json",
+        "free_generations.json",
+        "generations_history.json",
+        "jobs.json",
+    ]
+    
+    summary = {"cleaned": [], "errors": [], "skipped": []}
+    
+    for filename in files_to_clean:
+        try:
+            data = await storage.read_json_file(filename, {})
+            if not isinstance(data, dict):
+                summary["skipped"].append({"file": filename, "reason": "not_dict"})
+                continue
+            
+            garbage_found = [k for k in SYSTEM_GARBAGE_KEYS if k in data]
+            if not garbage_found:
+                summary["skipped"].append({"file": filename, "reason": "no_garbage"})
+                continue
+            
+            # Remove garbage keys
+            cleaned_data = {k: v for k, v in data.items() if k not in SYSTEM_GARBAGE_KEYS}
+            await storage.write_json_file(filename, cleaned_data)
+            
+            summary["cleaned"].append({
+                "file": filename,
+                "removed_keys": garbage_found,
+                "before_count": len(data),
+                "after_count": len(cleaned_data),
+            })
+            logger.info(
+                "DB_GARBAGE_CLEANUP file=%s removed_keys=%s before=%d after=%d",
+                filename, garbage_found, len(data), len(cleaned_data)
+            )
+        except Exception as e:
+            summary["errors"].append({"file": filename, "error": str(e)})
+            logger.error("DB_GARBAGE_CLEANUP_ERROR file=%s error=%s", filename, e)
+    
+    logger.info("DB_GARBAGE_CLEANUP_COMPLETE summary=%s", summary)
+    return summary
 
 
 def save_json_file(filename: str, data: dict, use_cache: bool = True):
@@ -29572,6 +29658,15 @@ async def _run_webhook_initialization(
     init_ms = int((time.monotonic() - init_started) * 1000)
     _webhook_app_ready_event.set()
     logger.info("action=WEBHOOK_APP_READY ready=true init_ms=%s", init_ms)
+    
+    # Clean up garbage keys from DB at startup
+    try:
+        _create_background_task(
+            cleanup_garbage_keys_from_db(),
+            action="db_garbage_cleanup",
+        )
+    except Exception as e:
+        logger.warning("DB_GARBAGE_CLEANUP_SCHEDULE_FAILED error=%s", e)
     
     # Log data loading summary for diagnostics
     try:
