@@ -244,7 +244,12 @@ async def show_price_confirmation(
             except:
                 pass
             
-            balance_after = max(0, user_balance - final_price) if not is_free else user_balance
+            # Конвертация в Stars для EN версии (1 Star ≈ 1.3 RUB)
+            RUB_TO_STARS = 1.3
+            price_stars = max(1, int(price / RUB_TO_STARS))
+            final_price_stars = max(1, int(final_price / RUB_TO_STARS)) if final_price > 0 else 0
+            user_balance_stars = int(user_balance / RUB_TO_STARS) if user_balance > 0 else 0
+            balance_after_stars = max(0, user_balance_stars - final_price_stars) if not is_free else user_balance_stars
             
             message_text = (
                 f"✨ <b>GENERATION CONFIRMATION</b> ✨\n\n"
@@ -272,7 +277,7 @@ async def show_price_confirmation(
                 f"approx <b>{time_estimate}</b>\n\n"
             )
             
-            # === SECTION "WHAT WILL BE DEDUCTED" ===
+            # === SECTION "WHAT WILL BE DEDUCTED" (in Stars) ===
             message_text += (
                 f"{'═' * 40}\n\n"
                 f"💳 <b>WHAT WILL BE DEDUCTED:</b>\n"
@@ -282,41 +287,43 @@ async def show_price_confirmation(
                 message_text += f"🎁 <b>FREE</b> (using free limit)\n"
             else:
                 message_text += (
-                    f"💰 Cost: <b>{price:.2f}</b> ₽\n"
+                    f"💰 Cost: <b>{price_stars}</b> ⭐\n"
                 )
                 
                 if discount:
-                    discount_amount = price * discount
+                    discount_stars = max(1, int((price * discount) / RUB_TO_STARS))
                     discount_percent = int(discount * 100)
                     message_text += (
-                        f"🎫 Discount -{discount_percent}%: <b>−{discount_amount:.2f}</b> ₽\n"
+                        f"🎫 Discount -{discount_percent}%: <b>−{discount_stars}</b> ⭐\n"
                     )
                 
                 if bonus_available > 0 and price_info.get('bonus_used', 0) > 0:
+                    bonus_stars = max(1, int(price_info.get('bonus_used', 0) / RUB_TO_STARS))
                     message_text += (
-                        f"🎁 Bonuses: <b>−{price_info.get('bonus_used', 0):.2f}</b> ₽\n"
+                        f"🎁 Bonuses: <b>−{bonus_stars}</b> ⭐\n"
                     )
             
-            # Show balance
+            # Show balance in Stars
             message_text += (
                 f"\n👤 <b>YOUR BALANCE:</b>\n"
-                f"Current: <b>{user_balance:.2f}</b> ₽\n"
+                f"Current: <b>{user_balance_stars}</b> ⭐\n"
             )
             
             if not is_free:
-                message_text += f"After: <b>{balance_after:.2f}</b> ₽\n"
-                message_text += f"Deduction: <b>−{final_price:.2f}</b> ₽\n"
+                message_text += f"After: <b>{balance_after_stars}</b> ⭐\n"
+                message_text += f"Deduction: <b>−{final_price_stars}</b> ⭐\n"
                 
                 if user_balance < final_price:
+                    missing_stars = max(1, int((final_price - user_balance) / RUB_TO_STARS))
                     message_text += (
                         f"\n⚠️ <b>INSUFFICIENT FUNDS!</b>\n"
-                        f"Missing: {final_price - user_balance:.2f} ₽\n"
+                        f"Missing: {missing_stars} ⭐\n"
                         f"Top up your balance in 💳 <b>Payments</b> section\n"
                     )
             
             message_text += (
                 f"\n{'═' * 40}\n\n"
-                f"💵 <b>TO PAY:</b> <b>{final_price:.2f}</b> ₽\n\n"
+                f"💵 <b>TO PAY:</b> <b>{final_price_stars}</b> ⭐\n\n"
                 f"{'═' * 40}\n\n"
                 f"🚀 <b>Ready to start?</b>"
             )
