@@ -306,26 +306,15 @@ class PostgresStorage(BaseStorage):
         # Filter garbage keys before saving
         clean_data = _filter_garbage_keys_storage(data, filename)
         
-        # AUDIT: Log ALL writes with stack trace for critical files
-        import traceback
-        CRITICAL_FILES = {"payments.json", "user_registry.json", "user_balances.json"}
+        # ============================================================
+        # CRITICAL DATA LOSS PROTECTION v2.0
+        # Comprehensive protection against data loss
+        # ============================================================
+        CRITICAL_FILES = {"payments.json", "user_registry.json", "user_balances.json", "generations_history.json"}
+        
+        new_keys_count = len(clean_data) if isinstance(clean_data, dict) else 0
         
         if filename in CRITICAL_FILES:
-            new_keys_count = len(clean_data) if clean_data else 0
-            stack_summary = ''.join(traceback.format_stack()[-5:-1])  # Last 4 frames
-            logger.info(
-                "CRITICAL_FILE_WRITE_ATTEMPT file=%s new_keys=%d partner_id=%s\nSTACK:\n%s",
-                filename, new_keys_count, self.partner_id, stack_summary
-            )
-        
-        # ============================================================
-        # CRITICAL DATA LOSS PROTECTION
-        # NEVER allow overwriting critical files with empty data
-        # ============================================================
-        
-        if filename in CRITICAL_FILES:
-            new_keys_count = len(clean_data) if clean_data else 0
-            
             # Load current data to compare
             try:
                 current_data = await self._load_json_unlocked(filename)
@@ -333,7 +322,7 @@ class PostgresStorage(BaseStorage):
             except Exception:
                 current_keys_count = 0
             
-            # BLOCK: Attempting to overwrite non-empty data with empty data
+            # BLOCK 1: Never overwrite non-empty data with empty data
             if current_keys_count > 0 and new_keys_count == 0:
                 logger.error(
                     "CRITICAL_DATA_LOSS_BLOCKED file=%s current_keys=%d new_keys=%d "
@@ -344,6 +333,27 @@ class PostgresStorage(BaseStorage):
                     f"DATA_LOSS_PROTECTION: Refusing to overwrite {filename} "
                     f"(has {current_keys_count} records) with empty data!"
                 )
+            
+            # BLOCK 2: Never create new empty critical files (except during legitimate init)
+            # Allow empty only if this is first write AND no data exists
+            if current_keys_count == 0 and new_keys_count == 0:
+                # Check if this is from migration or explicit init
+                import traceback
+                stack = ''.join(traceback.format_stack())
+                is_migration = 'migrate_from_github' in stack or 'migrate' in stack.lower()
+                is_init = '_ensure_' in stack or 'initialize' in stack.lower()
+                
+                if is_migration:
+                    logger.warning(
+                        "MIGRATION_EMPTY_FILE_SKIPPED file=%s reason=source_was_empty partner_id=%s",
+                        filename, self.partner_id
+                    )
+                    return  # Don't write empty file during migration
+                elif not is_init:
+                    logger.warning(
+                        "EMPTY_CRITICAL_FILE_WRITE file=%s current=0 new=0 partner_id=%s",
+                        filename, self.partner_id
+                    )
             
             # WARN: Significant data reduction (more than 50% loss)
             if current_keys_count > 5 and new_keys_count < current_keys_count * 0.5:
@@ -364,6 +374,8 @@ class PostgresStorage(BaseStorage):
         pool = await self._get_pool()
         try:
             async with pool.acquire() as conn:
+                # Use proper JSON serialization - empty dict is still valid JSON
+                payload_json = json.dumps(clean_data) if isinstance(clean_data, dict) else "{}"
                 await conn.execute(
                     """
                     INSERT INTO storage_json (partner_id, filename, payload)
@@ -373,7 +385,7 @@ class PostgresStorage(BaseStorage):
                     """,
                     self.partner_id,
                     filename,
-                    json.dumps(clean_data) if clean_data else "{}",
+                    payload_json,
                 )
         except Exception as exc:
             self._maybe_open_circuit(exc, context="save_json")
@@ -1617,10 +1629,16 @@ class PostgresStorage(BaseStorage):
             return not row or row[0] == 0
 
     async def migrate_from_github(self, github_storage: BaseStorage) -> None:
+        """Migrate data from GitHub storage to PostgreSQL.
+        
+        CRITICAL: This function will NOT overwrite existing data and will NOT
+        create empty files. It only migrates non-empty data from source.
+        """
         migrate_key = "github_to_postgres"
         if await self.has_completed_migration(migrate_key):
             logger.info("[STORAGE] migration already completed")
             return
+        
         files = [
             self.balances_file,
             self.languages_file,
@@ -1634,14 +1652,43 @@ class PostgresStorage(BaseStorage):
             self.referrals_file,
             self.jobs_file,
         ]
+        
         migrated = []
+        skipped_empty = []
+        skipped_existing = []
+        
         for fname in files:
             try:
+                # Check if target already has data
+                existing_data = await self._load_json_unlocked(fname)
+                existing_keys = len(existing_data) if isinstance(existing_data, dict) else 0
+                
+                if existing_keys > 0:
+                    logger.info("[STORAGE] migrate_skipped file=%s reason=target_has_data keys=%d", fname, existing_keys)
+                    skipped_existing.append(fname)
+                    continue
+                
+                # Load from source
                 payload = await github_storage.read_json_file(fname, default={})
-                await self._save_json(fname, payload or {})
+                source_keys = len(payload) if isinstance(payload, dict) else 0
+                
+                if source_keys == 0:
+                    logger.info("[STORAGE] migrate_skipped file=%s reason=source_empty", fname)
+                    skipped_empty.append(fname)
+                    continue
+                
+                # Only migrate if source has data
+                await self._save_json(fname, payload)
                 migrated.append(fname)
-                logger.info("[STORAGE] migrated %s", fname)
+                logger.info("[STORAGE] migrated file=%s keys=%d", fname, source_keys)
+                
             except Exception as exc:
                 logger.warning("[STORAGE] migrate_failed file=%s error=%s", fname, exc)
+        
         await self.mark_migration_done(migrate_key)
-        logger.info("[STORAGE] migration_completed migrated_files=%s", ",".join(migrated) if migrated else "none")
+        logger.info(
+            "[STORAGE] migration_completed migrated=%s skipped_empty=%s skipped_existing=%s",
+            ",".join(migrated) if migrated else "none",
+            ",".join(skipped_empty) if skipped_empty else "none",
+            ",".join(skipped_existing) if skipped_existing else "none"
+        )
