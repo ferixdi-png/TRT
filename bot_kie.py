@@ -8264,14 +8264,28 @@ async def upload_image_to_hosting(image_data: bytes, filename: str = "image.jpg"
                         # For catbox.moe, response is direct URL
                         if 'catbox.moe' in service['url']:
                             if text.startswith('http'):
-                                logger.info("Upload succeeded via catbox.moe")
+                                logger.info("IMAGE_UPLOAD_SUCCESS service=catbox.moe url=%s", text[:80])
                                 return text
+                            else:
+                                # catbox.moe вернул 200 но не URL - логируем детально
+                                logger.warning(
+                                    "IMAGE_UPLOAD_CATBOX_EMPTY_RESPONSE status=%d text_len=%d text_preview=%s",
+                                    status, len(text), repr(text[:100]) if text else "EMPTY"
+                                )
                         # For 0x0.st, response is direct URL
                         elif text.startswith('http'):
-                            logger.info("Upload succeeded via 0x0.st")
+                            logger.info("IMAGE_UPLOAD_SUCCESS service=0x0.st url=%s", text[:80])
                             return text
+                        else:
+                            logger.warning(
+                                "IMAGE_UPLOAD_NO_URL_IN_RESPONSE service=%s status=%d text_preview=%s",
+                                service['url'], status, repr(text[:100]) if text else "EMPTY"
+                            )
                     else:
-                        logger.warning(f"Upload to {service['url']} failed with status {status}: {text[:200]}")
+                        logger.warning(
+                            "IMAGE_UPLOAD_HTTP_ERROR service=%s status=%d text_preview=%s",
+                            service['url'], status, text[:200]
+                        )
             else:  # raw
                     headers = {
                         'Content-Type': 'image/jpeg',
@@ -8292,10 +8306,18 @@ async def upload_image_to_hosting(image_data: bytes, filename: str = "image.jpg"
                         if status in [200, 201]:
                             text = text.strip()
                             if text.startswith('http'):
-                                logger.info("Upload succeeded via transfer.sh")
+                                logger.info("IMAGE_UPLOAD_SUCCESS service=transfer.sh url=%s", text[:80])
                                 return text
+                            else:
+                                logger.warning(
+                                    "IMAGE_UPLOAD_NO_URL_IN_RESPONSE service=transfer.sh status=%d text_preview=%s",
+                                    status, repr(text[:100]) if text else "EMPTY"
+                                )
                         else:
-                            logger.warning(f"Upload to {service['url']} failed with status {status}: {text[:200]}")
+                            logger.warning(
+                                "IMAGE_UPLOAD_HTTP_ERROR service=transfer.sh status=%d text_preview=%s",
+                                status, text[:200]
+                            )
         except asyncio.TimeoutError:
             logger.warning(f"Timeout uploading to {service['url']}")
             continue
@@ -8304,7 +8326,11 @@ async def upload_image_to_hosting(image_data: bytes, filename: str = "image.jpg"
             continue
     
     # If all services fail, return None
-    logger.error("All image hosting services failed. Image size: {} bytes".format(len(image_data)))
+    logger.error(
+        "IMAGE_UPLOAD_ALL_PUBLIC_FAILED image_size=%d services_tried=%s",
+        len(image_data),
+        [s['url'] for s in services]
+    )
     return None
 
 
@@ -8361,11 +8387,30 @@ async def upload_image_to_kie_file_api(image_data: bytes, filename: str = "image
             if not payload.get("success"):
                 logger.error("KIE file upload unsuccessful: %s", payload)
                 return None
-            file_url = payload.get("data", {}).get("fileUrl")
+            
+            # KIE API может возвращать URL в разных полях: downloadUrl, fileUrl, url
+            data_obj = payload.get("data", {})
+            file_url = (
+                data_obj.get("downloadUrl") or 
+                data_obj.get("fileUrl") or 
+                data_obj.get("url")
+            )
+            
             if not file_url:
-                logger.error("KIE file upload missing fileUrl: %s", payload)
+                logger.error(
+                    "KIE_FILE_UPLOAD_URL_NOT_FOUND payload_keys=%s data_keys=%s full_payload=%s",
+                    list(payload.keys()),
+                    list(data_obj.keys()) if isinstance(data_obj, dict) else type(data_obj).__name__,
+                    payload
+                )
                 return None
-            logger.info("Upload succeeded via KIE file API")
+            
+            logger.info(
+                "KIE_FILE_UPLOAD_SUCCESS url=%s fileName=%s fileSize=%s",
+                file_url[:80] if file_url else None,
+                data_obj.get("fileName"),
+                data_obj.get("fileSize")
+            )
             return file_url
     except asyncio.TimeoutError:
         logger.warning("Timeout uploading image to KIE file API.")
@@ -8377,11 +8422,22 @@ async def upload_image_to_kie_file_api(image_data: bytes, filename: str = "image
 
 async def upload_image_with_fallback(image_data: bytes, filename: str = "image.jpg") -> str:
     """Try public hosting first, fall back to KIE file upload API."""
+    logger.info("IMAGE_UPLOAD_START filename=%s size=%d", filename, len(image_data))
+    
     public_url = await upload_image_to_hosting(image_data, filename=filename)
     if public_url:
+        logger.info("IMAGE_UPLOAD_COMPLETE source=public_hosting url=%s", public_url[:80])
         return public_url
-    logger.warning("Public hosting unavailable; trying KIE file upload API fallback.")
-    return await upload_image_to_kie_file_api(image_data, filename=filename)
+    
+    logger.warning("IMAGE_UPLOAD_PUBLIC_FAILED trying KIE file upload API fallback")
+    kie_url = await upload_image_to_kie_file_api(image_data, filename=filename)
+    
+    if kie_url:
+        logger.info("IMAGE_UPLOAD_COMPLETE source=kie_file_api url=%s", kie_url[:80])
+    else:
+        logger.error("IMAGE_UPLOAD_ALL_FAILED filename=%s size=%d", filename, len(image_data))
+    
+    return kie_url
 
 
 MAIN_MENU_TEXT_FALLBACK = "Главное меню"
