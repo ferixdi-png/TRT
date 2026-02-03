@@ -306,11 +306,22 @@ class PostgresStorage(BaseStorage):
         # Filter garbage keys before saving
         clean_data = _filter_garbage_keys_storage(data, filename)
         
+        # AUDIT: Log ALL writes with stack trace for critical files
+        import traceback
+        CRITICAL_FILES = {"payments.json", "user_registry.json", "user_balances.json"}
+        
+        if filename in CRITICAL_FILES:
+            new_keys_count = len(clean_data) if clean_data else 0
+            stack_summary = ''.join(traceback.format_stack()[-5:-1])  # Last 4 frames
+            logger.info(
+                "CRITICAL_FILE_WRITE_ATTEMPT file=%s new_keys=%d partner_id=%s\nSTACK:\n%s",
+                filename, new_keys_count, self.partner_id, stack_summary
+            )
+        
         # ============================================================
         # CRITICAL DATA LOSS PROTECTION
         # NEVER allow overwriting critical files with empty data
         # ============================================================
-        CRITICAL_FILES = {"payments.json", "user_registry.json", "user_balances.json"}
         
         if filename in CRITICAL_FILES:
             new_keys_count = len(clean_data) if clean_data else 0
