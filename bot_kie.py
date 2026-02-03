@@ -3375,8 +3375,8 @@ def get_admin_spent(user_id: int) -> float:
 
 def get_admin_limit(user_id: int) -> float:
     """Get spending limit for admin (100 rubles for limited admins, unlimited for main admin)."""
-    if user_id == ADMIN_ID:
-        return float('inf')  # Main admin has unlimited
+    if is_admin(user_id):
+        return float('inf')  # Admin (including partner) has unlimited
     admin_limits = get_admin_limits()
     admin_data = admin_limits.get(str(user_id), {})
     return admin_data.get('limit', 100.0)  # Default 100 rubles
@@ -3384,8 +3384,8 @@ def get_admin_limit(user_id: int) -> float:
 
 def add_admin_spent(user_id: int, amount: float):
     """Add to admin's spent amount."""
-    if user_id == ADMIN_ID:
-        return  # Main admin doesn't have limits
+    if is_admin(user_id):
+        return  # Admin (including partner) doesn't have limits
     admin_limits = get_admin_limits()
     if str(user_id) not in admin_limits:
         return
@@ -21063,7 +21063,7 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
         return next_param_result
 
     # Handle admin add balance
-    if user_id == ADMIN_ID and user_id in user_sessions and user_sessions[user_id].get('waiting_for') == 'admin_add_balance':
+    if is_admin(user_id) and user_id in user_sessions and user_sessions[user_id].get('waiting_for') == 'admin_add_balance':
         text = update.message.text.strip()
         
         # Parse input: @username amount OR user_id amount
@@ -21157,7 +21157,7 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
             return ADMIN_ADD_BALANCE
     
     # Handle admin OCR test
-    if user_id == ADMIN_ID and user_id in user_sessions and user_sessions[user_id].get('waiting_for') == 'admin_test_ocr':
+    if is_admin(user_id) and user_id in user_sessions and user_sessions[user_id].get('waiting_for') == 'admin_test_ocr':
         if update.message.photo:
             photo = update.message.photo[-1]
             loading_msg = await update.message.reply_text("🔍 Анализирую изображение...")
@@ -21307,7 +21307,7 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
             return ADMIN_TEST_OCR
     
     # Handle broadcast message
-    if user_id == ADMIN_ID and user_id in user_sessions and user_sessions[user_id].get('waiting_for') == 'broadcast_message':
+    if is_admin(user_id) and user_id in user_sessions and user_sessions[user_id].get('waiting_for') == 'broadcast_message':
         import time
         from datetime import datetime
         
@@ -21383,7 +21383,7 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
         return ConversationHandler.END
     
     # Handle currency rate input
-    if user_id == ADMIN_ID and user_id in user_sessions and user_sessions[user_id].get('waiting_for') == 'currency_rate':
+    if is_admin(user_id) and user_id in user_sessions and user_sessions[user_id].get('waiting_for') == 'currency_rate':
         if not update.message.text:
             await update.message.reply_text(
                 "❌ <b>Ошибка</b>\n\n"
@@ -24560,8 +24560,8 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 outcome="passed",
                 param={"price_rub": price, "balance_rub": user_balance},
             )
-    elif user_id != ADMIN_ID:
-        # Limited admin - check limit
+    elif not is_admin(user_id):
+        # Non-admin user - this shouldn't happen here, but handle it
         remaining = get_admin_remaining(user_id)
         if remaining < price:
             price_str = format_rub_amount(price)
@@ -27481,7 +27481,7 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                         is_free = session.get('is_free_generation', False)
                         
                         # Check if charge was made (shouldn't be, but check anyway)
-                        if not is_free and user_id != ADMIN_ID:
+                        if not is_free and not is_admin(user_id):
                             price = calculate_price_rub(model_id, params, is_admin_user)
                             # Refund if charge was made (idempotent - safe to call multiple times)
                             try:
@@ -27569,7 +27569,7 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                         is_free = session.get('is_free_generation', False)
                         
                         # AUTO-REFUND on timeout
-                        if not is_free and user_id != ADMIN_ID:
+                        if not is_free and not is_admin(user_id):
                             price = calculate_price_rub(model_id, params, is_admin_user)
                             try:
                                 await add_user_balance_async(user_id, price)
@@ -27601,7 +27601,7 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                 is_free = session.get('is_free_generation', False)
                 
                 # AUTO-REFUND on timeout
-                if not is_free and user_id != ADMIN_ID:
+                if not is_free and not is_admin(user_id):
                     price = calculate_price_rub(model_id, params, is_admin_user)
                     if price is None:
                         logger.error("Missing price for refund on model %s", model_id)
