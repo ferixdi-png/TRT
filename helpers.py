@@ -45,6 +45,17 @@ ADMIN_ID = None
 CREDIT_TO_USD = 0.005
 _get_usd_to_rub_rate = None
 
+# Курс конвертации RUB -> Stars
+RUB_TO_STARS_RATE = 1.3
+
+def _format_balance_for_lang(balance: float, lang: str) -> str:
+    """Форматирует баланс в зависимости от языка."""
+    if lang == 'ru':
+        return f"{balance:.2f} ₽"
+    else:
+        stars = max(1, int(balance / RUB_TO_STARS_RATE)) if balance > 0 else 0
+        return f"{stars} ⭐"
+
 
 def set_constants(free_gen_per_day: int, ref_bonus: int, admin_id: int):
     """Устанавливает константы из bot_kie.py"""
@@ -272,10 +283,10 @@ async def format_balance_message(balance_info: Dict[str, Any], user_lang: str = 
         if user_lang == 'en':
             return (
                 f'👑 <b>Admin with limit</b>\n\n'
-                f'💳 <b>Limit:</b> {limit:.2f} RUB\n'
-                f'💸 <b>Spent:</b> {spent:.2f} RUB\n'
-                f'✅ <b>Remaining:</b> {remaining:.2f} RUB\n\n'
-                f'💰 <b>User balance:</b> {balance_str} RUB'
+                f'💳 <b>Limit:</b> {_format_balance_for_lang(limit, "en")}\n'
+                f'💸 <b>Spent:</b> {_format_balance_for_lang(spent, "en")}\n'
+                f'✅ <b>Remaining:</b> {_format_balance_for_lang(remaining, "en")}\n\n'
+                f'💰 <b>User balance:</b> {_format_balance_for_lang(float(balance_str), "en")}'
             )
         else:
             return (
@@ -287,10 +298,11 @@ async def format_balance_message(balance_info: Dict[str, Any], user_lang: str = 
             )
     elif is_main_admin:
         if user_lang == 'en':
-            balance_text = f'💳 <b>Your balance:</b> {balance_str} RUB\n\n'
+            balance_text = f'💳 <b>Your balance:</b> {_format_balance_for_lang(float(balance_str), "en")}\n\n'
             if balance_info.get('kie_credits_rub_str'):
+                kie_rub = float(balance_info["kie_credits_rub_str"])
                 balance_text += (
-                    f'🔧 <b>Generation system balance:</b> {balance_info["kie_credits_rub_str"]} RUB\n'
+                    f'🔧 <b>Generation system balance:</b> {_format_balance_for_lang(kie_rub, "en")}\n'
                     f'<i>({balance_info["kie_credits"]} credits)</i>'
                 )
             elif balance_info.get("kie_credits_error"):
@@ -316,12 +328,13 @@ async def format_balance_message(balance_info: Dict[str, Any], user_lang: str = 
             if remaining_free > 0:
                 free_info = f"\n\n🎁 <b>Free Generations:</b> {remaining_free}/{FREE_GENERATIONS_PER_DAY} per day (free models)"
             
+            balance_stars = _format_balance_for_lang(float(balance_str), 'en')
             balance_message = (
                 f"╔═══════════════════════════════════╗\n"
                 f"║  💳 YOUR BALANCE 💳               ║\n"
                 f"╚═══════════════════════════════════╝\n\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"💰 <b>Available funds:</b> <b>{balance_str} ₽</b>\n"
+                f"💰 <b>Available funds:</b> <b>{balance_stars}</b>\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             )
             
