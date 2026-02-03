@@ -306,6 +306,50 @@ class PostgresStorage(BaseStorage):
         # Filter garbage keys before saving
         clean_data = _filter_garbage_keys_storage(data, filename)
         
+        # ============================================================
+        # CRITICAL DATA LOSS PROTECTION
+        # NEVER allow overwriting critical files with empty data
+        # ============================================================
+        CRITICAL_FILES = {"payments.json", "user_registry.json", "user_balances.json"}
+        
+        if filename in CRITICAL_FILES:
+            new_keys_count = len(clean_data) if clean_data else 0
+            
+            # Load current data to compare
+            try:
+                current_data = await self._load_json_unlocked(filename)
+                current_keys_count = len(current_data) if isinstance(current_data, dict) else 0
+            except Exception:
+                current_keys_count = 0
+            
+            # BLOCK: Attempting to overwrite non-empty data with empty data
+            if current_keys_count > 0 and new_keys_count == 0:
+                logger.error(
+                    "CRITICAL_DATA_LOSS_BLOCKED file=%s current_keys=%d new_keys=%d "
+                    "reason=REFUSING_TO_OVERWRITE_WITH_EMPTY partner_id=%s",
+                    filename, current_keys_count, new_keys_count, self.partner_id
+                )
+                raise ValueError(
+                    f"DATA_LOSS_PROTECTION: Refusing to overwrite {filename} "
+                    f"(has {current_keys_count} records) with empty data!"
+                )
+            
+            # WARN: Significant data reduction (more than 50% loss)
+            if current_keys_count > 5 and new_keys_count < current_keys_count * 0.5:
+                logger.warning(
+                    "CRITICAL_DATA_REDUCTION_WARNING file=%s current_keys=%d new_keys=%d "
+                    "reduction_pct=%.1f%% partner_id=%s",
+                    filename, current_keys_count, new_keys_count,
+                    (1 - new_keys_count / current_keys_count) * 100,
+                    self.partner_id
+                )
+            
+            # Log all writes to critical files
+            logger.info(
+                "CRITICAL_FILE_WRITE file=%s current_keys=%d new_keys=%d partner_id=%s",
+                filename, current_keys_count, new_keys_count, self.partner_id
+            )
+        
         pool = await self._get_pool()
         try:
             async with pool.acquire() as conn:
