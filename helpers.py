@@ -101,24 +101,24 @@ async def build_main_menu_keyboard(
     """
     if user_lang == "ru":
         return [
-            [InlineKeyboardButton("🆓 FAST TOOLS", callback_data="fast_tools")],
-            [InlineKeyboardButton("🎨 Генерация визуала", callback_data="gen_type:text-to-image")],
-            [InlineKeyboardButton("🧩 Ремикс изображения", callback_data="gen_type:image-to-image")],
+            [InlineKeyboardButton("⚡ Бесплатные генерации", callback_data="fast_tools")],
+            [InlineKeyboardButton("🖼️ Текст → Фото", callback_data="gen_type:text-to-image")],
+            [InlineKeyboardButton("🧩 Редактор фото", callback_data="gen_type:image-to-image")],
             [InlineKeyboardButton("🎬 Видео по сценарию", callback_data="gen_type:text-to-video")],
-            [InlineKeyboardButton("🪄 Анимировать изображение", callback_data="gen_type:image-to-video")],
-            [InlineKeyboardButton("🧰 Спец-инструменты", callback_data="special_tools")],
+            [InlineKeyboardButton("🎬 Фото → Видео", callback_data="gen_type:image-to-video")],
+            [InlineKeyboardButton("🧰 Другие модели", callback_data="special_tools")],
             [InlineKeyboardButton("💳 Баланс / Доступ", callback_data="check_balance")],
             [InlineKeyboardButton("🤝 Партнёрка", callback_data="referral_info")],
             [InlineKeyboardButton("🌐 Язык / Language", callback_data="change_language")],
         ]
     else:
         return [
-            [InlineKeyboardButton("🆓 FAST TOOLS", callback_data="fast_tools")],
-            [InlineKeyboardButton("🎨 Visual Generation", callback_data="gen_type:text-to-image")],
-            [InlineKeyboardButton("🧩 Image Remix", callback_data="gen_type:image-to-image")],
+            [InlineKeyboardButton("⚡ Free generations", callback_data="fast_tools")],
+            [InlineKeyboardButton("🖼️ Text → Photo", callback_data="gen_type:text-to-image")],
+            [InlineKeyboardButton("🧩 Photo editor", callback_data="gen_type:image-to-image")],
             [InlineKeyboardButton("🎬 Video by Script", callback_data="gen_type:text-to-video")],
-            [InlineKeyboardButton("🪄 Animate Image", callback_data="gen_type:image-to-video")],
-            [InlineKeyboardButton("🧰 Special Tools", callback_data="special_tools")],
+            [InlineKeyboardButton("🎬 Photo → Video", callback_data="gen_type:image-to-video")],
+            [InlineKeyboardButton("🧰 More models", callback_data="special_tools")],
             [InlineKeyboardButton("💳 Balance / Access", callback_data="check_balance")],
             [InlineKeyboardButton("🤝 Referral", callback_data="referral_info")],
             [InlineKeyboardButton("🌐 Language / Язык", callback_data="change_language")],
