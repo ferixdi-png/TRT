@@ -20,9 +20,9 @@ async def test_fast_tools_button_in_menu():
         for button in row:
             buttons.append((button.callback_data, button.text))
     
-    # Ищем кнопку FAST TOOLS (может быть с эмодзи 🆓)
-    fast_tools = [b for b in buttons if b[0] == "fast_tools" and "FAST TOOLS" in b[1]]
-    assert len(fast_tools) == 1, f"Ожидается 1 кнопка FAST TOOLS, найдено {len(fast_tools)}"
+    # Ищем кнопку fast_tools (текст может быть "Бесплатные генерации" или "Free generations")
+    fast_tools = [b for b in buttons if b[0] == "fast_tools"]
+    assert len(fast_tools) == 1, f"Ожидается 1 кнопка fast_tools, найдено {len(fast_tools)}"
 
 
 @pytest.mark.asyncio

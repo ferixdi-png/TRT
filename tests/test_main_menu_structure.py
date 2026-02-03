@@ -16,15 +16,15 @@ async def test_main_menu_has_fast_tools_button():
     # Проверяем русскую версию
     keyboard_ru = await build_main_menu_keyboard(user_id, user_lang='ru', is_new=False)
     
-    # Ищем кнопку FAST TOOLS
+    # Ищем кнопку fast_tools (текст обновлён на "Бесплатные генерации" / "Free generations")
     fast_tools_found = False
     for row in keyboard_ru:
         for button in row:
-            if button.callback_data == "fast_tools" and "FAST TOOLS" in button.text:
+            if button.callback_data == "fast_tools":
                 fast_tools_found = True
                 break
     
-    assert fast_tools_found, "Кнопка FAST TOOLS не найдена в русском меню"
+    assert fast_tools_found, "Кнопка fast_tools не найдена в русском меню"
     
     # Проверяем английскую версию
     keyboard_en = await build_main_menu_keyboard(user_id, user_lang='en', is_new=False)
@@ -32,11 +32,11 @@ async def test_main_menu_has_fast_tools_button():
     fast_tools_found = False
     for row in keyboard_en:
         for button in row:
-            if button.callback_data == "fast_tools" and "FAST TOOLS" in button.text:
+            if button.callback_data == "fast_tools":
                 fast_tools_found = True
                 break
     
-    assert fast_tools_found, "Кнопка FAST TOOLS не найдена в английском меню"
+    assert fast_tools_found, "Кнопка fast_tools не найдена в английском меню"
 
 
 @pytest.mark.asyncio
@@ -47,16 +47,17 @@ async def test_main_menu_has_all_required_buttons():
     
     keyboard = await build_main_menu_keyboard(user_id, user_lang=user_lang, is_new=False)
     
-    # Ожидаемые кнопки в порядке от эталона (из helpers.py)
+    # Ожидаемые кнопки в порядке от эталона (обновлено 2026-02-03)
     expected_buttons = [
-        ("fast_tools", "🆓 FAST TOOLS"),
-        ("gen_type:text-to-image", "🎨 Генерация визуала"),
-        ("gen_type:image-to-image", "🧩 Ремикс изображения"),
+        ("fast_tools", "⚡ Бесплатные генерации"),
+        ("gen_type:text-to-image", "🖼️ Текст → Фото"),
+        ("gen_type:image-to-image", "🧩 Редактор фото"),
         ("gen_type:text-to-video", "🎬 Видео по сценарию"),
-        ("gen_type:image-to-video", "🪄 Анимировать изображение"),
-        ("special_tools", "🧰 Спец-инструменты"),
+        ("gen_type:image-to-video", "🎬 Фото → Видео"),
+        ("special_tools", "🧰 Другие модели"),
         ("check_balance", "💳 Баланс / Доступ"),
-        ("referral_info", "🤝 Партнёрка")
+        ("referral_info", "🤝 Партнёрка"),
+        ("change_language", "🌐 Язык / Language")
     ]
     
     # Проверяем наличие всех кнопок
@@ -138,8 +139,8 @@ async def test_start_command_shows_menu():
     keyboard = await build_main_menu_keyboard(user_id=12345, user_lang='ru', is_new=False)
     button_texts = [button.text for row in keyboard for button in row]
     
-    assert any("FAST TOOLS" in t for t in button_texts), "В меню нет кнопки FAST TOOLS"
-    assert any("Генерация визуала" in t for t in button_texts), "В меню нет кнопки генерации визуала"
+    assert any("Бесплатные" in t for t in button_texts), "В меню нет кнопки Бесплатные генерации"
+    assert any("Текст" in t for t in button_texts), "В меню нет кнопки Текст → Фото"
 
 
 if __name__ == "__main__":

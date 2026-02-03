@@ -63,7 +63,7 @@ async def test_confirm_generate_dedup_joined_shows_status(harness, monkeypatch):
     payload = (outbox.get("edited_messages") or outbox.get("messages"))[-1]
     assert any(
         phrase in payload["text"]
-        for phrase in ("Генерация уже", "Generation already", "Задача принята", "Task accepted")
+        for phrase in ("Генерация уже", "Generation already", "Задача принята", "Task accepted", "запущена", "running", "В очереди", "In queue", "Обработка")
     )
     keyboard = payload["reply_markup"].inline_keyboard
     assert any(

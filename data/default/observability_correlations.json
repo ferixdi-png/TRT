@@ -78,20 +78,20 @@
   "corr-test": {
     "correlation_id": "corr-test",
     "request_id": "corr-test",
-    "task_id": "task-123",
-    "job_id": "job-873106cf330f",
-    "user_id": 42,
-    "model_id": "sora-2-text-to-video",
-    "updated_at_ms": 1770105852565,
+    "task_id": null,
+    "job_id": null,
+    "user_id": 101,
+    "model_id": null,
+    "updated_at_ms": 1770124780227,
     "missing_actions": [],
-    "source": "run_generation.task_created"
+    "source": "structured_logs"
   },
   "request:corr-test": {
     "correlation_id": "corr-test",
     "request_id": "corr-test",
-    "task_id": "task-123",
-    "job_id": "job-873106cf330f",
-    "updated_at_ms": 1770105852565
+    "task_id": null,
+    "job_id": null,
+    "updated_at_ms": 1770124780227
   },
   "1fc88320-e38e-444e-9774-b5268137a1be": {
     "correlation_id": "1fc88320-e38e-444e-9774-b5268137a1be",
@@ -3880,5 +3880,227 @@
     "task_id": "task-123",
     "job_id": "job-f025634d0003",
     "updated_at_ms": 1770117383792
+  },
+  "corr-1-9911-d816b94a": {
+    "correlation_id": "corr-1-9911-d816b94a",
+    "request_id": "corr-1-9911-d816b94a",
+    "task_id": "task-123",
+    "job_id": "job-e34da0f8ae0f",
+    "user_id": 9911,
+    "model_id": "test-model",
+    "updated_at_ms": 1770124667925,
+    "missing_actions": [],
+    "source": "confirm_generate.delivery_tracking"
+  },
+  "request:corr-1-9911-d816b94a": {
+    "correlation_id": "corr-1-9911-d816b94a",
+    "request_id": "corr-1-9911-d816b94a",
+    "task_id": "task-123",
+    "job_id": "job-e34da0f8ae0f",
+    "updated_at_ms": 1770124667925
+  },
+  "corr-1-777-e5438a80": {
+    "correlation_id": "corr-1-777-e5438a80",
+    "request_id": "corr-1-777-e5438a80",
+    "task_id": null,
+    "job_id": "job-d3300d27a78f",
+    "user_id": 777,
+    "model_id": "test-model",
+    "updated_at_ms": 1770126627069,
+    "missing_actions": [
+      "TASK_LIFECYCLE:TASK_LIFECYCLE:task_id:missing_required_ids_after_create"
+    ],
+    "source": "missing_ids"
+  },
+  "request:corr-1-777-e5438a80": {
+    "correlation_id": "corr-1-777-e5438a80",
+    "request_id": "corr-1-777-e5438a80",
+    "task_id": null,
+    "job_id": "job-d3300d27a78f",
+    "updated_at_ms": 1770126627069
+  },
+  "corr-1-777-6bb35da8": {
+    "correlation_id": "corr-1-777-6bb35da8",
+    "request_id": "corr-1-777-6bb35da8",
+    "task_id": "task-send-fail",
+    "job_id": "job-8eef61cf4a8f",
+    "user_id": 777,
+    "model_id": "test-model",
+    "updated_at_ms": 1770126688593,
+    "missing_actions": [],
+    "source": "confirm_generate.delivery_tracking"
+  },
+  "request:corr-1-777-6bb35da8": {
+    "correlation_id": "corr-1-777-6bb35da8",
+    "request_id": "corr-1-777-6bb35da8",
+    "task_id": "task-send-fail",
+    "job_id": "job-8eef61cf4a8f",
+    "updated_at_ms": 1770126688593
+  },
+  "corr-1-778-2e5244c2": {
+    "correlation_id": "corr-1-778-2e5244c2",
+    "request_id": "corr-1-778-2e5244c2",
+    "task_id": null,
+    "job_id": "job-9a98e7ae45b8",
+    "user_id": 778,
+    "model_id": "test-model",
+    "updated_at_ms": 1770126688668,
+    "missing_actions": [
+      "TASK_LIFECYCLE:TASK_LIFECYCLE:task_id:missing_required_ids_after_create"
+    ],
+    "source": "missing_ids"
+  },
+  "request:corr-1-778-2e5244c2": {
+    "correlation_id": "corr-1-778-2e5244c2",
+    "request_id": "corr-1-778-2e5244c2",
+    "task_id": null,
+    "job_id": "job-9a98e7ae45b8",
+    "updated_at_ms": 1770126688668
+  },
+  "corr-1-9911-dde48635": {
+    "correlation_id": "corr-1-9911-dde48635",
+    "request_id": "corr-1-9911-dde48635",
+    "task_id": "task-123",
+    "job_id": "job-53760d49964d",
+    "user_id": 9911,
+    "model_id": "test-model",
+    "updated_at_ms": 1770126691214,
+    "missing_actions": [],
+    "source": "confirm_generate.delivery_tracking"
+  },
+  "request:corr-1-9911-dde48635": {
+    "correlation_id": "corr-1-9911-dde48635",
+    "request_id": "corr-1-9911-dde48635",
+    "task_id": "task-123",
+    "job_id": "job-53760d49964d",
+    "updated_at_ms": 1770126691214
+  },
+  "corr-1-7777-c4c5009e": {
+    "correlation_id": "corr-1-7777-c4c5009e",
+    "request_id": "corr-1-7777-c4c5009e",
+    "task_id": "task-123",
+    "job_id": "job-aafb3f2ed972",
+    "user_id": 7777,
+    "model_id": "test-model",
+    "updated_at_ms": 1770126691420,
+    "missing_actions": [],
+    "source": "confirm_generate.delivery_tracking"
+  },
+  "request:corr-1-7777-c4c5009e": {
+    "correlation_id": "corr-1-7777-c4c5009e",
+    "request_id": "corr-1-7777-c4c5009e",
+    "task_id": "task-123",
+    "job_id": "job-aafb3f2ed972",
+    "updated_at_ms": 1770126691420
+  },
+  "corr-1-777-9229c716": {
+    "correlation_id": "corr-1-777-9229c716",
+    "request_id": "corr-1-777-9229c716",
+    "task_id": "task-send-fail",
+    "job_id": "job-2f961339faf7",
+    "user_id": 777,
+    "model_id": "test-model",
+    "updated_at_ms": 1770126796466,
+    "missing_actions": [],
+    "source": "confirm_generate.delivery_tracking"
+  },
+  "request:corr-1-777-9229c716": {
+    "correlation_id": "corr-1-777-9229c716",
+    "request_id": "corr-1-777-9229c716",
+    "task_id": "task-send-fail",
+    "job_id": "job-2f961339faf7",
+    "updated_at_ms": 1770126796466
+  },
+  "corr-1-9911-893fc271": {
+    "correlation_id": "corr-1-9911-893fc271",
+    "request_id": "corr-1-9911-893fc271",
+    "task_id": "task-123",
+    "job_id": "job-623b2b8c55ef",
+    "user_id": 9911,
+    "model_id": "test-model",
+    "updated_at_ms": 1770126799306,
+    "missing_actions": [],
+    "source": "missing_ids"
+  },
+  "request:corr-1-9911-893fc271": {
+    "correlation_id": "corr-1-9911-893fc271",
+    "request_id": "corr-1-9911-893fc271",
+    "task_id": "task-123",
+    "job_id": "job-623b2b8c55ef",
+    "updated_at_ms": 1770126799306
+  },
+  "corr-1-7777-f4330878": {
+    "correlation_id": "corr-1-7777-f4330878",
+    "request_id": "corr-1-7777-f4330878",
+    "task_id": "task-123",
+    "job_id": "job-2b4acfe65f86",
+    "user_id": 7777,
+    "model_id": "test-model",
+    "updated_at_ms": 1770126799489,
+    "missing_actions": [],
+    "source": "confirm_generate.delivery_tracking"
+  },
+  "request:corr-1-7777-f4330878": {
+    "correlation_id": "corr-1-7777-f4330878",
+    "request_id": "corr-1-7777-f4330878",
+    "task_id": "task-123",
+    "job_id": "job-2b4acfe65f86",
+    "updated_at_ms": 1770126799489
+  },
+  "corr-1-9911-623df293": {
+    "correlation_id": "corr-1-9911-623df293",
+    "request_id": "corr-1-9911-623df293",
+    "task_id": "task-123",
+    "job_id": "job-e416cc473f0a",
+    "user_id": 9911,
+    "model_id": "test-model",
+    "updated_at_ms": 1770126983301,
+    "missing_actions": [],
+    "source": "confirm_generate.delivery_tracking"
+  },
+  "request:corr-1-9911-623df293": {
+    "correlation_id": "corr-1-9911-623df293",
+    "request_id": "corr-1-9911-623df293",
+    "task_id": "task-123",
+    "job_id": "job-e416cc473f0a",
+    "updated_at_ms": 1770126983301
+  },
+  "corr-1-7777-e4f518e4": {
+    "correlation_id": "corr-1-7777-e4f518e4",
+    "request_id": "corr-1-7777-e4f518e4",
+    "task_id": "task-123",
+    "job_id": "job-091f36dec535",
+    "user_id": 7777,
+    "model_id": "test-model",
+    "updated_at_ms": 1770126983472,
+    "missing_actions": [],
+    "source": "confirm_generate.delivery_tracking"
+  },
+  "request:corr-1-7777-e4f518e4": {
+    "correlation_id": "corr-1-7777-e4f518e4",
+    "request_id": "corr-1-7777-e4f518e4",
+    "task_id": "task-123",
+    "job_id": "job-091f36dec535",
+    "updated_at_ms": 1770126983472
+  },
+  "corr-1-777-22abb167": {
+    "correlation_id": "corr-1-777-22abb167",
+    "request_id": "corr-1-777-22abb167",
+    "task_id": null,
+    "job_id": "job-0343acc1aa02",
+    "user_id": 777,
+    "model_id": "test-model",
+    "updated_at_ms": 1770127138369,
+    "missing_actions": [
+      "TASK_LIFECYCLE:TASK_LIFECYCLE:task_id:missing_required_ids_after_create"
+    ],
+    "source": "missing_ids"
+  },
+  "request:corr-1-777-22abb167": {
+    "correlation_id": "corr-1-777-22abb167",
+    "request_id": "corr-1-777-22abb167",
+    "task_id": null,
+    "job_id": "job-0343acc1aa02",
+    "updated_at_ms": 1770127138369
   }
 }

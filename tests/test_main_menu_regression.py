@@ -18,16 +18,17 @@ class TestMainMenuRegression:
         
         keyboard = await build_main_menu_keyboard(user_id, user_lang=user_lang, is_new=False)
         
-        # Ожидаемая структура кнопок согласно эталону
+        # Ожидаемая структура кнопок согласно эталону (обновлено 2026-02-03)
         expected_buttons = [
-            "🆓 FAST TOOLS",
-            "🎨 Генерация визуала", 
-            "🧩 Ремикс изображения",
+            "⚡ Бесплатные генерации",
+            "🖼️ Текст → Фото", 
+            "🧩 Редактор фото",
             "🎬 Видео по сценарию",
-            "🪄 Анимировать изображение",
-            "🧰 Спец-инструменты",
+            "🎬 Фото → Видео",
+            "🧰 Другие модели",
             "💳 Баланс / Доступ",
-            "🤝 Партнёрка"
+            "🤝 Партнёрка",
+            "🌐 Язык / Language"
         ]
         
         # Проверяем количество строк
@@ -40,22 +41,24 @@ class TestMainMenuRegression:
             assert button.text == expected_text, f"Row {i}: expected '{expected_text}', got '{button.text}'"
             
             # Проверяем callback_data
-            if expected_text == "🆓 FAST TOOLS":
+            if expected_text == "⚡ Бесплатные генерации":
                 assert button.callback_data == "fast_tools"
-            elif expected_text == "🎨 Генерация визуала":
+            elif expected_text == "🖼️ Текст → Фото":
                 assert button.callback_data == "gen_type:text-to-image"
-            elif expected_text == "🧩 Ремикс изображения":
+            elif expected_text == "🧩 Редактор фото":
                 assert button.callback_data == "gen_type:image-to-image"
             elif expected_text == "🎬 Видео по сценарию":
                 assert button.callback_data == "gen_type:text-to-video"
-            elif expected_text == "🪄 Анимировать изображение":
+            elif expected_text == "🎬 Фото → Видео":
                 assert button.callback_data == "gen_type:image-to-video"
-            elif expected_text == "🧰 Спец-инструменты":
+            elif expected_text == "🧰 Другие модели":
                 assert button.callback_data == "special_tools"
             elif expected_text == "💳 Баланс / Доступ":
                 assert button.callback_data == "check_balance"
             elif expected_text == "🤝 Партнёрка":
                 assert button.callback_data == "referral_info"
+            elif expected_text == "🌐 Язык / Language":
+                assert button.callback_data == "change_language"
 
     @pytest.mark.asyncio
     async def test_main_menu_english_etalon_structure(self):
@@ -65,16 +68,17 @@ class TestMainMenuRegression:
         
         keyboard = await build_main_menu_keyboard(user_id, user_lang=user_lang, is_new=False)
         
-        # Ожидаемая структура кнопок согласно эталону
+        # Ожидаемая структура кнопок согласно эталону (обновлено 2026-02-03)
         expected_buttons = [
-            "🆓 FAST TOOLS",
-            "🎨 Visual Generation",
-            "🧩 Image Remix", 
+            "⚡ Free generations",
+            "🖼️ Text → Photo",
+            "🧩 Photo editor", 
             "🎬 Video by Script",
-            "🪄 Animate Image",
-            "🧰 Special Tools",
+            "🎬 Photo → Video",
+            "🧰 More models",
             "💳 Balance / Access",
-            "🤝 Referral"
+            "🤝 Referral",
+            "🌐 Language / Язык"
         ]
         
         # Проверяем количество строк
@@ -87,22 +91,24 @@ class TestMainMenuRegression:
             assert button.text == expected_text, f"Row {i}: expected '{expected_text}', got '{button.text}'"
             
             # Проверяем callback_data (аналогично русской версии)
-            if expected_text == "🆓 FAST TOOLS":
+            if expected_text == "⚡ Free generations":
                 assert button.callback_data == "fast_tools"
-            elif expected_text == "🎨 Visual Generation":
+            elif expected_text == "🖼️ Text → Photo":
                 assert button.callback_data == "gen_type:text-to-image"
-            elif expected_text == "🧩 Image Remix":
+            elif expected_text == "🧩 Photo editor":
                 assert button.callback_data == "gen_type:image-to-image"
             elif expected_text == "🎬 Video by Script":
                 assert button.callback_data == "gen_type:text-to-video"
-            elif expected_text == "🪄 Animate Image":
+            elif expected_text == "🎬 Photo → Video":
                 assert button.callback_data == "gen_type:image-to-video"
-            elif expected_text == "🧰 Special Tools":
+            elif expected_text == "🧰 More models":
                 assert button.callback_data == "special_tools"
             elif expected_text == "💳 Balance / Access":
                 assert button.callback_data == "check_balance"
             elif expected_text == "🤝 Referral":
                 assert button.callback_data == "referral_info"
+            elif expected_text == "🌐 Language / Язык":
+                assert button.callback_data == "change_language"
 
     @pytest.mark.asyncio
     async def test_main_menu_no_extra_buttons(self):
@@ -123,6 +129,7 @@ class TestMainMenuRegression:
                     "special_tools", 
                     "check_balance",
                     "referral_info",
+                    "change_language",
                     "gen_type:text-to-image",
                     "gen_type:image-to-image", 
                     "gen_type:text-to-video",
@@ -142,29 +149,31 @@ class TestMainMenuRegression:
             # Извлекаем тексты кнопок в порядке следования
             button_texts = [row[0].text for row in keyboard]
             
-            # Проверяем порядок для русского языка
+            # Проверяем порядок для русского языка (обновлено 2026-02-03)
             if lang == "ru":
                 expected_order = [
-                    "🆓 FAST TOOLS",
-                    "🎨 Генерация визуала",
-                    "🧩 Ремикс изображения", 
+                    "⚡ Бесплатные генерации",
+                    "🖼️ Текст → Фото",
+                    "🧩 Редактор фото", 
                     "🎬 Видео по сценарию",
-                    "🪄 Анимировать изображение",
-                    "🧰 Спец-инструменты",
+                    "🎬 Фото → Видео",
+                    "🧰 Другие модели",
                     "💳 Баланс / Доступ",
-                    "🤝 Партнёрка"
+                    "🤝 Партнёрка",
+                    "🌐 Язык / Language"
                 ]
-            # Проверяем порядок для английского языка
+            # Проверяем порядок для английского языка (обновлено 2026-02-03)
             else:
                 expected_order = [
-                    "🆓 FAST TOOLS",
-                    "🎨 Visual Generation",
-                    "🧩 Image Remix",
+                    "⚡ Free generations",
+                    "🖼️ Text → Photo",
+                    "🧩 Photo editor",
                     "🎬 Video by Script", 
-                    "🪄 Animate Image",
-                    "🧰 Special Tools",
+                    "🎬 Photo → Video",
+                    "🧰 More models",
                     "💳 Balance / Access",
-                    "🤝 Referral"
+                    "🤝 Referral",
+                    "🌐 Language / Язык"
                 ]
             
             assert button_texts == expected_order, \
