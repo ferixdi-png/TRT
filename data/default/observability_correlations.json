@@ -3862,5 +3862,23 @@
     "task_id": "task-123",
     "job_id": "job-b41fdb7fadea",
     "updated_at_ms": 1770114164646
+  },
+  "corr-1-9911-3f27e59c": {
+    "correlation_id": "corr-1-9911-3f27e59c",
+    "request_id": "corr-1-9911-3f27e59c",
+    "task_id": "task-123",
+    "job_id": "job-f025634d0003",
+    "user_id": 9911,
+    "model_id": "test-model",
+    "updated_at_ms": 1770117383792,
+    "missing_actions": [],
+    "source": "confirm_generate.delivery_tracking"
+  },
+  "request:corr-1-9911-3f27e59c": {
+    "correlation_id": "corr-1-9911-3f27e59c",
+    "request_id": "corr-1-9911-3f27e59c",
+    "task_id": "task-123",
+    "job_id": "job-f025634d0003",
+    "updated_at_ms": 1770117383792
   }
 }

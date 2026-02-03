@@ -96,7 +96,13 @@ def main() -> int:
 
     orphan_callbacks = sorted(cb for cb in callbacks if cb not in IGNORED_CALLBACKS and not is_covered(cb))
 
-    unused_handler_allowlist = {"pay_card:", "pay_stars:", "reset_step", "view_payment_screenshots", "..."}
+    unused_handler_allowlist = {
+        "pay_card:", "pay_stars:", "reset_step", "view_payment_screenshots", "...",
+        # These handlers ARE used but regex doesn't detect matching callbacks:
+        "example:",  # data.startswith("example:") - used in bot_kie.py:17914
+        "info:",     # data.startswith("info:") - used in bot_kie.py:18039
+        "other_models",  # data == "other_models" - used in bot_kie.py:12334
+    }
     unused_handlers = sorted(
         h for h in handler_prefixes.union(handler_exact)
         if h not in unused_handler_allowlist
