@@ -264,12 +264,19 @@ def _create_background_task(coro: Any, *, action: str) -> asyncio.Task:
 def start_delivery_reconciler(bot) -> None:
     global _delivery_reconciler_task
     if _delivery_reconciler_task and not _delivery_reconciler_task.done():
+        logger.info("RECONCILER_ALREADY_RUNNING task_done=%s", _delivery_reconciler_task.done() if _delivery_reconciler_task else None)
         return
     from app.storage import get_storage
     from app.integrations.kie_stub import get_kie_client_or_stub
     from app.delivery.reconciler import run_reconciler_loop
     storage_instance = get_storage()
     kie_client = get_kie_client_or_stub()
+    logger.info(
+        "RECONCILER_STARTING interval_s=%s batch_limit=%s kie_client_type=%s",
+        DELIVERY_RECONCILE_INTERVAL_SECONDS,
+        DELIVERY_RECONCILE_BATCH_LIMIT,
+        type(kie_client).__name__
+    )
     _delivery_reconciler_task = _create_background_task(
         run_reconciler_loop(
             bot,
