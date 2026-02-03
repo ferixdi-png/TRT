@@ -263,12 +263,13 @@ class PostgresStorage(BaseStorage):
                     filename,
                 )
                 # AUDIT: Log critical files
-                if filename == "user_registry.json":
+                if filename in ("user_registry.json", "payments.json", "user_balances.json"):
                     if row:
-                        payload = row[0]
-                        keys_count = len(payload) if isinstance(payload, dict) else 0
-                        logger.info("PG_LOAD_AUDIT file=%s partner_id=%s row_found=true keys=%d", 
-                                   filename, self.partner_id, keys_count)
+                        payload_preview = row[0]
+                        keys_count = len(payload_preview) if isinstance(payload_preview, dict) else 0
+                        sample_keys = list(payload_preview.keys())[:5] if isinstance(payload_preview, dict) else []
+                        logger.info("PG_LOAD_AUDIT file=%s partner_id=%s row_found=true keys=%d sample=%s", 
+                                   filename, self.partner_id, keys_count, sample_keys)
                     else:
                         logger.info("PG_LOAD_AUDIT file=%s partner_id=%s row_found=false", 
                                    filename, self.partner_id)
