@@ -4611,6 +4611,70 @@ async def cleanup_garbage_keys_from_db() -> dict:
     return summary
 
 
+async def startup_data_health_check() -> dict:
+    """CRITICAL: Check data integrity at startup. Runs synchronously to guarantee logging."""
+    from app.storage.factory import get_storage
+    
+    logger.info("=" * 60)
+    logger.info("STARTUP_DATA_HEALTH_CHECK_BEGIN")
+    logger.info("=" * 60)
+    
+    storage = get_storage()
+    storage_type = type(storage).__name__
+    
+    results = {
+        "storage_type": storage_type,
+        "files": {}
+    }
+    
+    critical_files = [
+        ("payments.json", "payments"),
+        ("user_registry.json", "users"),
+        ("user_balances.json", "balances"),
+    ]
+    
+    for filename, label in critical_files:
+        try:
+            data = await storage.read_json_file(filename, {})
+            keys_count = len(data) if isinstance(data, dict) else 0
+            sample_keys = list(data.keys())[:5] if isinstance(data, dict) else []
+            data_type = type(data).__name__
+            
+            results["files"][filename] = {
+                "keys_count": keys_count,
+                "sample_keys": sample_keys,
+                "type": data_type
+            }
+            
+            logger.info(
+                "STARTUP_DATA_CHECK file=%s keys=%d sample=%s type=%s storage=%s",
+                filename, keys_count, sample_keys, data_type, storage_type
+            )
+        except Exception as e:
+            results["files"][filename] = {"error": str(e)}
+            logger.error("STARTUP_DATA_CHECK_ERROR file=%s error=%s", filename, e)
+    
+    # Summary
+    total_payments = results["files"].get("payments.json", {}).get("keys_count", 0)
+    total_users = results["files"].get("user_registry.json", {}).get("keys_count", 0)
+    total_balances = results["files"].get("user_balances.json", {}).get("keys_count", 0)
+    
+    logger.info("=" * 60)
+    logger.info(
+        "STARTUP_DATA_HEALTH_CHECK_COMPLETE payments=%d users=%d balances=%d storage=%s",
+        total_payments, total_users, total_balances, storage_type
+    )
+    logger.info("=" * 60)
+    
+    # ALERT if data is suspiciously low
+    if total_payments == 0:
+        logger.error("STARTUP_ALERT: NO PAYMENTS FOUND! Data may be lost!")
+    if total_users == 0:
+        logger.error("STARTUP_ALERT: NO USERS FOUND! Data may be lost!")
+    
+    return results
+
+
 def save_json_file(filename: str, data: dict, use_cache: bool = True):
     """Save data to storage with cached writes."""
     try:
@@ -29756,6 +29820,13 @@ async def _run_webhook_initialization(
         logger.warning("[WEBHOOK] health_server_start_failed: %s", health_exc, exc_info=True)
 
     init_ms = int((time.monotonic() - init_started) * 1000)
+    
+    # CRITICAL: Run data health check BEFORE marking app as ready
+    try:
+        await startup_data_health_check()
+    except Exception as e:
+        logger.error("STARTUP_DATA_HEALTH_CHECK_FAILED error=%s", e, exc_info=True)
+    
     _webhook_app_ready_event.set()
     logger.info("action=WEBHOOK_APP_READY ready=true init_ms=%s", init_ms)
     
