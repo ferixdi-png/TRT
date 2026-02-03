@@ -15747,6 +15747,11 @@ async def _button_callback_impl(
                     balance = balances.get(uid, 0)
                     if isinstance(balance, dict):
                         balance = balance.get('balance', 0)
+                    # Ensure balance is a valid number
+                    try:
+                        balance = float(balance) if balance else 0
+                    except (ValueError, TypeError):
+                        balance = 0
                     
                     user_display = f"@{username}" if username else first_name or f"ID:{uid}"
                     text += f"{i}. <code>{uid}</code> {user_display} — {format_rub_amount(balance)}\n"
