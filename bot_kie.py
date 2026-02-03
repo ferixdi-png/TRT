@@ -7093,7 +7093,13 @@ def get_extended_admin_stats() -> dict:
     # Get top models by usage
     model_usage = {}
     for user_key, user_history in history.items():
+        # Skip invalid user_history (must be list)
+        if not isinstance(user_history, list):
+            continue
         for gen in user_history:
+            # Skip invalid generation records
+            if not isinstance(gen, dict):
+                continue
             model_id = gen.get('model_id', '')
             if model_id:
                 model_usage[model_id] = model_usage.get(model_id, 0) + 1
@@ -7115,6 +7121,8 @@ def get_extended_admin_stats() -> dict:
     # Calculate conversion rate (users who made at least one payment)
     users_with_payments = set()
     for payment in payment_stats.get('payments', []):
+        if not isinstance(payment, dict):
+            continue
         user_id = payment.get('user_id')
         if user_id:
             users_with_payments.add(user_id)
@@ -7126,12 +7134,30 @@ def get_extended_admin_stats() -> dict:
     
     # Get revenue for periods
     payments = payment_stats.get('payments', [])
-    revenue_today = sum(p.get('amount', 0) for p in payments if p.get('timestamp', 0) >= today_start)
-    revenue_week = sum(p.get('amount', 0) for p in payments if p.get('timestamp', 0) >= week_start)
-    revenue_month = sum(p.get('amount', 0) for p in payments if p.get('timestamp', 0) >= month_start)
     
-    # Total generations count
-    total_generations = sum(len(user_history) for user_history in history.values())
+    def safe_payment_amount(p, min_ts):
+        if not isinstance(p, dict):
+            return 0
+        ts = p.get('timestamp', 0)
+        if not isinstance(ts, (int, float)):
+            try:
+                ts = int(ts) if ts else 0
+            except (ValueError, TypeError):
+                ts = 0
+        if ts >= min_ts:
+            amt = p.get('amount', 0)
+            try:
+                return float(amt) if amt else 0
+            except (ValueError, TypeError):
+                return 0
+        return 0
+    
+    revenue_today = sum(safe_payment_amount(p, today_start) for p in payments)
+    revenue_week = sum(safe_payment_amount(p, week_start) for p in payments)
+    revenue_month = sum(safe_payment_amount(p, month_start) for p in payments)
+    
+    # Total generations count (only count valid list entries)
+    total_generations = sum(len(uh) for uh in history.values() if isinstance(uh, list))
     
     return {
         'total_users': total_users,
