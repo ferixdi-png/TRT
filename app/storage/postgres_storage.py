@@ -29,6 +29,53 @@ SYSTEM_GARBAGE_KEYS = frozenset({
     "ERROR", "INFO", "DEBUG", "SYSTEM", "CONFIG",
 })
 
+# Metrics counters for garbage filtering
+_garbage_filter_stats = {
+    "total_filtered": 0,
+    "files_cleaned": set(),
+}
+
+
+def _is_valid_user_key(key: str) -> bool:
+    """Check if a key is a valid user ID (numeric string)."""
+    if not isinstance(key, str):
+        return False
+    return key.isdigit() and int(key) > 0
+
+
+def _validate_user_id(user_id: int, operation: str) -> bool:
+    """Validate user_id is a positive integer."""
+    if not isinstance(user_id, int):
+        logger.error("INVALID_USER_ID operation=%s user_id=%s type=%s expected=int",
+                    operation, user_id, type(user_id).__name__)
+        return False
+    if user_id <= 0:
+        logger.error("INVALID_USER_ID operation=%s user_id=%s reason=non_positive",
+                    operation, user_id)
+        return False
+    return True
+
+
+def _safe_float(value, default: float = 0.0, field: str = "unknown") -> float:
+    """Safely convert value to float with logging on failure."""
+    if value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            logger.warning("SAFE_FLOAT_FAILED field=%s value=%s type=str", field, value[:50] if len(value) > 50 else value)
+            return default
+    if isinstance(value, dict):
+        # Try to extract 'balance' or 'amount' from dict
+        for key in ('balance', 'amount', 'value'):
+            if key in value:
+                return _safe_float(value[key], default, field=f"{field}.{key}")
+    logger.warning("SAFE_FLOAT_FAILED field=%s value_type=%s", field, type(value).__name__)
+    return default
+
 
 def _filter_garbage_keys_storage(data: dict, filename: str) -> dict:
     """Filter out garbage system keys from data before saving to storage."""
@@ -36,11 +83,24 @@ def _filter_garbage_keys_storage(data: dict, filename: str) -> dict:
         return data
     
     garbage_found = [k for k in data.keys() if k in SYSTEM_GARBAGE_KEYS]
-    if garbage_found:
-        filtered = {k: v for k, v in data.items() if k not in SYSTEM_GARBAGE_KEYS}
+    # Also filter non-digit keys in user data files
+    user_data_files = {
+        "user_balances.json", "user_languages.json", "gift_claimed.json",
+        "daily_free_generations.json", "referral_free_bank.json", "admin_limits.json",
+    }
+    invalid_keys = []
+    if filename in user_data_files:
+        invalid_keys = [k for k in data.keys() if not _is_valid_user_key(k) and k not in SYSTEM_GARBAGE_KEYS]
+    
+    all_garbage = list(set(garbage_found + invalid_keys))
+    
+    if all_garbage:
+        filtered = {k: v for k, v in data.items() if k not in SYSTEM_GARBAGE_KEYS and (filename not in user_data_files or _is_valid_user_key(k))}
+        _garbage_filter_stats["total_filtered"] += len(all_garbage)
+        _garbage_filter_stats["files_cleaned"].add(filename)
         logger.warning(
-            "STORAGE_GARBAGE_FILTERED filename=%s removed_keys=%s before=%d after=%d",
-            filename, garbage_found, len(data), len(filtered)
+            "STORAGE_GARBAGE_FILTERED filename=%s removed_keys=%s invalid_user_keys=%s before=%d after=%d total_filtered=%d",
+            filename, garbage_found, invalid_keys, len(data), len(filtered), _garbage_filter_stats["total_filtered"]
         )
         return filtered
     return data
@@ -303,10 +363,16 @@ class PostgresStorage(BaseStorage):
         }
 
     async def get_user_balance(self, user_id: int) -> float:
+        if not _validate_user_id(user_id, "get_user_balance"):
+            return 0.0
         data = await self._load_json(self.balances_file)
-        return float(data.get(str(user_id), 0.0))
+        raw_value = data.get(str(user_id), 0.0)
+        return _safe_float(raw_value, default=0.0, field=f"balance[{user_id}]")
 
     async def set_user_balance(self, user_id: int, amount: float) -> None:
+        if not _validate_user_id(user_id, "set_user_balance"):
+            logger.error("SET_BALANCE_REJECTED user_id=%s reason=invalid_user_id", user_id)
+            return
         balance_before = await self.get_user_balance(user_id)
         data = await self._load_json(self.balances_file)
         data[str(user_id)] = amount
@@ -321,6 +387,9 @@ class PostgresStorage(BaseStorage):
 
     async def add_user_balance(self, user_id: int, amount: float) -> float:
         """Add to user balance with transaction lock to prevent race conditions."""
+        if not _validate_user_id(user_id, "add_user_balance"):
+            logger.error("ADD_BALANCE_REJECTED user_id=%s amount=%.2f reason=invalid_user_id", user_id, amount)
+            return 0.0
         pool = await self._get_pool()
         async with pool.acquire() as conn:
             async with conn.transaction():
@@ -340,7 +409,7 @@ class PostgresStorage(BaseStorage):
                 balances = self._coerce_payload(payload, filename=self.balances_file)
                 # Filter garbage keys before processing
                 balances = _filter_garbage_keys_storage(balances, self.balances_file)
-                balance_before = float(balances.get(str(user_id), 0.0))
+                balance_before = _safe_float(balances.get(str(user_id), 0.0), field=f"balance[{user_id}]")
                 new_balance = balance_before + amount
                 balances[str(user_id)] = new_balance
                 
@@ -362,6 +431,9 @@ class PostgresStorage(BaseStorage):
 
     async def subtract_user_balance(self, user_id: int, amount: float) -> bool:
         """Subtract from user balance with transaction lock to prevent race conditions."""
+        if not _validate_user_id(user_id, "subtract_user_balance"):
+            logger.error("SUBTRACT_BALANCE_REJECTED user_id=%s amount=%.2f reason=invalid_user_id", user_id, amount)
+            return False
         pool = await self._get_pool()
         async with pool.acquire() as conn:
             async with conn.transaction():
@@ -381,7 +453,7 @@ class PostgresStorage(BaseStorage):
                 balances = self._coerce_payload(payload, filename=self.balances_file)
                 # Filter garbage keys before processing
                 balances = _filter_garbage_keys_storage(balances, self.balances_file)
-                balance_before = float(balances.get(str(user_id), 0.0))
+                balance_before = _safe_float(balances.get(str(user_id), 0.0), field=f"balance[{user_id}]")
                 
                 if balance_before < amount:
                     logger.warning(
@@ -423,6 +495,9 @@ class PostgresStorage(BaseStorage):
         sku_id: str = "",
         model_id: str = "",
     ) -> Dict[str, Any]:
+        if not _validate_user_id(user_id, "charge_balance_once"):
+            logger.error("CHARGE_BALANCE_REJECTED user_id=%s task_id=%s reason=invalid_user_id", user_id, task_id)
+            return {"status": "invalid_user_id", "balance_before": 0.0, "balance_after": 0.0}
         if not task_id:
             return {"status": "missing_task_id"}
         if not math.isfinite(amount) or amount <= 0:
@@ -471,7 +546,7 @@ class PostgresStorage(BaseStorage):
                 deductions = _filter_garbage_keys_storage(deductions, self.balance_deductions_file)
 
                 if task_id in deductions:
-                    balance_before = float(balances.get(str(user_id), 0.0))
+                    balance_before = _safe_float(balances.get(str(user_id), 0.0), field=f"balance[{user_id}]")
                     logger.info(
                         "BALANCE_CHARGE_DUPLICATE user_id=%s task_id=%s sku_id=%s model_id=%s balance=%.2f",
                         user_id,
@@ -486,7 +561,7 @@ class PostgresStorage(BaseStorage):
                         "balance_after": balance_before,
                     }
 
-                balance_before = float(balances.get(str(user_id), 0.0))
+                balance_before = _safe_float(balances.get(str(user_id), 0.0), field=f"balance[{user_id}]")
                 if balance_before < amount:
                     logger.warning(
                         "BALANCE_CHARGE_INSUFFICIENT user_id=%s task_id=%s required=%.2f available=%.2f",
@@ -613,6 +688,9 @@ class PostgresStorage(BaseStorage):
         sku_id: str = "",
         source: str = "delivery",
     ) -> Dict[str, Any]:
+        if not _validate_user_id(user_id, "consume_free_generation_once"):
+            logger.error("CONSUME_FREE_GEN_REJECTED user_id=%s task_id=%s reason=invalid_user_id", user_id, task_id)
+            return {"status": "invalid_user_id", "used_today": 0, "remaining": 0, "limit_per_day": 0}
         if not task_id:
             return {"status": "missing_task_id"}
         from app.pricing.free_policy import get_free_daily_limit
@@ -728,6 +806,9 @@ class PostgresStorage(BaseStorage):
 
     async def add_referral_free_bank(self, user_id: int, bonus: int) -> int:
         """Add to referral free bank with transaction lock to prevent race conditions."""
+        if not _validate_user_id(user_id, "add_referral_free_bank"):
+            logger.error("ADD_REFERRAL_BANK_REJECTED user_id=%s bonus=%d reason=invalid_user_id", user_id, bonus)
+            return 0
         pool = await self._get_pool()
         async with pool.acquire() as conn:
             async with conn.transaction():
