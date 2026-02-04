@@ -765,12 +765,31 @@ async def main() -> None:
     logger.info("[RENDER] Application initialized")
     
     # Кэшируем bot_username для реферальных ссылок
+    # ВАЖНО: bot.username может быть None до вызова getMe()!
     try:
         import bot_kie
-        if application.bot and hasattr(application.bot, 'username') and application.bot.username:
-            bot_kie._cached_bot_username = application.bot.username
-            bot_kie._application_for_webhook = application
-            logger.info("[RENDER] BOT_USERNAME_CACHED username=%s", application.bot.username)
+        bot_kie._application_for_webhook = application
+        
+        # Получаем username через getMe() если он ещё не заполнен
+        bot_username = None
+        if application.bot:
+            if hasattr(application.bot, 'username') and application.bot.username:
+                bot_username = application.bot.username
+            else:
+                # Явно вызываем getMe() чтобы получить username
+                try:
+                    me = await application.bot.get_me()
+                    if me and me.username:
+                        bot_username = me.username
+                        logger.info("[RENDER] BOT_USERNAME_FROM_GETME username=%s", bot_username)
+                except Exception as get_me_err:
+                    logger.warning("[RENDER] BOT_GETME_FAILED error=%s", get_me_err)
+        
+        if bot_username:
+            bot_kie._cached_bot_username = bot_username
+            logger.info("[RENDER] BOT_USERNAME_CACHED username=%s", bot_username)
+        else:
+            logger.warning("[RENDER] BOT_USERNAME_NOT_AVAILABLE bot=%s", application.bot)
     except Exception as e:
         logger.warning("[RENDER] BOT_USERNAME_CACHE_FAILED error=%s", e)
     
