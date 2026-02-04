@@ -3,21 +3,10 @@
 """
 
 import logging
-from typing import Optional, Any
+from typing import Optional
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
-
-# Курс конвертации RUB -> Stars
-RUB_TO_STARS_RATE = 1.3
-
-def _format_price(amount: float, lang: str) -> str:
-    """Форматирует цену в зависимости от языка."""
-    if lang == 'ru':
-        return f"{amount:.2f} ₽"
-    else:
-        stars = max(1, int(amount / RUB_TO_STARS_RATE))
-        return f"{stars} ⭐"
 
 
 async def send_balance_deduction_notification(
@@ -59,18 +48,17 @@ async def send_balance_deduction_notification(
                 f"⏰ {datetime.now().strftime('%H:%M:%S')}"
             )
         else:
-            # EN: показываем в Stars
             message_text = (
                 f"💳 <b>Balance Deduction</b>\n\n"
                 f"📊 <b>Model:</b> {model_name}\n"
-                f"💰 <b>Deducted:</b> {_format_price(amount, 'en')}\n"
+                f"💰 <b>Deducted:</b> {amount:.2f} ₽\n"
             )
             
             if bonus_used > 0:
-                message_text += f"🎁 <b>Bonuses used:</b> {_format_price(bonus_used, 'en')}\n"
+                message_text += f"🎁 <b>Bonuses used:</b> {bonus_used:.2f} ₽\n"
             
             message_text += (
-                f"💵 <b>Remaining balance:</b> {_format_price(remaining_balance, 'en')}\n\n"
+                f"💵 <b>Remaining balance:</b> {remaining_balance:.2f} ₽\n\n"
                 f"⏰ {datetime.now().strftime('%H:%M:%S')}"
             )
         
@@ -139,27 +127,26 @@ async def send_insufficient_balance_message(
                 [InlineKeyboardButton("🏠 Главное меню", callback_data="back_to_menu")]
             ]
         else:
-            # EN: показываем в Stars
             message_text = (
                 f"⚠️ <b>Insufficient Funds</b>\n\n"
-                f"💰 <b>Required:</b> {_format_price(required, 'en')}\n"
-                f"💳 <b>Your balance:</b> {_format_price(current_balance, 'en')}\n"
+                f"💰 <b>Required:</b> {required:.2f} ₽\n"
+                f"💳 <b>Your balance:</b> {current_balance:.2f} ₽\n"
             )
             
             if bonus_available > 0:
-                message_text += f"🎁 <b>Available bonuses:</b> {_format_price(bonus_available, 'en')}\n"
+                message_text += f"🎁 <b>Available bonuses:</b> {bonus_available:.2f} ₽\n"
                 if bonus_available >= needed:
                     message_text += f"✅ <b>Bonuses are enough to pay!</b>\n"
                 else:
-                    message_text += f"❌ <b>Need:</b> {_format_price(needed, 'en')}\n"
+                    message_text += f"❌ <b>Need:</b> {needed:.2f} ₽\n"
             else:
-                message_text += f"❌ <b>Need:</b> {_format_price(needed, 'en')}\n"
+                message_text += f"❌ <b>Need:</b> {needed:.2f} ₽\n"
             
             message_text += (
                 f"\n💡 <b>Recommendations:</b>\n"
                 f"• Top up balance via /balance command\n"
                 f"• Use promo codes to get bonuses\n"
-                f"• Invite a friend and get 38 ⭐ bonus\n"
+                f"• Invite a friend and get 50 ₽ bonus\n"
             )
             
             buttons = [
@@ -212,14 +199,13 @@ async def send_balance_update(
             
             message_text += f"\n⏰ {datetime.now().strftime('%H:%M:%S')}"
         else:
-            # EN: показываем в Stars
             message_text = (
                 f"💳 <b>Balance Update</b>\n\n"
-                f"💰 <b>Your balance:</b> {_format_price(new_balance, 'en')}\n"
+                f"💰 <b>Your balance:</b> {new_balance:.2f} ₽\n"
             )
             
             if bonus_balance > 0:
-                message_text += f"🎁 <b>Bonus balance:</b> {_format_price(bonus_balance, 'en')}\n"
+                message_text += f"🎁 <b>Bonus balance:</b> {bonus_balance:.2f} ₽\n"
             
             message_text += f"\n⏰ {datetime.now().strftime('%H:%M:%S')}"
         
