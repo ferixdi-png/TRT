@@ -983,3 +983,32 @@ models:
     notes: default-10.0s-1080p
   description_ru: Текст в видео через Wan 2.5. Стабильный результат, понятная логика
     генерации.
+- id: wan/2-6-text-to-video
+  title_ru: Wan 2.6 Text to Video
+  type: t2v
+  modes:
+  - unit: video
+    credits: 68.6
+    official_usd: 0.343
+    notes: default-5.0s-720p
+  - unit: video
+    credits: 137.2
+    official_usd: 0.686
+    notes: default-10.0s-720p
+  - unit: video
+    credits: 205.8
+    official_usd: 1.029
+    notes: default-15.0s-720p
+  - unit: video
+    credits: 102.4
+    official_usd: 0.512
+    notes: default-5.0s-1080p
+  - unit: video
+    credits: 205.4
+    official_usd: 1.027
+    notes: default-10.0s-1080p
+  - unit: video
+    credits: 308.9
+    official_usd: 1.544
+    notes: default-15.0s-1080p
+  description_ru: Wan 2.6 - новейшая модель текст в видео. До 15 секунд, режим multi-shots.

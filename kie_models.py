@@ -558,6 +558,42 @@ KIE_MODELS = [
         }
     },
     {
+        "id": "wan/2-6-text-to-video",
+        "name": "WAN 2.6 Text-to-Video",
+        "description": "Alibaba WAN 2.6 - новейшая модель генерации видео из текста. Поддержка 720p и 1080p, длительность до 15 секунд, режим multi-shots для переходов между кадрами.",
+        "category": "Видео",
+        "emoji": "🎥",
+        "pricing": "54-243 ₽ в зависимости от длительности и разрешения",
+        "input_params": {
+            "prompt": {
+                "type": "string",
+                "description": "Текстовое описание желаемого видео (макс. 5000 символов, поддерживает китайский и английский)",
+                "required": True,
+                "max_length": 5000
+            },
+            "duration": {
+                "type": "string",
+                "description": "Длительность видео в секундах",
+                "required": False,
+                "default": "5",
+                "enum": ["5", "10", "15"]
+            },
+            "resolution": {
+                "type": "string",
+                "description": "Разрешение видео",
+                "required": False,
+                "default": "1080p",
+                "enum": ["720p", "1080p"]
+            },
+            "multi_shots": {
+                "type": "boolean",
+                "description": "Режим мультикадров - создаёт видео с переходами между несколькими кадрами вместо одного непрерывного",
+                "required": False,
+                "default": False
+            }
+        }
+    },
+    {
         "id": "wan/2-2-animate-move",
         "name": "WAN 2.2 Animate Move",
         "description": "Alibaba Tongyi Lab модель для генерации реалистичных видео персонажей с движением, выражениями и освещением. Поддерживает режим анимации для оживления статических изображений и режим замены для бесшовной замены персонажей в существующих клипах.",
@@ -2641,7 +2677,7 @@ GENERATION_TYPES = {
     "text-to-video": {
         "name": "🎬 Текст в видео",
         "description": "Создавайте видео из текстового описания",
-        "models": ["sora-2-text-to-video", "kling-2.6/text-to-video", "kling/v2-5-turbo-text-to-video-pro", "wan/2-5-text-to-video", "hailuo/02-text-to-video-pro", "hailuo/02-text-to-video-standard", "kling/v2-1-master-text-to-video", "grok/imagine", "google/veo-3", "google/veo-3.1", "sora-2-pro-storyboard", "kling/v2-5-turbo", "hailuo/2.3", "runway/gen-4"]
+        "models": ["sora-2-text-to-video", "kling-2.6/text-to-video", "kling/v2-5-turbo-text-to-video-pro", "wan/2-6-text-to-video", "wan/2-5-text-to-video", "hailuo/02-text-to-video-pro", "hailuo/02-text-to-video-standard", "kling/v2-1-master-text-to-video", "grok/imagine", "google/veo-3", "google/veo-3.1", "sora-2-pro-storyboard", "kling/v2-5-turbo", "hailuo/2.3", "runway/gen-4"]
     },
     "image-to-video": {
         "name": "📸 Фото в видео",
