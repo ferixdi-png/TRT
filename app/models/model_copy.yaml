@@ -485,6 +485,12 @@ wan/2-5-text-to-video:
     default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
       • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
     by_sku_key: {}
+wan/2-6-text-to-video:
+  model_short: Wan 2.6 — новейшая модель текст в видео. До 15 секунд, режим multi-shots
+    для переходов между кадрами.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution}'
+    by_sku_key: {}
 z-image:
   model_short: 'Z-Image: экспериментальная модель генерации. Нестандартные стили и
     подходы.'

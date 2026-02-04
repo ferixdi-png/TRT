@@ -91,7 +91,19 @@ description: Добавление новой нейросети в бота
 
 Найти строки с `is_video = gen.get('model_id', '') in [...]` и добавить model_id.
 
-### 7. Проверка
+### 7. (Опционально) `app/models/model_copy.yaml` — копирайтинг
+
+Убирает warning `MODEL_COPY_FALLBACK`. Добавить:
+
+```yaml
+model-id:
+  model_short: Краткое описание модели для UI.
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution}'
+    by_sku_key: {}
+```
+
+### 8. Проверка
 
 ```bash
 python -c "import yaml; yaml.safe_load(open('app/kie_catalog/models_pricing.yaml', encoding='utf-8'))"
@@ -117,3 +129,4 @@ python -m pytest tests/test_critical_flows.py -q
 - [ ] `kie_models.py` → GENERATION_TYPES
 - [ ] `data/kie_pricing_rub.yaml`
 - [ ] `bot_kie.py` → is_video (для видео)
+- [ ] `app/models/model_copy.yaml` (опционально, убирает warning)
