@@ -18411,6 +18411,23 @@ async def _button_callback_impl(
                 return ConversationHandler.END
             session["prefill_params"] = dict(sku.params)
             session["sku_id"] = sku.sku_id
+            # Сохраняем price_quote для отображения цены на первом шаге
+            from app.pricing.price_resolver import resolve_price_quote
+            from app.config import get_settings
+            sku_quote = resolve_price_quote(
+                model_id=sku.model_id,
+                mode_index=0,
+                gen_type=None,
+                selected_params=dict(sku.params),
+                settings=get_settings(),
+                is_admin=get_is_admin(user_id),
+            )
+            if sku_quote:
+                session["price_quote"] = {
+                    "price_rub": f"{sku_quote.price_rub:.2f}",
+                    "currency": sku_quote.currency,
+                    "breakdown": sku_quote.breakdown,
+                }
             data = f"select_model:{canonicalize_model_id(sku.model_id)}"
 
         # Handle select_model: callback - starts generation flow directly (legacy, still supported)
