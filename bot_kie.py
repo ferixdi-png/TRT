@@ -6602,9 +6602,36 @@ def give_bonus_generations(user_id: int, bonus_count: int):
 
 
 def get_user_referral_link(user_id: int, bot_username: str = None) -> str:
-    """Get referral link for user."""
+    """Get referral link for user.
+    
+    Приоритет получения bot_username:
+    1. Переданный аргумент bot_username
+    2. Переменная окружения BOT_USERNAME (партнёр ОБЯЗАН её установить!)
+    3. Динамически из _application_for_webhook.bot.username
+    4. Fallback: пустая строка (ссылка не сработает, но не покажет чужой бот)
+    """
     if bot_username is None:
-        bot_username = os.getenv("BOT_USERNAME") or "Ferixdi_bot_ai_bot"
+        # Приоритет 1: переменная окружения (партнёр должен установить!)
+        bot_username = os.getenv("BOT_USERNAME", "").strip()
+        
+        # Приоритет 2: динамически из application
+        if not bot_username:
+            try:
+                if _application_for_webhook and hasattr(_application_for_webhook, 'bot'):
+                    bot_obj = _application_for_webhook.bot
+                    if bot_obj and hasattr(bot_obj, 'username') and bot_obj.username:
+                        bot_username = bot_obj.username
+            except Exception:
+                pass
+        
+        # Fallback: логируем предупреждение, возвращаем пустую строку
+        if not bot_username:
+            logger.warning(
+                "BOT_USERNAME not set! Referral link will be broken. "
+                "Partner must set BOT_USERNAME environment variable on Render."
+            )
+            bot_username = "YOUR_BOT_USERNAME_NOT_SET"
+    
     return build_referral_link(user_id, bot_username)
 
 
