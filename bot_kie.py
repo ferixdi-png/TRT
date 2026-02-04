@@ -6606,15 +6606,20 @@ def get_user_referral_link(user_id: int, bot_username: str = None) -> str:
     
     Приоритет получения bot_username:
     1. Переданный аргумент bot_username
-    2. Переменная окружения BOT_USERNAME (партнёр ОБЯЗАН её установить!)
-    3. Динамически из _application_for_webhook.bot.username
-    4. Fallback: пустая строка (ссылка не сработает, но не покажет чужой бот)
+    2. Переменная окружения BOT_USERNAME
+    3. Кэш _cached_bot_username (заполняется при инициализации)
+    4. Динамически из _application_for_webhook.bot.username
+    5. Fallback с предупреждением
     """
     if bot_username is None:
-        # Приоритет 1: переменная окружения (партнёр должен установить!)
+        # Приоритет 1: переменная окружения
         bot_username = os.getenv("BOT_USERNAME", "").strip()
         
-        # Приоритет 2: динамически из application
+        # Приоритет 2: кэш (заполняется при инициализации application)
+        if not bot_username and _cached_bot_username:
+            bot_username = _cached_bot_username
+        
+        # Приоритет 3: динамически из application (fallback)
         if not bot_username:
             try:
                 if _application_for_webhook and hasattr(_application_for_webhook, 'bot'):
@@ -6624,11 +6629,11 @@ def get_user_referral_link(user_id: int, bot_username: str = None) -> str:
             except Exception:
                 pass
         
-        # Fallback: логируем предупреждение, возвращаем пустую строку
+        # Fallback: логируем предупреждение
         if not bot_username:
             logger.warning(
-                "BOT_USERNAME not set! Referral link will be broken. "
-                "Partner must set BOT_USERNAME environment variable on Render."
+                "BOT_USERNAME not set and bot not initialized! "
+                "Set BOT_USERNAME environment variable on Render."
             )
             bot_username = "YOUR_BOT_USERNAME_NOT_SET"
     
@@ -28878,6 +28883,7 @@ async def _register_all_handlers_internal(application: Application):
 
 # Global webhook handler for aiohttp (webhook mode)
 _application_for_webhook: Optional[Application] = None
+_cached_bot_username: Optional[str] = None  # Кэш для bot.username (заполняется при инициализации)
 _webhook_app_ready_event = asyncio.Event()
 _webhook_init_lock = asyncio.Lock()
 _webhook_init_task: Optional[asyncio.Task] = None
@@ -29400,13 +29406,20 @@ def _schedule_webhook_setter(webhook_url: str) -> None:
 
 
 async def _register_webhook_application(application: Application) -> None:
-    global _application_for_webhook
+    global _application_for_webhook, _cached_bot_username
     # КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ ДЛЯ ДИАГНОСТИКИ
     logger.info("🔍 WEBHOOK_REGISTER_START app_is_none=%s", _application_for_webhook is None)
     
     async with _webhook_init_lock:
         if _application_for_webhook is None:
             _application_for_webhook = application
+            # Кэшируем bot_username для реферальных ссылок
+            try:
+                if application.bot and hasattr(application.bot, 'username') and application.bot.username:
+                    _cached_bot_username = application.bot.username
+                    logger.info("🔍 BOT_USERNAME_CACHED username=%s", _cached_bot_username)
+            except Exception as e:
+                logger.warning("🔍 BOT_USERNAME_CACHE_FAILED error=%s", e)
             # КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ ДЛЯ ДИАГНОСТИКИ
             logger.info("🔍 WEBHOOK_REGISTER_DONE app_registered=true")
         else:
@@ -30434,6 +30447,15 @@ async def main():
     
     # Сохраняем application глобально для доступа из run_webhook_sync
     globals()['application'] = application
+    
+    # Кэшируем bot_username для реферальных ссылок (нужно до первого /start)
+    global _cached_bot_username
+    try:
+        if application.bot and hasattr(application.bot, 'username') and application.bot.username:
+            _cached_bot_username = application.bot.username
+            logger.info("🔍 BOT_USERNAME_CACHED_MAIN username=%s", _cached_bot_username)
+    except Exception as e:
+        logger.warning("🔍 BOT_USERNAME_CACHE_MAIN_FAILED error=%s", e)
     
     # Для обратной совместимости: сохраняем в глобальные переменные
     # NOTE: удалить после полного рефакторинга handlers
