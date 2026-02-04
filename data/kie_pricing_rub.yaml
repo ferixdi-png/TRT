@@ -904,6 +904,44 @@ models:
           duration: "10"
           resolution: 1080p
         notes: default 10s 1080p
+  - id: wan/2-6-text-to-video
+    skus:
+      - unit: video
+        price_rub: 53.9
+        params:
+          duration: "5"
+          resolution: 720p
+        notes: 5s 720p
+      - unit: video
+        price_rub: 80.46
+        params:
+          duration: "5"
+          resolution: 1080p
+        notes: 5s 1080p
+      - unit: video
+        price_rub: 107.8
+        params:
+          duration: "10"
+          resolution: 720p
+        notes: 10s 720p
+      - unit: video
+        price_rub: 161.32
+        params:
+          duration: "10"
+          resolution: 1080p
+        notes: 10s 1080p
+      - unit: video
+        price_rub: 161.7
+        params:
+          duration: "15"
+          resolution: 720p
+        notes: 15s 720p
+      - unit: video
+        price_rub: 242.54
+        params:
+          duration: "15"
+          resolution: 1080p
+        notes: 15s 1080p
   - id: wan/2-5-image-to-video
     skus:
       - unit: video

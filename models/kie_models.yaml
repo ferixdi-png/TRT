@@ -537,6 +537,30 @@ models:
         type: boolean
         required: false
     model_mode: text_to_video
+  wan/2-6-text-to-video:
+    model_type: text_to_video
+    input:
+      prompt:
+        type: string
+        required: true
+        max: 5000
+      duration:
+        type: enum
+        required: false
+        values:
+        - '5'
+        - '10'
+        - '15'
+      resolution:
+        type: enum
+        required: false
+        values:
+        - 720p
+        - 1080p
+      multi_shots:
+        type: boolean
+        required: false
+    model_mode: text_to_video
   wan/2-2-animate-move:
     model_type: image_to_video
     input:
