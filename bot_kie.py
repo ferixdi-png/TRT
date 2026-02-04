@@ -18370,6 +18370,13 @@ async def _button_callback_impl(
                 await query.edit_message_text(blocked_text, parse_mode="HTML")
                 return ConversationHandler.END
             user_sessions[user_id]["mode_index"] = mode_index
+            # Сохраняем price_quote в сессию чтобы цена отображалась на первом шаге
+            user_sessions[user_id]["price_quote"] = {
+                "price_rub": f"{mode_quote.price_rub:.2f}",
+                "currency": mode_quote.currency,
+                "breakdown": mode_quote.breakdown,
+            }
+            user_sessions[user_id]["sku_id"] = mode_quote.sku_id
             _prefill_params_from_quote(user_sessions[user_id], model_id, mode_quote)
             log_structured_event(
                 correlation_id=correlation_id,
