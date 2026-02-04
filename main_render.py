@@ -764,6 +764,16 @@ async def main() -> None:
     application = await _get_initialized_application(settings)
     logger.info("[RENDER] Application initialized")
     
+    # Кэшируем bot_username для реферальных ссылок
+    try:
+        import bot_kie
+        if application.bot and hasattr(application.bot, 'username') and application.bot.username:
+            bot_kie._cached_bot_username = application.bot.username
+            bot_kie._application_for_webhook = application
+            logger.info("[RENDER] BOT_USERNAME_CACHED username=%s", application.bot.username)
+    except Exception as e:
+        logger.warning("[RENDER] BOT_USERNAME_CACHE_FAILED error=%s", e)
+    
     # КРИТИЧНО: Устанавливаем webhook в Telegram
     webhook_base_url = os.getenv("WEBHOOK_BASE_URL", "").rstrip("/")
     if webhook_base_url:
