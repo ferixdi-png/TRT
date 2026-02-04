@@ -266,25 +266,31 @@ def build_step1_prompt_text(
 
     fallback_used = model_fallback or sku_fallback
 
+    # Получаем реальную цену SKU для отображения (даже для админов)
+    real_price = billing_ctx.get("real_price_rub") if isinstance(billing_ctx, dict) else None
+    display_price = real_price if real_price is not None else price_rub
+    
+    if display_price is not None and float(display_price) > 0:
+        from app.pricing.price_resolver import format_price_rub
+        formatted_price = format_price_rub(display_price)
+        if user_lang == "en":
+            price_lines = [f"Price: {formatted_price} ₽"]
+        else:
+            price_lines = [f"Цена по прайсу: {formatted_price} ₽"]
+    elif is_free or (display_price is not None and float(display_price) == 0):
+        price_lines = ["🎁 Free" if user_lang == "en" else "🎁 Бесплатно"]
+    elif price_text:
+        price_lines = [str(price_text)]
+    else:
+        price_lines = ["Price: TBD" if user_lang == "en" else "Цена: уточняется"]
+    
+    # Добавляем пометку для админа
     if admin_flag:
         if user_lang == "en":
-            price_lines = [
-                "🎁 Free",
-                "🎁 Admin: unlimited generations (quota not used).",
-            ]
+            price_lines.append("👑 Admin: unlimited generations (quota not used).")
         else:
-            price_lines = [
-                "🎁 Бесплатно",
-                "🎁 Админ: безлимитные генерации (квота не расходуется).",
-            ]
+            price_lines.append("👑 Админ: безлимитные генерации (квота не расходуется).")
         price_rub = 0
-    else:
-        if is_free:
-            price_lines = ["🎁 Free" if user_lang == "en" else "🎁 Бесплатно"]
-        elif price_text:
-            price_lines = [str(price_text)]
-        else:
-            price_lines = ["Price: TBD" if user_lang == "en" else "Цена: уточняется"]
 
     log_structured_event(
         correlation_id=correlation_id,

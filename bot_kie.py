@@ -19604,10 +19604,12 @@ async def prompt_for_specific_param(
         price_quote = session.get("price_quote") or {}
         breakdown = price_quote.get("breakdown", {}) if isinstance(price_quote, dict) else {}
         price_rub = price_quote.get("price_rub") if isinstance(price_quote, dict) else None
+        real_price_rub = breakdown.get("real_price_rub") if breakdown else None
         is_free = bool(breakdown.get("free_sku")) or str(price_rub) in {"0", "0.0", "0.00"}
         billing_ctx = {
             "price_text": price_line,
             "price_rub": price_rub,
+            "real_price_rub": real_price_rub,
             "is_free": is_free,
         }
         prompt_text = build_step1_prompt_text(
@@ -20613,10 +20615,12 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
             price_quote = session.get("price_quote") or {}
             breakdown = price_quote.get("breakdown", {}) if isinstance(price_quote, dict) else {}
             price_rub = price_quote.get("price_rub") if isinstance(price_quote, dict) else None
+            real_price_rub = breakdown.get("real_price_rub") if breakdown else None
             is_free = bool(breakdown.get("free_sku")) or str(price_rub) in {"0", "0.0", "0.00"}
             billing_ctx = {
                 "price_text": price_line,
                 "price_rub": price_rub,
+                "real_price_rub": real_price_rub,
                 "is_free": is_free,
             }
             message_text = build_step1_prompt_text(
