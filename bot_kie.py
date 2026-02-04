@@ -3542,11 +3542,6 @@ ADMIN_ADD_BALANCE = 8
 # NOTE: active_generations already declared above (line 358), this is a duplicate - removed
 
 
-# Курсы валют для отображения цен
-RUB_TO_USD_RATE = 100.0  # 1 USD = 100 RUB
-RUB_TO_STARS_RATE = 1.3  # 1 Star ≈ 1.3 RUB
-
-
 def format_rub_amount(value: float) -> str:
     """Format RUB amount with 2 decimals (ROUND_HALF_UP)."""
     from app.pricing.price_resolver import format_price_rub
@@ -3555,38 +3550,6 @@ def format_rub_amount(value: float) -> str:
     if "." in formatted:
         formatted = formatted.rstrip("0").rstrip(".")
     return f"{formatted} ₽"
-
-
-def format_price_for_lang(price_rub: float, lang: str = "ru", use_stars: bool = True) -> str:
-    """
-    Форматирует цену в зависимости от языка пользователя.
-    
-    Args:
-        price_rub: Цена в рублях
-        lang: Язык пользователя ('ru' или 'en')
-        use_stars: Для EN использовать Stars (True) или USD (False)
-    
-    Returns:
-        Форматированная строка с ценой в нужной валюте
-    """
-    from app.pricing.price_resolver import format_price_rub as _format_price
-    
-    if lang == "ru":
-        # Для русского - рубли
-        formatted = _format_price(price_rub)
-        if "." in formatted:
-            formatted = formatted.rstrip("0").rstrip(".")
-        return f"{formatted} ₽"
-    else:
-        # Для английского - Stars или USD
-        if use_stars:
-            stars = max(1, int(price_rub / RUB_TO_STARS_RATE))
-            return f"{stars} ⭐"
-        else:
-            usd = price_rub / RUB_TO_USD_RATE
-            if usd < 0.01:
-                return f"${usd:.3f}"
-            return f"${usd:.2f}"
 
 _admin_price_notice_logged = False
 
@@ -3635,16 +3598,15 @@ def _build_price_line(
     *,
     is_from: bool = False,
 ) -> str:
+    from app.pricing.price_resolver import format_price_rub as format_price_value
+
     if is_admin:
-        if user_lang == "ru":
-            return "🎁 Админ: безлимитные генерации (квота не расходуется)."
-        return "🎁 Admin: unlimited generations (quota not consumed)."
-    
+        return "🎁 Админ: безлимитные генерации (квота не расходуется)."
     prefix = "от " if user_lang == "ru" and is_from else ("from " if user_lang != "ru" and is_from else "")
     label = "Стоимость" if user_lang == "ru" else "Price"
-    price_display = format_price_for_lang(price_rub, user_lang)
+    price_display = format_price_value(price_rub)
     context = _format_pricing_context(settings, is_admin, user_lang)
-    return f"💰 <b>{label}:</b> {prefix}{price_display} ({context})"
+    return f"💰 <b>{label}:</b> {prefix}{price_display} ₽ ({context})"
 
 
 def _build_price_unavailable_line(user_lang: str) -> str:
@@ -4039,11 +4001,11 @@ def _build_current_price_line(
         elif is_free:
             price_text = "🎁 Бесплатно" if user_lang == "ru" else "🎁 Free"
         else:
-            formatted_price = format_price_for_lang(price_value, user_lang)
+            formatted_price = format_price_value(price_value)
             if user_lang == "ru":
-                price_text = f"Цена по прайсу: {formatted_price}"
+                price_text = f"Цена по прайсу: {formatted_price} ₽"
             else:
-                price_text = f"Price: {formatted_price}"
+                price_text = f"Price (RUB): {formatted_price} ₽"
     log_structured_event(
         correlation_id=correlation_id,
         user_id=user_id,
@@ -4070,7 +4032,7 @@ def build_option_confirm_text(
     display_value: str,
     price_rub: float,
 ) -> str:
-    price_line = format_price_for_lang(price_rub, user_lang)
+    price_line = f"{price_rub:.2f} ₽"
     if user_lang == "ru":
         return (
             f"✅ {param_label}: <b>{display_value}</b>\n"
@@ -4086,11 +4048,15 @@ def build_option_confirm_text(
 
 def _build_price_preview_text(user_lang: str, price: float, balance: float) -> str:
     after_balance = balance - price
-    price_str = format_price_for_lang(price, user_lang)
-    balance_str = format_price_for_lang(balance, user_lang)
-    after_str = format_price_for_lang(max(after_balance, 0), user_lang)
+    price_str = format_rub_amount(price)
+    balance_str = format_rub_amount(balance)
+    after_str = format_rub_amount(max(after_balance, 0))
+    rounding_note = (
+        "💡 <i>Цена округляется до копеек (0.01 ₽).</i>"
+        if user_lang == "ru"
+        else "💡 <i>Prices are rounded to 0.01 ₽.</i>"
+    )
     if user_lang == "ru":
-        rounding_note = "💡 <i>Цена округляется до копеек (0.01 ₽).</i>"
         return (
             "🧾 <b>Перед запуском</b>\n\n"
             f"💰 <b>Стоимость:</b> {price_str}\n"
@@ -4098,7 +4064,6 @@ def _build_price_preview_text(user_lang: str, price: float, balance: float) -> s
             f"✅ <b>После списания:</b> {after_str}\n\n"
             f"{rounding_note}"
         )
-    rounding_note = "💡 <i>Prices rounded to nearest Star.</i>"
     return (
         "🧾 <b>Before we start</b>\n\n"
         f"💰 <b>Price:</b> {price_str}\n"
@@ -4109,8 +4074,14 @@ def _build_price_preview_text(user_lang: str, price: float, balance: float) -> s
 
 
 def _build_insufficient_funds_text(user_lang: str, price: float, balance: float) -> str:
-    price_str = format_price_for_lang(price, user_lang)
-    balance_str = format_price_for_lang(balance, user_lang)
+    price_str = format_rub_amount(price)
+    balance_str = format_rub_amount(balance)
+    needed_str = format_rub_amount(max(price - balance, 0))
+    rounding_note = (
+        "💡 <i>Цена округляется до копеек (0.01 ₽).</i>"
+        if user_lang == "ru"
+        else "💡 <i>Prices are rounded to 0.01 ₽.</i>"
+    )
     if user_lang == "ru":
         return (
             f"💳 <b>Недостаточно средств</b>\n\n"
@@ -4194,24 +4165,10 @@ def _prefill_params_from_quote(session: dict, model_id: str, quote: Optional["Pr
     session["prefill_params"] = merged
 
 
-def _build_mode_selection_keyboard(model_id: str, mode_entries: List[tuple[int, Any]], user_lang: str, gen_type: Optional[str] = None) -> InlineKeyboardMarkup:
-    """Формирует клавиатуру выбора режима с ценами для каждого SKU."""
+def _build_mode_selection_keyboard(model_id: str, mode_entries: List[tuple[int, Any]], user_lang: str) -> InlineKeyboardMarkup:
     buttons: List[List[InlineKeyboardButton]] = []
     for index, mode in mode_entries:
         label = _resolve_mode_label(mode, index, user_lang)
-        # Добавляем цену к каждой кнопке SKU
-        quote = _resolve_mode_price_quote(model_id, index, gen_type)
-        if quote:
-            price_rub = quote.price_rub if hasattr(quote, 'price_rub') else (quote.get('price_rub') if isinstance(quote, dict) else None)
-            breakdown = quote.breakdown if hasattr(quote, 'breakdown') else (quote.get('breakdown', {}) if isinstance(quote, dict) else {})
-            is_free = bool(breakdown.get("free_sku")) if isinstance(breakdown, dict) else False
-            if is_free:
-                price_suffix = " · 🎁" if user_lang == "ru" else " · 🎁"
-            elif price_rub is not None:
-                price_suffix = f" · {format_price_for_lang(price_rub, user_lang)}"
-            else:
-                price_suffix = ""
-            label = f"{label}{price_suffix}"
         buttons.append([InlineKeyboardButton(label, callback_data=f"select_mode:{model_id}:{index}")])
     buttons.append([InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")])
     return InlineKeyboardMarkup(buttons)
@@ -9127,7 +9084,7 @@ async def _build_main_menu_sections(
     if resolved_lang == "ru":
         balance_lines = ""
         if user_balance > 0:
-            balance_lines = f"💰 Баланс: {format_price_for_lang(user_balance, 'ru')}"
+            balance_lines = f"💰 Баланс: {user_balance:.2f} ₽"
         else:
             balance_lines = "💳 Баланс: 0 ₽"
         
@@ -9142,8 +9099,8 @@ async def _build_main_menu_sections(
         )
         referral_bonus_text = ""
     else:
-        # EN: показываем баланс в Stars через format_price_for_lang
-        stars_balance = format_price_for_lang(user_balance, 'en') if user_balance > 0 else "0 ⭐"
+        # EN: показываем только Stars (0 если баланс пустой)
+        stars_balance = int(user_balance * 10) if user_balance > 0 else 0  # примерная конвертация ₽ → Stars
         
         if is_new:
             header_text = t(
@@ -15261,34 +15218,20 @@ async def _button_callback_impl(
             payment_details = get_payment_details()
             
             # Show amount selection - focus on small amounts with marketing
-            if user_lang == 'ru':
-                keyboard = [
-                    [
-                        InlineKeyboardButton("💎 50 ₽", callback_data="topup_amount:50"),
-                        InlineKeyboardButton("💎 100 ₽", callback_data="topup_amount:100"),
-                        InlineKeyboardButton("💎 150 ₽", callback_data="topup_amount:150")
-                    ],
-                    [
-                        InlineKeyboardButton(t('btn_custom_amount', lang=user_lang), callback_data="topup_custom")
-                    ],
-                    [InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")]
-                ]
-            else:
-                # EN: показываем в Stars
-                keyboard = [
-                    [
-                        InlineKeyboardButton("💎 38 ⭐", callback_data="topup_amount:50"),
-                        InlineKeyboardButton("💎 77 ⭐", callback_data="topup_amount:100"),
-                        InlineKeyboardButton("💎 115 ⭐", callback_data="topup_amount:150")
-                    ],
-                    [
-                        InlineKeyboardButton(t('btn_custom_amount', lang=user_lang), callback_data="topup_custom")
-                    ],
-                    [InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")]
-                ]
+            keyboard = [
+                [
+                    InlineKeyboardButton("💎 50 ₽", callback_data="topup_amount:50"),
+                    InlineKeyboardButton("💎 100 ₽", callback_data="topup_amount:100"),
+                    InlineKeyboardButton("💎 150 ₽", callback_data="topup_amount:150")
+                ],
+                [
+                    InlineKeyboardButton(t('btn_custom_amount', lang=user_lang), callback_data="topup_custom")
+                ],
+                [InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")]
+            ]
             
             current_balance = await get_user_balance_async(user_id)
-            balance_str = format_price_for_lang(current_balance, user_lang)
+            balance_str = format_rub_amount(current_balance)
             
             if user_lang == 'ru':
                 topup_text = (
@@ -15318,15 +15261,15 @@ async def _button_callback_impl(
                     f'{payment_details}\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
                     f'💡 <b>Price examples:</b>\n'
-                    f'• Video: 3-38 ⭐\n'
-                    f'• Image: 1-2 ⭐\n'
-                    f'• Editing: 1-4 ⭐\n\n'
+                    f'• Video: 4-50 ₽\n'
+                    f'• Image: 0.6-3 ₽\n'
+                    f'• Editing: 1-5 ₽\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
                     f'🚀 <b>SELECT AMOUNT:</b>\n'
-                    f'• Quick select: 38, 77, 115 ⭐\n'
+                    f'• Quick select: 50, 100, 150 ₽\n'
                     f'• Or enter your amount\n\n'
                     f'📝 <b>Limits:</b>\n'
-                    f'Minimum: 38 ⭐ | Maximum: 38461 ⭐'
+                    f'Minimum: 50 ₽ | Maximum: 50000 ₽'
                 )
             
             await query.edit_message_text(
@@ -18840,7 +18783,7 @@ async def _button_callback_impl(
                     return ConversationHandler.END
                 await query.edit_message_text(
                     _build_mode_selection_text(model_name, user_lang),
-                    reply_markup=_build_mode_selection_keyboard(model_id, available_mode_entries, user_lang, gen_type=model_gen_type),
+                    reply_markup=_build_mode_selection_keyboard(model_id, available_mode_entries, user_lang),
                     parse_mode="HTML",
                 )
                 return ConversationHandler.END
@@ -20504,13 +20447,15 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 price_variants_text = "\n".join(price_rows)
 
             keyboard = []
+            if price_depends:
+                from app.pricing.price_resolver import format_price_rub
             for i in range(0, len(display_values), 2):
                 first_value = display_values[i]
                 first_label = str(first_value)
                 if price_depends:
                     price_value = param_price_map.get(str(first_value))
                     if price_value is not None:
-                        first_label = f"{first_label} — {format_price_for_lang(price_value, user_lang)}"
+                        first_label = f"{first_label} — {format_price_rub(price_value)}₽"
                 row = [
                     InlineKeyboardButton(first_label, callback_data=f"set_param:{param_name}:{first_value}")
                 ]
@@ -20520,7 +20465,7 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                     if price_depends:
                         price_value = param_price_map.get(str(second_value))
                         if price_value is not None:
-                            second_label = f"{second_label} — {format_price_for_lang(price_value, user_lang)}"
+                            second_label = f"{second_label} — {format_price_rub(price_value)}₽"
                     row.append(InlineKeyboardButton(second_label, callback_data=f"set_param:{param_name}:{second_value}"))
                 keyboard.append(row)
 

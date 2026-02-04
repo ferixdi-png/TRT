@@ -441,9 +441,9 @@ TRANSLATIONS = {
         'msg_gen_type_select_model': '💡 <b>Select a model below</b>',
         'msg_gen_type_no_models': '❌ No models found for this generation type.',
         'msg_payment_success': '✅ <b>PAYMENT SUCCESSFUL!</b> ✅',
-        'msg_payment_added': '💰 <b>Added:</b> {stars} ⭐',
+        'msg_payment_added': '💰 <b>Added:</b> {amount:.2f} ₽',
         'msg_payment_method': '⭐ <b>Method:</b> Telegram Stars ({stars} ⭐)',
-        'msg_payment_balance': '💳 <b>Your balance:</b> {balance} ⭐',
+        'msg_payment_balance': '💳 <b>Your balance:</b> {balance} ₽',
         'msg_payment_use_funds': (
             '🎉 <b>Great! Balance topped up!</b>\n\n'
             '💡 <b>What\'s next:</b>\n'
@@ -546,8 +546,8 @@ TRANSLATIONS = {
         'msg_admin_only': 'This function is available only to administrator.',
         'msg_user_mode_enabled': 'User mode enabled',
         'msg_returning_to_admin': 'Returning to admin panel',
-        'msg_insufficient_funds': '💳 <b>Insufficient funds</b>\n\n💰 <b>Your balance:</b> {balance} ⭐\n💵 <b>Required:</b> {required} ⭐\n\n💡 <b>Top up your balance</b> to continue generation.\n\nOr use free generations if available ✨',
-        'msg_available_generations': '✅ <b>Available generations:</b> {count}\n💳 <b>Your balance:</b> {balance} ⭐',
+        'msg_insufficient_funds': '💳 <b>Insufficient funds</b>\n\n💰 <b>Your balance:</b> {balance} ₽\n💵 <b>Required:</b> {required} ₽\n\n💡 <b>Top up your balance</b> to continue generation.\n\nOr use free generations if available ✨',
+        'msg_available_generations': '✅ <b>Available generations:</b> {count}\n💳 <b>Your balance:</b> {balance} ₽',
         'msg_unlimited_available': '✅ <b>Available:</b> Unlimited',
         'btn_check_balance': '💰 Check Balance',
         'btn_back_to_categories': '◀️ Back to Categories',
