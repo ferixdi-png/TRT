@@ -2411,22 +2411,13 @@ async def _render_gen_type_menu(
         model_emoji = model.get('emoji', '🤖')
         model_id = model.get('id')
 
-        from app.pricing.price_ssot import get_min_price
-        min_price = get_min_price(model_id)
-
-        if min_price is not None:
-            price_formatted = format_rub_amount(float(min_price))
-            button_text = f"{model_emoji} {model_name} • {price_formatted}"
-        else:
-            button_text = f"{model_emoji} {model_name}"
+        # Цена НЕ показывается на кнопках - только после выбора SKU перед первым шагом
+        button_text = f"{model_emoji} {model_name}"
 
         if len(button_text.encode("utf-8")) > 60:
-            max_name_length = 25 if min_price else 40
+            max_name_length = 40
             truncated = model_name[:max_name_length].rstrip()
-            if min_price is not None:
-                button_text = f"{model_emoji} {truncated}... • {price_formatted}"
-            else:
-                button_text = f"{model_emoji} {truncated}..."
+            button_text = f"{model_emoji} {truncated}..."
 
         callback_data = f"select_model:{model_id}"
         if len(callback_data.encode('utf-8')) > 64:
