@@ -3986,13 +3986,18 @@ def _build_current_price_line(
     else:
         breakdown = quote.get("breakdown", {}) if isinstance(quote, dict) else {}
         price_value = quote.get("price_rub") if isinstance(quote, dict) else None
-        is_free = bool(breakdown.get("free_sku")) or bool(breakdown.get("admin_free"))
-        if price_value is None:
+        # Используем real_price_rub для отображения (реальная цена SKU)
+        # price_rub может быть 0 для админов или при бесплатных генерациях
+        real_price = breakdown.get("real_price_rub") if breakdown else None
+        display_price = real_price if real_price is not None else price_value
+        # Бесплатно только если реальная цена SKU = 0
+        is_truly_free = display_price is not None and float(display_price) == 0
+        if display_price is None:
             price_text = "Цена: уточняется" if user_lang == "ru" else "Price: уточняется"
-        elif is_free:
+        elif is_truly_free:
             price_text = "🎁 Бесплатно" if user_lang == "ru" else "🎁 Free"
         else:
-            formatted_price = format_price_value(price_value)
+            formatted_price = format_price_value(display_price)
             if user_lang == "ru":
                 price_text = f"Цена по прайсу: {formatted_price} ₽"
             else:
