@@ -26,7 +26,7 @@ class SecretRedactor:
         # GitHub Token
         re.compile(r'\bghp_[A-Za-z0-9]{36}\b'),
         # KIE API Key
-        re.compile(r'\bkie_[A-Za-z0-9]{32}\b'),
+        re.compile(r'\bkie_[A-Za-z0-9_]{32,}\b'),
         # Database URLs
         re.compile(r'(?i)(postgresql|mysql|mongodb)://[^:]+:[^@]+@[^/]+'),
         # Redis URLs
