@@ -50,7 +50,7 @@ async def test_health_server_stays_alive_without_webhook():
         
         # Ensure we have a minimal bot token (can be fake for this test)
         if 'TELEGRAM_BOT_TOKEN' not in os.environ:
-            os.environ['TELEGRAM_BOT_TOKEN'] = '123456789:TEST_TOKEN_FOR_HEALTH_CHECK'
+            os.environ['TELEGRAM_BOT_TOKEN'] = 'TEST_TOKEN_PLACEHOLDER'
         
         # Import and start main in background
         import main_render

@@ -49,7 +49,7 @@ async def test_boot_report_ok_minimal_env(monkeypatch):
     config = {
         "ADMIN_ID": "123456",
         "BOT_INSTANCE_ID": "partner-01",
-        "TELEGRAM_BOT_TOKEN": "123456:ABCDEFabcdef1234567890",
+        "TELEGRAM_BOT_TOKEN": "TEST_TOKEN_PLACEHOLDER",
         "WEBHOOK_BASE_URL": "https://example.com",
         "DATABASE_URL": "postgresql://example",
         "BOT_MODE": "polling",
@@ -97,7 +97,7 @@ async def test_boot_report_degraded_no_redis_no_kie(monkeypatch):
     config = {
         "ADMIN_ID": "123456",
         "BOT_INSTANCE_ID": "partner-01",
-        "TELEGRAM_BOT_TOKEN": "123456:ABCDEFabcdef1234567890",
+        "TELEGRAM_BOT_TOKEN": "TEST_TOKEN_PLACEHOLDER",
         "WEBHOOK_BASE_URL": "https://example.com",
         "DATABASE_URL": "postgresql://example",
         "BOT_MODE": "polling",
@@ -121,7 +121,7 @@ async def test_no_secrets_in_boot_logs(monkeypatch):
     config = {
         "ADMIN_ID": "123456",
         "BOT_INSTANCE_ID": "partner-01",
-        "TELEGRAM_BOT_TOKEN": "123456:SECRET_TELEGRAM_TOKEN",
+        "TELEGRAM_BOT_TOKEN": "SECRET_TEST_TOKEN_PLACEHOLDER",
         "WEBHOOK_BASE_URL": "https://example.com",
         "DATABASE_URL": "postgresql://example",
         "BOT_MODE": "polling",

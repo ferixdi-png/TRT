@@ -35,7 +35,7 @@
 - `cursor_ai_integration.py` - Line 865, 883
 - `check_duplicate_services.py` - Multiple locations
 
-**Secret Pattern:** `rnd_nXYNUy1lrWO4QTIjVMYizzKyHItw`
+**Secret Pattern:** `YOUR_RENDER_API_KEY` (previously real key, now redacted)
 
 #### 2. **Telegram Bot Tokens** (`digits:letters` pattern)
 **Files affected (25+ locations):**
@@ -66,7 +66,7 @@
 - `cursor_auto_fix.bat` - Line 50
 - `fix_409_conflict.bat` - Line 50
 
-**Secret Pattern:** `8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y`
+**Secret Pattern:** `YOUR_TELEGRAM_BOT_TOKEN` (previously real token, now redacted)
 
 #### 3. **Render Service IDs** (`srv-*` pattern)
 **Files affected (15+ locations):**
@@ -85,7 +85,7 @@
 - `CURSOR_INTEGRATION.txt` - Line 30
 - Multiple cursor scripts and batch files
 
-**Secret Pattern:** `srv-d4s025er433s73bsf62g`
+**Secret Pattern:** `YOUR_RENDER_SERVICE_ID` (previously real ID, now redacted)
 
 #### 4. **KIE API Keys**
 **Files affected (5+ locations):**
@@ -95,7 +95,7 @@
 - `все/Новая папка/УНИКУМ.txt` - Line 37
 - `все/Новая папка/api.txt` - Line 6
 
-**Secret Pattern:** `4d49a621bc589222a2769978cb725495`
+**Secret Pattern:** `YOUR_KIE_API_KEY` (previously real key, now redacted)
 
 #### 5. **Hardcoded Secrets in Code**
 **Python files with os.getenv defaults:**

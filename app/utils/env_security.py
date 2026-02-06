@@ -183,6 +183,6 @@ if __name__ == "__main__":
     validate_environment_on_startup()
     
     # Test redaction
-    test_text = "Bot token:  ***REDACTED***and API key: rnd_1234567890abcdef1234567890abcdef"
+    test_text = "Bot token: [REDACTED]and API key: YOUR_RENDER_API_KEY_PLACEHOLDER and DB: postgresql://user:***REDACTED***@host/db"
     print(f"Original: {test_text}")
     print(f"Redacted: {redact_log_message(test_text)}")
