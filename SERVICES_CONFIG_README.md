@@ -14,19 +14,19 @@
     {
       "name": "Основной бот",
       "service_id": "srv-d4s025er433s73bsf62g",
-      "telegram_token": "8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y",
+      "telegram_token": "YOUR_TELEGRAM_BOT_TOKEN",
       "enabled": true
     },
     {
       "name": "Тестовый бот",
       "service_id": "srv-xxxxxxxxxxxxx",
-      "telegram_token": "1234567890:ABCdefGHIjklMNOpqrsTUVwxyz",
+      "telegram_token": "YOUR_TELEGRAM_BOT_TOKEN_2",
       "enabled": true
     },
     {
       "name": "Резервный бот",
       "service_id": "srv-yyyyyyyyyyyyy",
-      "telegram_token": "9876543210:ZYXwvutsRQPonmlkJIHgfedcba",
+      "telegram_token": "YOUR_TELEGRAM_BOT_TOKEN_3",
       "enabled": false
     }
   ],

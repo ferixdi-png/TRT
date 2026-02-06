@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 def setup_mock_env():
     """Устанавливает мок env переменные"""
-    os.environ.setdefault("TELEGRAM_BOT_TOKEN", "1234567890:TEST_TOKEN_ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    os.environ.setdefault("TELEGRAM_BOT_TOKEN", "TEST_TOKEN_PLACEHOLDER")
     os.environ.setdefault("ADMIN_ID", "123456789")
     os.environ.setdefault("SKIP_CONFIG_INIT", "1")  # Пропускаем инициализацию при импорте
     os.environ.setdefault("STORAGE_MODE", "json")

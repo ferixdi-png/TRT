@@ -44,7 +44,7 @@ docker run -d \
     -p "${HEALTH_PORT}:${HEALTH_PORT}" \
     -e TEST_MODE=1 \
     -e ALLOW_REAL_GENERATION=0 \
-    -e TELEGRAM_BOT_TOKEN="1234567890:TEST_TOKEN_FOR_SMOKE_TEST" \
+    -e TELEGRAM_BOT_TOKEN="TEST_TOKEN_PLACEHOLDER" \
     -e ADMIN_ID="123456789" \
     "${IMAGE_NAME}" || {
     echo -e "${RED}❌ Failed to start container${NC}"

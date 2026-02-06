@@ -7,7 +7,7 @@
 1. **TELEGRAM_BOT_TOKEN**
    - Токен Telegram бота
    - Получить у @BotFather
-   - Пример: `1234567890:ABCdefGHIjklMNOpqrsTUVwxyz`
+   - Пример: `YOUR_TELEGRAM_BOT_TOKEN`
    - ⚠️ **ОБЯЗАТЕЛЬНО!**
 
 2. **KIE_API_KEY**

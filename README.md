@@ -42,7 +42,7 @@ BOT_MODE=polling python entrypoints/run_bot.py
 cp .env.example .env
 
 # Основные ключи
-TELEGRAM_BOT_TOKEN=1234567890:ABCDEFghijklmnopqrstuvwxyz123456789
+TELEGRAM_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN
 KIE_API_KEY=kie_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 DATABASE_URL=postgresql://user:***REDACTED***@host:5432/database
 REDIS_URL=redis://user:password@host:6379/0
