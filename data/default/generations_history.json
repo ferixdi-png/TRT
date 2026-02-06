@@ -560,6 +560,17 @@
       ],
       "price": 0.0,
       "timestamp": "2026-02-03T16:58:49.129159"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-06T12:27:04.824011"
     }
   ],
   "9911": [
@@ -1446,6 +1457,17 @@
       ],
       "price": 0.0,
       "timestamp": "2026-02-03T16:59:02.115485"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-06T12:27:21.198444"
     }
   ],
   "7777": [
@@ -1954,6 +1976,17 @@
       ],
       "price": 0.0,
       "timestamp": "2026-02-03T16:59:02.388062"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-06T12:27:21.429350"
     }
   ]
 }

@@ -67,9 +67,10 @@ paths = [
 ]
 
 # Allow specific commits that might contain false positives
-[[allowlist.commits]]
-description = "Allow specific commits with known false positives"
-sha = "commit-sha-here"
+# Format: list of SHA strings
+# Example: ["abc123", "def456"]
+# Empty list means no specific commits allowed
+allowlist_commits = []
 
 # Allow specific file patterns
 [[allowlist.files]]
