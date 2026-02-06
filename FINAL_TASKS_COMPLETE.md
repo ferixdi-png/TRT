@@ -83,7 +83,7 @@ wan/2-6-text-to-video:
 - ✅ `create_task(model: str, input: dict, callback_url=None) -> task_id`
 - ✅ `get_task(task_id) -> dict`
 - ✅ `wait_task(task_id, timeout=900, poll=3) -> final_response`
-- ✅ Authorization: Bearer KIE_API_KEY
+- ✅ Authorization: Bearer YOUR_KIE_API_KEY
 - ✅ retries + timeouts
 - ✅ resultJson — JSON STRING, парсится через json.loads()
 - ✅ failCode / failMsg обрабатываются корректно

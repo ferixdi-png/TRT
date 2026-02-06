@@ -157,7 +157,7 @@ async function getUser(userId) {
 
 ### 2. Локальная разработка
    - Создай `.env` файл в корне проекта
-   - Добавь: `DATABASE_URL=postgresql://user:password@host:port/database`
+   - Добавь: `DATABASE_URL=postgresql://user:***REDACTED***@host:port/database`
    - Получи DATABASE_URL из Render Dashboard → Database → Connections
 
 ### 3. Проверка подключения

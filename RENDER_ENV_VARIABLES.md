@@ -17,7 +17,7 @@ KIE_API_KEY=your_kie_api_key_here
 KIE_API_URL=https://api.kie.ai
 
 # Database
-DATABASE_URL=postgresql://user:password@host:port/database
+DATABASE_URL=postgresql://user:***REDACTED***@host:port/database
 
 # Admin
 ADMIN_ID=your_telegram_user_id

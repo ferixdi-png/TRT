@@ -16,9 +16,9 @@
 - ✅ Однократная проверка с опцией автоматического исправления
 
 **Ключи доступа настроены:**
-- `RENDER_API_KEY`: `rnd_nXYNUy1lrWO4QTIjVMYizzKyHItw`
-- `RENDER_SERVICE_ID`: `srv-d4s025er433s73bsf62g`
-- `TELEGRAM_BOT_TOKEN`: `8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y`
+- `RENDER_API_KEY`: `YOUR_RENDER_API_KEY`
+- `RENDER_SERVICE_ID`: `YOUR_RENDER_SERVICE_ID`
+- `TELEGRAM_BOT_TOKEN`: `YOUR_TELEGRAM_BOT_TOKEN`
 
 ### ✅ Исправлена проблема ModuleNotFoundError
 

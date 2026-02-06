@@ -18,7 +18,7 @@
 2. Найдите раздел **"Переменные"** (Variables)
 3. Убедитесь, что установлены:
    - ✅ `TELEGRAM_BOT_TOKEN` - токен бота
-   - ✅ `KIE_API_KEY` - API ключ
+   - ✅ `KIE_API_KEY` - API ключ (YOUR_KIE_API_KEY)
    - ✅ `ADMIN_ID` - ваш Telegram ID (опционально)
 
 **Если переменных нет:**
@@ -56,7 +56,7 @@
 **ОБЯЗАТЕЛЬНЫЕ:**
 ```
 TELEGRAM_BOT_TOKEN=ваш_токен_бота
-KIE_API_KEY=ваш_api_ключ
+KIE_API_KEY=YOUR_KIE_API_KEY
 ```
 
 **ОПЦИОНАЛЬНЫЕ (но желательно):**

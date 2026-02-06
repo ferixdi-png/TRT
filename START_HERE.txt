@@ -11,7 +11,7 @@
 2. Настрой ENV переменные (создай .env или используй системные):
    TELEGRAM_BOT_TOKEN=your_token
    KIE_API_KEY=your_key
-   DATABASE_URL=postgresql://...
+   DATABASE_URL=YOUR_DATABASE_URL
    BOT_MODE=polling
 
 3. Запусти проверки:

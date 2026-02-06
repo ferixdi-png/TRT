@@ -31,7 +31,7 @@ ADMIN_ID=your_telegram_user_id
 KIE_API_KEY=your_kie_api_key_here
 
 # Database (PostgreSQL)
-DATABASE_URL=postgresql://user:password@host:port/database
+DATABASE_URL=postgresql://user:***REDACTED***@host:port/database
 ```
 
 **Примечание:** `DATABASE_URL` автоматически устанавливается при создании PostgreSQL Database в Render.

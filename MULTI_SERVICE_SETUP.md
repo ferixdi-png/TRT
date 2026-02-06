@@ -25,7 +25,7 @@
    ENABLE_HEALTH_SERVER=1
    TELEGRAM_BOT_TOKEN=ваш_токен_бота_1
    KIE_API_KEY=ваш_kie_api_key
-   DATABASE_URL=postgresql://...
+   DATABASE_URL=YOUR_DATABASE_URL
    ADMIN_ID=ваш_telegram_id
    ```
 3. **Start Command:** `python bot_kie.py`
@@ -48,7 +48,7 @@
    ENABLE_HEALTH_SERVER=0
    TELEGRAM_BOT_TOKEN=ваш_токен_бота_2
    KIE_API_KEY=ваш_kie_api_key
-   DATABASE_URL=postgresql://...
+   DATABASE_URL=YOUR_DATABASE_URL
    ADMIN_ID=ваш_telegram_id
    ```
 3. **Start Command:** `python bot_kie.py`
@@ -119,7 +119,7 @@
 Service Name: kie-ai-bot-main
 Service Type: Web Service
 ENABLE_HEALTH_SERVER=1
-TELEGRAM_BOT_TOKEN=8390068635:AAHAIwuTxW3eWbow8WjeViZtZ9xp1SW57V8
+TELEGRAM_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN
 ```
 
 ### Сервис 2: Тестовый бот (Worker)
@@ -127,7 +127,7 @@ TELEGRAM_BOT_TOKEN=8390068635:AAHAIwuTxW3eWbow8WjeViZtZ9xp1SW57V8
 Service Name: kie-ai-bot-test
 Service Type: Background Worker
 ENABLE_HEALTH_SERVER=0
-TELEGRAM_BOT_TOKEN=8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y
+TELEGRAM_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN
 ```
 
 ---

@@ -44,7 +44,7 @@ cp .env.example .env
 # Основные ключи
 TELEGRAM_BOT_TOKEN=1234567890:ABCDEFghijklmnopqrstuvwxyz123456789
 KIE_API_KEY=kie_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-DATABASE_URL=postgresql://user:password@host:5432/database
+DATABASE_URL=postgresql://user:***REDACTED***@host:5432/database
 REDIS_URL=redis://user:password@host:6379/0
 ADMIN_ID=123456789
 BOT_INSTANCE_ID=partner-01

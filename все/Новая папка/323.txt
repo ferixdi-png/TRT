@@ -107,7 +107,7 @@ wait_task(task_id, timeout=900, poll=3) -> final_response
 
 Особенности:
 
-Authorization: Bearer KIE_API_KEY
+Authorization: Bearer YOUR_KIE_API_KEY
 
 retries + timeouts
 

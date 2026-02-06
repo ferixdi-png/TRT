@@ -30,7 +30,7 @@
 | `ADMIN_ID` | **ТВОЙ** Telegram user_id (даёт доступ к /admin) | `6913446846` | https://t.me/userinfobot |
 | `BOT_INSTANCE_ID` | Уникальный ID инстанса (ОБЯЗАТЕЛЬНО уникальный!) | `partner-ivan-01` | Придумай сам |
 | `BOT_MODE` | Режим работы | `webhook` | Всегда `webhook` |
-| `DATABASE_URL` | Строка подключения к PostgreSQL | `postgresql://user:pass@host/db` | Render PostgreSQL или свой |
+| `DATABASE_URL` | Строка подключения к PostgreSQL | `postgresql://user:***REDACTED***@host/db` | Render PostgreSQL или свой |
 | `KIE_API_KEY` | **ТВОЙ** ключ KIE AI | `7da14b33c652ee46...` | https://kie.ai/ (личный кабинет) |
 | `PAYMENT_BANK` | Название банка для оплаты | `Альфа Банк` | Твои данные |
 | `PAYMENT_CARD_HOLDER` | Имя держателя карты | `Иван` | Твои данные |

@@ -18,7 +18,7 @@
 
 Создай файл `.env` в корне проекта:
 ```env
-DATABASE_URL=postgresql://telegrambot_j6cd_user:password@dpg-d50f1hvgi27c73ajfos0-a:5432/telegrambot_j6cd
+DATABASE_URL=postgresql://telegrambot_j6cd_user:***REDACTED***@dpg-d50f1hvgi27c73ajfos0-a:5432/telegrambot_j6cd
 ```
 
 **ВАЖНО:** Замени `password` на реальный пароль из Render Dashboard!

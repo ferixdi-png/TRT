@@ -8184,7 +8184,7 @@ async def upload_image_to_hosting(image_data: bytes, filename: str = "image.jpg"
       * POST /api/file-stream-upload - для локальных файлов (рекомендуется)
       * POST /api/file-base64-upload - для маленьких файлов (≤10MB)
       * POST /api/file-url-upload - для удаленных файлов
-    - Authentication: Authorization: Bearer YOUR_API_KEY
+    - Authentication: Authorization: Bearer YOUR_KIE_API_KEY
     - Документация: https://docs.kie.ai/file-upload-api
     
     ⚠️ НЕ использовать внешние хостинги (0x0.st, catbox.moe, transfer.sh)!

@@ -68,7 +68,7 @@ pip install -r requirements.txt
 Убедитесь, что в `.env` или в настройках Render установлена переменная:
 
 ```
-DATABASE_URL=postgresql://user:password@host:port/database
+DATABASE_URL=postgresql://user:***REDACTED***@host:port/database
 ```
 
 Также можно настроить период хранения логов:

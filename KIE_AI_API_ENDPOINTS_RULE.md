@@ -163,7 +163,7 @@ https://kieai.redpandaai.co
 
 ### Authentication:
 ```http
-Authorization: Bearer YOUR_API_KEY
+Authorization: Bearer YOUR_KIE_API_KEY
 ```
 
 ### Endpoints:

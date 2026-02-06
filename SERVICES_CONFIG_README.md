@@ -30,8 +30,8 @@
       "enabled": false
     }
   ],
-  "render_api_key": "rnd_nXYNUy1lrWO4QTIjVMYizzKyHItw",
-  "default_service": "srv-d4s025er433s73bsf62g"
+  "render_api_key": "YOUR_RENDER_API_KEY",
+  "default_service": "YOUR_RENDER_SERVICE_ID"
 }
 ```
 

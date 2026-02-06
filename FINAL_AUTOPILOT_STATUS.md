@@ -68,9 +68,9 @@
 - **Примечание:** Render должен пересобрать образ после push
 
 ### 3. ✅ Настроены ключи доступа
-- Render API Key: `rnd_nXYNUy1lrWO4QTIjVMYizzKyHItw` ✅
-- Service ID: `srv-d4s025er433s73bsf62g` ✅
-- Telegram Bot Token: `8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y` ✅
+- Render API Key: `YOUR_RENDER_API_KEY` ✅
+- Service ID: `YOUR_RENDER_SERVICE_ID` ✅
+- Telegram Bot Token: `YOUR_TELEGRAM_BOT_TOKEN` ✅
 
 ### 4. ✅ NO-SILENCE GUARD интегрирован
 - Создан `app/observability/no_silence_guard.py` ✅

@@ -77,7 +77,7 @@ python -c "import yaml; ...; print('Total models:', len(m))"
 - ✅ Метод `create_task(model, input, callback_url=None) -> task_id`
 - ✅ Метод `get_task(task_id) -> dict`
 - ✅ Метод `wait_task(task_id, timeout=900, poll=3) -> final_response`
-- ✅ Authorization: Bearer KIE_API_KEY
+- ✅ Authorization: Bearer YOUR_KIE_API_KEY
 - ✅ Retries + timeouts
 - ✅ Парсинг `resultJson` через `json.loads()`
 - ✅ Обработка `failCode` / `failMsg`

@@ -76,7 +76,7 @@ model_id:
 **Методы:**
 1. ✅ `create_task(model: str, input: dict, callback_url=None) -> task_id`
    - POST `https://api.kie.ai/api/v1/jobs/createTask`
-   - Authorization: Bearer KIE_API_KEY
+   - Authorization: Bearer YOUR_KIE_API_KEY
    - Retries + timeouts
    - Логирование payload
 
@@ -91,7 +91,7 @@ model_id:
    - Обрабатывает `failCode` / `failMsg`
 
 **Особенности:**
-- ✅ Authorization: Bearer KIE_API_KEY
+- ✅ Authorization: Bearer YOUR_KIE_API_KEY
 - ✅ Retries + timeouts
 - ✅ resultJson парсится через `json.loads()`
 - ✅ failCode / failMsg обрабатываются корректно

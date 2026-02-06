@@ -7,7 +7,7 @@
 ## 📋 ИНФОРМАЦИЯ
 
 - **URL деплоя:** https://five656.onrender.com
-- **Токен бота:** `8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y`
+- **Токен бота:** `YOUR_TELEGRAM_BOT_TOKEN`
 
 ---
 
@@ -45,20 +45,20 @@
 **Правильная команда:**
 
 ```bash
-curl -F "url=https://five656.onrender.com/webhook" \
-  https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/setWebhook
+curl -F "url=https://your-service.onrender.com/webhook" \
+  https://api.telegram.org/botYOUR_TELEGRAM_BOT_TOKEN/setWebhook
 ```
 
 **Или через браузер:**
 
 ```
-https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/setWebhook?url=https://five656.onrender.com/webhook
+https://api.telegram.org/botYOUR_TELEGRAM_BOT_TOKEN/setWebhook?url=https://your-service.onrender.com/webhook
 ```
 
 **Проверка webhook:**
 
 ```bash
-curl https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getWebhookInfo
+curl https://api.telegram.org/botYOUR_TELEGRAM_BOT_TOKEN/getWebhookInfo
 ```
 
 ---
@@ -97,7 +97,7 @@ curl https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/
 ### Проверка webhook (если установлен):
 
 ```bash
-curl https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/getWebhookInfo
+curl https://api.telegram.org/botYOUR_TELEGRAM_BOT_TOKEN/getWebhookInfo
 ```
 
 **Если webhook НЕ установлен, ответ будет:**
@@ -127,7 +127,7 @@ curl https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/
 ### Удаление webhook (если нужно вернуться к polling):
 
 ```bash
-curl https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/deleteWebhook
+curl https://api.telegram.org/botYOUR_TELEGRAM_BOT_TOKEN/deleteWebhook
 ```
 
 ---
@@ -157,8 +157,8 @@ app.run_webhook(
 ### ШАГ 2: Установить webhook
 
 ```bash
-curl -F "url=https://five656.onrender.com/8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y" \
-  https://api.telegram.org/bot8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y/setWebhook
+curl -F "url=https://your-service.onrender.com/YOUR_TELEGRAM_BOT_TOKEN" \
+  https://api.telegram.org/botYOUR_TELEGRAM_BOT_TOKEN/setWebhook
 ```
 
 ---

@@ -31,7 +31,7 @@
    
    # CRITICAL: Для масштабирования (multi-instance safe locks) ⚠️
    # Обязательно при запуске 2+ инстансов:
-   DATABASE_URL=postgresql://user:pass@host:5432/dbname
+   DATABASE_URL=postgresql://user:***REDACTED***@host:5432/dbname
    REDIS_URL=redis://host:6379/0
    
    # Без DATABASE_URL/REDIS_URL:

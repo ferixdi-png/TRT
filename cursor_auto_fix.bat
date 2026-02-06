@@ -44,17 +44,18 @@ if %errorlevel% neq 0 (
 echo ✅ Все зависимости установлены
 echo.
 
-REM Установка переменных окружения (если не установлены)
+REM Проверка переменных окружения
 if "%RENDER_API_KEY%"=="" (
-    set RENDER_API_KEY=rnd_nXYNUy1lrWO4QTIjVMYizzKyHItw
+    echo Please set RENDER_API_KEY environment variable
+    exit /b 2
 )
-
 if "%RENDER_SERVICE_ID%"=="" (
-    set RENDER_SERVICE_ID=srv-d4s025er433s73bsf62g
+    echo Please set RENDER_SERVICE_ID environment variable
+    exit /b 2
 )
-
 if "%TELEGRAM_BOT_TOKEN%"=="" (
-    set TELEGRAM_BOT_TOKEN=8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y
+    echo Please set TELEGRAM_BOT_TOKEN environment variable
+    exit /b 2
 )
 
 echo ✅ Переменные окружения установлены

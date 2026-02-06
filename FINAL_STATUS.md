@@ -63,7 +63,7 @@ python -c "import yaml; f=open('models/kie_models.yaml'); d=yaml.safe_load(f); p
 - ✅ `wait_task(task_id, timeout_s=900, poll_s=3) -> Dict[str, Any]`
 
 **Особенности:**
-- ✅ Authorization: Bearer KIE_API_KEY
+- ✅ Authorization: Bearer YOUR_KIE_API_KEY
 - ✅ Retries на 5xx ошибках
 - ✅ Timeouts (30s по умолчанию)
 - ✅ Парсинг resultJson (JSON string → dict)

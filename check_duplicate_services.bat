@@ -43,10 +43,12 @@ if %errorlevel% neq 0 (
 echo ✅ Все зависимости установлены
 echo.
 
-REM Установка переменных окружения (fallback)
-set RENDER_API_KEY=rnd_nXYNUy1lrWO4QTIjVMYizzKyHItw
-
-echo ✅ Переменные окружения установлены (fallback)
+REM Проверка переменных окружения
+if "%RENDER_API_KEY%"=="" (
+    echo Please set RENDER_API_KEY environment variable
+    echo Usage: set RENDER_API_KEY=your_api_key_here
+    exit /b 2
+)
 echo.
 echo 🚀 Запуск проверки...
 echo.

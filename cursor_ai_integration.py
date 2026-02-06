@@ -891,8 +891,15 @@ def main():
         # Fallback на старый способ (env vars)
         print("⚠️  Конфигурация сервисов не найдена, используем переменные окружения", flush=True)
         sys.stdout.flush()
-        service_id = os.getenv("RENDER_SERVICE_ID", "srv-d4s025er433s73bsf62g")
-        telegram_token = os.getenv("TELEGRAM_BOT_TOKEN", "8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y")
+        service_id = os.getenv("RENDER_SERVICE_ID")
+        telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
+        
+        if not service_id:
+            print("Please set RENDER_SERVICE_ID environment variable", flush=True)
+            sys.exit(2)
+        if not telegram_token:
+            print("Please set TELEGRAM_BOT_TOKEN environment variable", flush=True)
+            sys.exit(2)
         
         print("✅ Параметры загружены из env vars", flush=True)
         print(f"   Service ID: {service_id}", flush=True)

@@ -65,9 +65,19 @@ def check_duplicate_tokens():
     config = load_services_config()
     if not config:
         print("⚠️  services_config.json не найден, используем переменные окружения")
-        api_key = os.getenv("RENDER_API_KEY", "rnd_nXYNUy1lrWO4QTIjVMYizzKyHItw")
-        service_id = os.getenv("RENDER_SERVICE_ID", "srv-d4s025er433s73bsf62g")
-        telegram_token = os.getenv("TELEGRAM_BOT_TOKEN", "8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y")
+        api_key = os.getenv("RENDER_API_KEY")
+        service_id = os.getenv("RENDER_SERVICE_ID")
+        telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
+        
+        if not api_key:
+            print("Please set RENDER_API_KEY environment variable")
+            exit(2)
+        if not service_id:
+            print("Please set RENDER_SERVICE_ID environment variable")
+            exit(2)
+        if not telegram_token:
+            print("Please set TELEGRAM_BOT_TOKEN environment variable")
+            exit(2)
         
         services_to_check = [{
             "name": "Default Service",
@@ -75,7 +85,10 @@ def check_duplicate_tokens():
             "telegram_token": telegram_token
         }]
     else:
-        api_key = config.get("render_api_key") or os.getenv("RENDER_API_KEY", "rnd_nXYNUy1lrWO4QTIjVMYizzKyHItw")
+        api_key = config.get("render_api_key") or os.getenv("RENDER_API_KEY")
+        if not api_key:
+            print("Please set RENDER_API_KEY in config or environment variable")
+            exit(2)
         services_to_check = config.get("services", [])
     
     print(f"📋 Найдено сервисов в конфиге: {len(services_to_check)}")
