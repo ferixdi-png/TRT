@@ -25,9 +25,9 @@ if sys.platform == 'win32':
 RENDER_API_BASE = "https://api.render.com/v1"
 
 # Конфигурация из ENV или дефолт
-RENDER_API_KEY = os.getenv("RENDER_API_KEY", "rnd_nXYNUy1lrWO4QTIjVMYizzKyHItw")
-RENDER_SERVICE_ID = os.getenv("RENDER_SERVICE_ID", "srv-d4s025er433s73bsf62g")
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y")
+RENDER_API_KEY = os.getenv("RENDER_API_KEY", "")
+RENDER_SERVICE_ID = os.getenv("RENDER_SERVICE_ID", "")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 
 project_root = Path(__file__).parent.parent
 

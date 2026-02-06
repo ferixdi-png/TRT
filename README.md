@@ -36,18 +36,67 @@ BOT_MODE=polling python entrypoints/run_bot.py
 
 ## 🔐 ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ
 
-### Обязательные:
-- `TELEGRAM_BOT_TOKEN` - токен бота от @BotFather
-- `KIE_API_KEY` - API ключ от Kie.ai
-- `DATABASE_URL` - PostgreSQL connection string (для production)
+### 🚨 КРИТИЧНЫЕ (обязательно):
+```bash
+# Скопируй .env.example в .env и заполни реальные значения
+cp .env.example .env
 
-### Опциональные:
-- `BOT_MODE` - `polling` (default) или `webhook`
-- `APP_ENV` - `prod` (default), `dev`, или `test`
-- `FAKE_KIE_MODE` - `1` для тестов (обязательно в CI)
-- `RENDER_API_KEY` - для чтения логов Render
-- `RENDER_SERVICE_ID` - для чтения логов Render
-- `AUTO_SET_WEBHOOK` - `1` чтобы принудительно включить авто-установку webhook в webhook-режиме
+# Основные ключи
+TELEGRAM_BOT_TOKEN=1234567890:ABCDEFghijklmnopqrstuvwxyz123456789
+KIE_API_KEY=kie_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+DATABASE_URL=postgresql://user:password@host:5432/database
+REDIS_URL=redis://user:password@host:6379/0
+ADMIN_ID=123456789
+BOT_INSTANCE_ID=partner-01
+```
+
+### 🌐 Webhook (если webhook режим):
+```bash
+WEBHOOK_BASE_URL=https://your-service.onrender.com
+PORT=10000
+BOT_MODE=webhook
+```
+
+### 📦 Storage (выбрать один):
+```bash
+STORAGE_MODE=postgres  # или github/json
+GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx  # для github
+```
+
+### ⚙️ Оптимизация (рекомендуется):
+```bash
+BOOT_WARMUP_BUDGET_SECONDS=10
+BOOT_CACHE_LOAD_TIMEOUT_SECONDS=3
+REDIS_CONNECT_TIMEOUT_SECONDS=5
+REDIS_CONNECT_ATTEMPTS=3
+REDIS_CONNECT_DEADLINE_SECONDS=10
+WEBHOOK_SETTER_TIMEOUT_SECONDS=10
+```
+
+### 🏷️ Платежи (опционально):
+```bash
+PAYMENT_PROVIDER=yookassa
+PAYMENT_BANK=Сбер
+PAYMENT_CARD_HOLDER=IVAN IVANOV
+PAYMENT_PHONE=+79001234567
+```
+
+### 🎯 Режимы (опционально):
+```bash
+ENV=production
+RENDER=true
+DRY_RUN=false
+ALLOW_REAL_GENERATION=true
+```
+
+### 🔧 Мониторинг (опционально):
+```bash
+RENDER_API_KEY=rnd_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+RENDER_SERVICE_ID=srv-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+### 📋 Полный список:
+Смотри `.env.example` для полного шаблона всех переменных.
 - `REQUIRE_WEBHOOK_REGISTERED` - `1` чтобы падать при пустом/несовпадающем webhook в Telegram
 
 **Все секреты ТОЛЬКО через ENV, никаких .env файлов в репо!**

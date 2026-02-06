@@ -1,0 +1,46 @@
+name: Gitleaks Secret Scan
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-latest
+    name: Gitleaks Scan
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Full history for better scanning
+    
+    - name: Run Gitleaks
+      uses: gitleaks/gitleaks-action@v2
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}  # Optional for enterprise features
+      with:
+        config-path: .gitleaks.toml
+        report-format: sarif
+        output-file: gitleaks-report.sarif
+    
+    - name: Upload SARIF file
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: gitleaks-report.sarif
+    
+    - name: Display results
+      if: always()
+      run: |
+        echo "## Gitleaks Scan Results" >> $GITHUB_STEP_SUMMARY
+        if [ -f gitleaks-report.sarif ]; then
+          echo "✅ Scan completed. Check Security tab for detailed findings." >> $GITHUB_STEP_SUMMARY
+        else
+          echo "❌ Scan failed or no results generated." >> $GITHUB_STEP_SUMMARY
+        fi
