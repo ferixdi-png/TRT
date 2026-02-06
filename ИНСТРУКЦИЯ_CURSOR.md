@@ -25,9 +25,9 @@ cursor_auto_fix.bat
 ```
 
 Скрипт уже настроен с вашими ключами:
-- RENDER_API_KEY: rnd_nXYNUy1lrWO4QTIjVMYizzKyHItw
-- RENDER_SERVICE_ID: srv-d4s025er433s73bsf62g
-- TELEGRAM_BOT_TOKEN: 8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y
+- RENDER_API_KEY: YOUR_RENDER_API_KEY
+- RENDER_SERVICE_ID: YOUR_RENDER_SERVICE_ID
+- TELEGRAM_BOT_TOKEN: YOUR_TELEGRAM_BOT_TOKEN
 
 ### Шаг 2: Откройте файл с задачами в Cursor
 

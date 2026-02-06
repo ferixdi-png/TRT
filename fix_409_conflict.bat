@@ -45,9 +45,9 @@ echo ✅ Все зависимости установлены
 echo.
 
 REM Установка переменных окружения
-set RENDER_API_KEY=rnd_nXYNUy1lrWO4QTIjVMYizzKyHItw
-set RENDER_SERVICE_ID=srv-d4s025er433s73bsf62g
-set TELEGRAM_BOT_TOKEN=8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y
+set RENDER_API_KEY=YOUR_RENDER_API_KEY
+set RENDER_SERVICE_ID=YOUR_RENDER_SERVICE_ID
+set TELEGRAM_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN
 
 echo ✅ Переменные окружения установлены
 echo.

@@ -862,7 +862,7 @@ def load_services_config() -> Dict:
             print(f"⚠️  Ошибка при загрузке конфига: {e}")
     return {
         "services": [],
-        "render_api_key": os.getenv("RENDER_API_KEY", "rnd_nXYNUy1lrWO4QTIjVMYizzKyHItw"),
+        "render_api_key": os.getenv("RENDER_API_KEY", ""),
         "default_service": None
     }
 
@@ -880,7 +880,7 @@ def main():
     
     # Загружаем конфигурацию
     config = load_services_config()
-    render_api_key = config.get("render_api_key") or os.getenv("RENDER_API_KEY", "rnd_nXYNUy1lrWO4QTIjVMYizzKyHItw")
+    render_api_key = config.get("render_api_key") or os.getenv("RENDER_API_KEY", "")
     print(f"✅ API ключ загружен: {render_api_key[:20]}...", flush=True)
     sys.stdout.flush()
     

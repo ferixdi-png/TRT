@@ -544,9 +544,9 @@ def main():
     print()
     
     # Получаем переменные окружения
-    render_api_key = os.getenv("RENDER_API_KEY", "rnd_nXYNUy1lrWO4QTIjVMYizzKyHItw")
-    service_id = os.getenv("RENDER_SERVICE_ID", "srv-d4s025er433s73bsf62g")
-    telegram_token = os.getenv("TELEGRAM_BOT_TOKEN", "8524869517:AAEqLyZ3guOUoNsAnmkkKTTX56MoKW2f30Y")
+    render_api_key = os.getenv("RENDER_API_KEY", "")
+    service_id = os.getenv("RENDER_SERVICE_ID", "")
+    telegram_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
     
     # Создаём интегратор
     integrator = EnhancedCursorAutoFix(render_api_key, service_id, telegram_token)
