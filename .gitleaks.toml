@@ -53,6 +53,30 @@ id = "generic-api-key"
 regex = '''\b[A-Za-z0-9]{32,}\b'''
 keywords = ["key", "api", "secret"]
 
+[[rules]]
+description = "Database URLs with credentials"
+id = "database-urls"
+regex = '''(?i)(postgresql|mysql|mongodb)://[^:]+:[^@]+@[^/]+'''
+keywords = ["database", "url", "password", "postgresql", "mysql", "mongodb"]
+
+[[rules]]
+description = "Redis URLs with credentials"
+id = "redis-urls"
+regex = '''redis://[^:]+:[^@]+@'''
+keywords = ["redis", "url", "password"]
+
+[[rules]]
+description = "Authorization headers"
+id = "authorization-header"
+regex = '''(?i)authorization:\s*[bearer|basic]+\s+[A-Za-z0-9_-]+'''
+keywords = ["authorization", "bearer", "basic"]
+
+[[rules]]
+description = "Password in URLs"
+id = "password-in-url"
+regex = '''://[^:]+:([^@]+)@'''
+keywords = ["password", "url", "credentials"]
+
 # Allowlist for known false positives
 [allowlist]
 description = "Global Allowlist"

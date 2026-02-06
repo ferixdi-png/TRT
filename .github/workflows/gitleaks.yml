@@ -28,6 +28,7 @@ jobs:
         config-path: .gitleaks.toml
         report-format: sarif
         output-file: gitleaks-report.sarif
+        scan-args: '--log-opts="--all"'
     
     - name: Display results
       if: always()
