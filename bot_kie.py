@@ -1025,20 +1025,9 @@ async def inbound_rate_limit_guard(update: Update, context: ContextTypes.DEFAULT
 # ==================== SELF-CHECK: ENV SUMMARY AND VALIDATION ====================
 def log_env_summary():
     """Логирует summary ENV переменных без секретов"""
-    env_vars = {
-        "PORT": os.getenv("PORT", "not set"),
-        "RENDER": os.getenv("RENDER", "not set"),
-        "ENV": os.getenv("ENV", "not set"),
-        "BOT_MODE": os.getenv("BOT_MODE", "not set"),
-        "STORAGE_MODE": os.getenv("STORAGE_MODE", "not set"),
-        "TELEGRAM_BOT_TOKEN": "[SET]" if os.getenv("TELEGRAM_BOT_TOKEN") else "[NOT SET]",
-        "KIE_API_KEY": "[SET]" if os.getenv("KIE_API_KEY") else "[NOT SET]",
-        "KIE_API_URL": os.getenv("KIE_API_URL", "not set"),
-        "TEST_MODE": os.getenv("TEST_MODE", "not set"),
-        "DRY_RUN": os.getenv("DRY_RUN", "not set"),
-        "ALLOW_REAL_GENERATION": os.getenv("ALLOW_REAL_GENERATION", "not set"),
-        "KIE_STUB": os.getenv("KIE_STUB", "not set"),
-    }
+    from app.utils.env_security import safe_log_env_vars
+    
+    env_vars = safe_log_env_vars()
     
     logger.info("=" * 60)
     logger.info("ENVIRONMENT VARIABLES SUMMARY")
@@ -1050,21 +1039,12 @@ def log_env_summary():
 
 def validate_required_env():
     """Проверяет обязательные переменные окружения"""
-    errors = []
+    from app.utils.env_security import validate_environment_on_startup
+    
+    # Use centralized validation
+    validate_environment_on_startup()
+    
     warnings = []
-    
-    # TELEGRAM_BOT_TOKEN - обязателен всегда
-    if not os.getenv("TELEGRAM_BOT_TOKEN"):
-        errors.append("TELEGRAM_BOT_TOKEN is required but not set")
-    
-    # KIE_API_KEY - обязателен если real generation
-    allow_real = os.getenv("ALLOW_REAL_GENERATION", "1") != "0"
-    test_mode = os.getenv("TEST_MODE", "0") == "1"
-    kie_stub = os.getenv("KIE_STUB", "0") == "1"
-    
-    if allow_real and not test_mode and not kie_stub:
-        if not os.getenv("KIE_API_KEY"):
-            errors.append("KIE_API_KEY is required for real generation (set ALLOW_REAL_GENERATION=0 or TEST_MODE=1 to disable)")
     
     # Проверяем наличие критических файлов (warning, не error - может быть опциональным)
     models_yaml = Path(__file__).parent / "models" / "kie_models.yaml"
@@ -1085,17 +1065,6 @@ def validate_required_env():
         for warning in warnings:
             logger.warning(f"⚠️  {warning}")
         logger.warning("=" * 60)
-    
-    # Выводим ошибки и выходим
-    if errors:
-        logger.error("=" * 60)
-        logger.error("ENVIRONMENT VALIDATION FAILED")
-        logger.error("=" * 60)
-        for error in errors:
-            logger.error(f"❌ {error}")
-        logger.error("=" * 60)
-        logger.error("Please fix the errors above and restart the bot")
-        sys.exit(1)
     
     logger.info("✅ Environment validation passed")
 

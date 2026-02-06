@@ -1,6 +1,7 @@
 # Environment variables (NEVER commit .env files!)
 .env
 .env.*
+!.env.example
 !.env.partner.example
 *.pem
 *.key
@@ -12,6 +13,20 @@ config.dev.*
 services_config.json
 render.yaml
 .github_token
+
+# Additional secret patterns
+*.crt
+*.pfx
+credentials/
+*.backup
+*.bak
+archive/
+*.zip
+*.tar.gz
+*.rar
+docker-compose.override.yml
+secrets.yaml
+secrets.json
 
 # IDE/Cursor (contains secrets and temp files)
 .cursor/

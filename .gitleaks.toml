@@ -1,0 +1,85 @@
+title = "Gitleaks Configuration"
+
+# Extend the default Gitleaks configuration
+[extend]
+useDefault = true
+
+# Custom rules for this project
+[[rules]]
+description = "Telegram Bot Token"
+id = "telegram-bot-token"
+regex = '''\b\d{8,10}:[A-Za-z0-9_-]{35}\b'''
+keywords = ["telegram", "bot", "token"]
+
+[[rules]]
+description = "Render API Key"
+id = "render-api-key"
+regex = '''\brnd_[A-Za-z0-9]{32}\b'''
+keywords = ["render", "api", "key"]
+
+[[rules]]
+description = "Render Service ID"
+id = "render-service-id"
+regex = '''\bsrv-[A-Za-z0-9]{25}\b'''
+keywords = ["render", "service", "id"]
+
+[[rules]]
+description = "GitHub Token"
+id = "github-token"
+regex = '''\bghp_[A-Za-z0-9]{36}\b'''
+keywords = ["github", "token", "ghp"]
+
+[[rules]]
+description = "KIE API Key"
+id = "kie-api-key"
+regex = '''\bkie_[A-Za-z0-9]{32}\b'''
+keywords = ["kie", "api", "key"]
+
+[[rules]]
+description = "Database URL with password"
+id = "database-url"
+regex = '''(?i)(postgresql|mysql|mongodb)://[^:]+:[^@]+@[^/]+'''
+keywords = ["database", "url", "password"]
+
+[[rules]]
+description = "Redis URL with password"
+id = "redis-url"
+regex = '''redis://[^:]+:[^@]+@'''
+keywords = ["redis", "url", "password"]
+
+[[rules]]
+description = "Generic API Key pattern"
+id = "generic-api-key"
+regex = '''\b[A-Za-z0-9]{32,}\b'''
+keywords = ["key", "api", "secret"]
+
+# Allowlist for known false positives
+[allowlist]
+description = "Global Allowlist"
+paths = [
+    '''\.gitignore''',
+    '''\.env\.example''',
+    '''README.*\.md''',
+    '''docs/.*''',
+    '''test.*''',
+    '''spec.*''',
+    '''\.example$'''
+]
+
+# Allow specific commits that might contain false positives
+[[allowlist.commits]]
+description = "Allow specific commits with known false positives"
+sha = "commit-sha-here"
+
+# Allow specific file patterns
+[[allowlist.files]]
+description = "Allow documentation files"
+path = '''docs/.*\.md'''
+
+[[allowlist.files]]
+description = "Allow example files"
+path = '''.*\.example$'''
+
+[[allowlist.files]]
+description = "Allow test files"
+path = '''test.*'''
