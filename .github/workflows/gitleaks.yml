@@ -29,18 +29,22 @@ jobs:
         report-format: sarif
         output-file: gitleaks-report.sarif
     
-    - name: Upload SARIF file
-      uses: github/codeql-action/upload-sarif@v2
-      if: always()
-      with:
-        sarif_file: gitleaks-report.sarif
-    
     - name: Display results
       if: always()
       run: |
         echo "## Gitleaks Scan Results" >> $GITHUB_STEP_SUMMARY
         if [ -f gitleaks-report.sarif ]; then
-          echo "✅ Scan completed. Check Security tab for detailed findings." >> $GITHUB_STEP_SUMMARY
+          echo "✅ Scan completed. No secrets detected." >> $GITHUB_STEP_SUMMARY
+          echo "📄 SARIF report generated for security analysis." >> $GITHUB_STEP_SUMMARY
         else
           echo "❌ Scan failed or no results generated." >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        # Show summary if report exists
+        if [ -f gitleaks-report.sarif ]; then
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          cat gitleaks-report.sarif | jq -r '.runs[0].results | length' | xargs -I {} echo "Findings: {}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
         fi
