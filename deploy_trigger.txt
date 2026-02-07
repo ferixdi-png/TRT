@@ -1,0 +1,8 @@
+Deploy trigger for Render update - 2026-02-07
+
+This file triggers a deployment to update the service on Render platform.
+
+Changes:
+- Empty deployment trigger
+- Service restart requested
+- Environment variables preserved
