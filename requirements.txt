@@ -3,6 +3,10 @@ python-telegram-bot[webhooks]==20.8
 
 # HTTP Client
 aiohttp>=3.8.0
+aiohttp-asgi>=0.1.0
+
+# Mini App (FastAPI)
+fastapi>=0.104.0
 aiofiles>=23.0.0
 requests>=2.31.0  # Для работы с Render API
 GitPython>=3.1.40  # Для автоматических коммитов

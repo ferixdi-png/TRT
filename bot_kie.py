@@ -1087,7 +1087,7 @@ from telegram.ext import (
     ConversationHandler, CallbackQueryHandler, TypeHandler,
     PreCheckoutQueryHandler
 )
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, CallbackQuery, BotCommand
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, CallbackQuery, BotCommand, WebAppInfo
 from telegram.ext import ContextTypes
 from telegram.error import BadRequest, Conflict, RetryAfter, TimedOut
 from telegram.warnings import PTBUserWarning

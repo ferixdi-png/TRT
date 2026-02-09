@@ -3,7 +3,7 @@
 Убрано дублирование кода
 """
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 import asyncio
 import logging
 import os
@@ -99,8 +99,11 @@ async def build_main_menu_keyboard(
     Строит главное меню клавиатуры.
     Обновлено согласно скриншоту идеального меню.
     """
+    # Mini App URL (optional - if set, show webapp button)
+    webapp_url = os.getenv("WEBAPP_URL", "").strip()
+    
     if user_lang == "ru":
-        return [
+        buttons = [
             [InlineKeyboardButton("⚡ Бесплатные генерации", callback_data="fast_tools")],
             [InlineKeyboardButton("🖼️ Текст → Фото", callback_data="gen_type:text-to-image")],
             [InlineKeyboardButton("🧩 Редактор фото", callback_data="gen_type:image-to-image")],
@@ -111,8 +114,11 @@ async def build_main_menu_keyboard(
             [InlineKeyboardButton("🤝 Партнёрка", callback_data="referral_info")],
             [InlineKeyboardButton("🌐 Язык / Language", callback_data="change_language")],
         ]
+        if webapp_url:
+            buttons.insert(0, [InlineKeyboardButton("🚀 Открыть приложение", web_app=WebAppInfo(url=webapp_url))])
+        return buttons
     else:
-        return [
+        buttons = [
             [InlineKeyboardButton("⚡ Free generations", callback_data="fast_tools")],
             [InlineKeyboardButton("🖼️ Text → Photo", callback_data="gen_type:text-to-image")],
             [InlineKeyboardButton("🧩 Photo editor", callback_data="gen_type:image-to-image")],
@@ -123,6 +129,9 @@ async def build_main_menu_keyboard(
             [InlineKeyboardButton("🤝 Referral", callback_data="referral_info")],
             [InlineKeyboardButton("🌐 Language / Язык", callback_data="change_language")],
         ]
+        if webapp_url:
+            buttons.insert(0, [InlineKeyboardButton("🚀 Open App", web_app=WebAppInfo(url=webapp_url))])
+        return buttons
 
 
 async def get_balance_info(user_id: int, user_lang: str = None) -> Dict[str, Any]:
