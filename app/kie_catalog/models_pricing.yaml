@@ -749,14 +749,15 @@ models:
   description_ru: Убирает водяной знак OpenAI с видео Sora. Профессиональная очистка
     готовых роликов для публикации.
 - id: openai/4o-image
-  title_ru: OpenAI 4o Image Text to Image
+  title_ru: 🔥 OpenAI 4o Image
   type: t2i
   modes:
   - unit: image
     credits: 6.0
     official_usd: 0.03
-  description_ru: 'GPT-4o с визуальным пониманием: генерация и анализ изображений.
-    Умный AI-помощник.'
+    notes: text-to-image
+  description_ru: ⭐ ТОП МОДЕЛЬ! GPT-4o Image — генерация и редактирование изображений.
+    Text-to-image, image editing, variants. Понимает визуальный контекст.
 - id: qwen/image-to-image
   title_ru: Qwen Image Image to Image
   type: i2i

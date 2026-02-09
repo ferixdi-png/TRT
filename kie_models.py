@@ -2584,19 +2584,39 @@ KIE_MODELS = [
     },
     {
         "id": "openai/4o-image",
-        "name": "OpenAI 4o Image",
-        "description": "GPT-Image-1 (ChatGPT 4o Image) - последняя модель генерации изображений от OpenAI. Понимает текст и визуальный контекст, создает и редактирует изображения с высокой точностью.",
+        "name": "🔥 OpenAI 4o Image",
+        "description": "⭐ ТОП МОДЕЛЬ! GPT-4o Image — генерация и редактирование изображений. Text-to-image, image editing, variants. Понимает визуальный контекст.",
         "category": "Изображения",
         "emoji": "🎨",
-        "pricing": "Скоро появится",
+        "is_featured": True,
+        "pricing": "6 кредитов за изображение ($0.03)",
         "input_params": {
             "prompt": {
                 "type": "string",
-                "description": "Текстовое описание (скоро появится)",
-                "required": True
+                "description": "Описание желаемого изображения",
+                "required": True,
+                "max_length": 4000
+            },
+            "filesUrl": {
+                "type": "array",
+                "description": "URL изображений для редактирования (опционально)",
+                "required": False,
+                "item_type": "string"
+            },
+            "size": {
+                "type": "string",
+                "description": "Соотношение сторон изображения",
+                "required": False,
+                "default": "1:1",
+                "enum": ["1:1", "3:2", "2:3", "16:9", "9:16"]
+            },
+            "nVariants": {
+                "type": "integer",
+                "description": "Количество вариантов (1-4)",
+                "required": False,
+                "default": 1
             }
-        },
-        "coming_soon": True
+        }
     },
     {
         "id": "flux/kontext",
