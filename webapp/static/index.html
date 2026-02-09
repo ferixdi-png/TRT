@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TRT Mini App</title>
+    <title>AI Генератор</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root {
@@ -14,173 +14,234 @@
             --tg-theme-button-color: #2481cc;
             --tg-theme-button-text-color: #ffffff;
             --tg-theme-secondary-bg-color: #f0f0f0;
+            --tg-theme-destructive-text-color: #ff3b30;
+            --accent-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --success-color: #34c759;
+            --warning-color: #ff9500;
         }
         
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            background-color: var(--tg-theme-bg-color);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--tg-theme-bg-color);
             color: var(--tg-theme-text-color);
             min-height: 100vh;
-            padding: 16px;
+            padding-bottom: 100px;
         }
         
-        .container {
-            max-width: 400px;
-            margin: 0 auto;
-        }
+        .container { max-width: 100%; padding: 0 16px; }
         
+        /* Header */
         .header {
-            text-align: center;
-            margin-bottom: 24px;
+            background: var(--accent-gradient);
+            padding: 24px 16px 32px;
+            margin: 0 -16px 16px;
+            border-radius: 0 0 24px 24px;
+            color: white;
         }
-        
-        .header h1 {
-            font-size: 24px;
-            margin-bottom: 8px;
-        }
-        
-        .header .subtitle {
-            color: var(--tg-theme-hint-color);
-            font-size: 14px;
-        }
-        
-        .card {
-            background: var(--tg-theme-secondary-bg-color);
-            border-radius: 12px;
-            padding: 16px;
-            margin-bottom: 16px;
-        }
-        
-        .card-title {
-            font-size: 14px;
-            color: var(--tg-theme-hint-color);
-            margin-bottom: 8px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        .card-value {
-            font-size: 32px;
-            font-weight: 600;
-        }
-        
-        .card-value .currency {
-            font-size: 18px;
-            color: var(--tg-theme-hint-color);
-        }
-        
-        .models-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 12px;
-        }
-        
-        .model-card {
-            background: var(--tg-theme-secondary-bg-color);
-            border-radius: 12px;
-            padding: 16px;
-            text-align: center;
-            cursor: pointer;
-            transition: transform 0.2s, opacity 0.2s;
-        }
-        
-        .model-card:active {
-            transform: scale(0.95);
-            opacity: 0.8;
-        }
-        
-        .model-emoji {
-            font-size: 32px;
-            margin-bottom: 8px;
-        }
-        
-        .model-name {
-            font-size: 12px;
-            font-weight: 500;
-            word-break: break-word;
-        }
-        
-        .section-title {
-            font-size: 16px;
-            font-weight: 600;
-            margin-bottom: 12px;
-            margin-top: 24px;
-        }
-        
-        .btn {
-            display: block;
-            width: 100%;
-            padding: 14px;
-            background: var(--tg-theme-button-color);
-            color: var(--tg-theme-button-text-color);
-            border: none;
-            border-radius: 12px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            margin-top: 24px;
-        }
-        
-        .btn:active {
-            opacity: 0.8;
-        }
-        
-        .loading {
-            text-align: center;
-            padding: 40px;
-            color: var(--tg-theme-hint-color);
-        }
-        
-        .error {
-            background: #ffebee;
-            color: #c62828;
-            padding: 12px;
-            border-radius: 8px;
-            margin-bottom: 16px;
-            font-size: 14px;
-        }
-        
-        .user-info {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 24px;
-        }
-        
+        .header-top { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
         .user-avatar {
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            background: var(--tg-theme-button-color);
+            width: 52px; height: 52px; border-radius: 50%;
+            background: rgba(255,255,255,0.25);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px; font-weight: 700; color: white;
+            border: 2px solid rgba(255,255,255,0.4);
+        }
+        .user-info { flex: 1; }
+        .user-name { font-size: 18px; font-weight: 600; }
+        .user-username { font-size: 13px; opacity: 0.85; }
+        
+        /* Balance Card */
+        .balance-card {
+            background: rgba(255,255,255,0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 16px;
+            display: flex; align-items: center; gap: 12px;
+        }
+        .balance-icon { font-size: 28px; }
+        .balance-info { flex: 1; }
+        .balance-label { font-size: 12px; opacity: 0.8; text-transform: uppercase; letter-spacing: 0.5px; }
+        .balance-value { font-size: 28px; font-weight: 700; }
+        .balance-value .currency { font-size: 16px; opacity: 0.7; }
+        .balance-btn {
+            background: rgba(255,255,255,0.25);
+            border: none; border-radius: 12px;
+            padding: 10px 16px; color: white;
+            font-weight: 600; font-size: 14px;
+            cursor: pointer;
+        }
+        
+        /* Quick Actions */
+        .quick-actions {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+        .quick-action {
+            background: var(--tg-theme-secondary-bg-color);
+            border-radius: 16px;
+            padding: 14px 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: transform 0.15s, opacity 0.15s;
+        }
+        .quick-action:active { transform: scale(0.95); opacity: 0.8; }
+        .quick-action-icon { font-size: 26px; margin-bottom: 6px; }
+        .quick-action-label { font-size: 11px; font-weight: 500; color: var(--tg-theme-hint-color); }
+        
+        /* Section */
+        .section { margin-bottom: 20px; }
+        .section-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 12px; padding: 0 4px;
+        }
+        .section-title { font-size: 17px; font-weight: 600; }
+        .section-link { font-size: 14px; color: var(--tg-theme-link-color); cursor: pointer; }
+        
+        /* Category Cards */
+        .category-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+        .category-card {
+            background: var(--tg-theme-secondary-bg-color);
+            border-radius: 16px;
+            padding: 16px;
+            cursor: pointer;
+            transition: transform 0.15s, box-shadow 0.15s;
+            position: relative;
+            overflow: hidden;
+        }
+        .category-card:active { transform: scale(0.97); }
+        .category-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 4px;
+            background: var(--accent-gradient);
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .category-card:active::before { opacity: 1; }
+        .category-icon { font-size: 32px; margin-bottom: 8px; }
+        .category-name { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+        .category-count { font-size: 12px; color: var(--tg-theme-hint-color); }
+        .category-badge {
+            position: absolute; top: 12px; right: 12px;
+            background: var(--success-color);
+            color: white; font-size: 10px; font-weight: 600;
+            padding: 3px 8px; border-radius: 10px;
+        }
+        
+        /* Model List */
+        .model-list { display: flex; flex-direction: column; gap: 8px; }
+        .model-item {
+            display: flex; align-items: center; gap: 12px;
+            background: var(--tg-theme-secondary-bg-color);
+            border-radius: 14px;
+            padding: 12px 14px;
+            cursor: pointer;
+            transition: transform 0.15s;
+        }
+        .model-item:active { transform: scale(0.98); }
+        .model-icon { font-size: 28px; }
+        .model-info { flex: 1; }
+        .model-name { font-size: 15px; font-weight: 500; }
+        .model-type { font-size: 12px; color: var(--tg-theme-hint-color); }
+        .model-arrow { color: var(--tg-theme-hint-color); font-size: 18px; }
+        
+        /* Bottom Nav */
+        .bottom-nav {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            background: var(--tg-theme-bg-color);
+            border-top: 1px solid var(--tg-theme-secondary-bg-color);
             display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--tg-theme-button-text-color);
-            font-size: 20px;
-            font-weight: 600;
+            padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
         }
-        
-        .user-name {
-            font-size: 18px;
-            font-weight: 600;
-        }
-        
-        .user-username {
-            font-size: 14px;
+        .nav-item {
+            flex: 1; display: flex; flex-direction: column;
+            align-items: center; gap: 4px;
+            padding: 8px; cursor: pointer;
             color: var(--tg-theme-hint-color);
+            transition: color 0.2s;
+        }
+        .nav-item.active { color: var(--tg-theme-button-color); }
+        .nav-icon { font-size: 22px; }
+        .nav-label { font-size: 11px; font-weight: 500; }
+        
+        /* Loading */
+        .loading {
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            min-height: 60vh; gap: 16px;
+        }
+        .loading-spinner {
+            width: 40px; height: 40px;
+            border: 3px solid var(--tg-theme-secondary-bg-color);
+            border-top-color: var(--tg-theme-button-color);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-text { color: var(--tg-theme-hint-color); font-size: 14px; }
+        
+        /* Error */
+        .error-card {
+            background: #fff5f5; border-radius: 16px;
+            padding: 24px; text-align: center; margin: 20px 0;
+        }
+        .error-icon { font-size: 48px; margin-bottom: 12px; }
+        .error-title { font-size: 17px; font-weight: 600; margin-bottom: 8px; color: var(--tg-theme-destructive-text-color); }
+        .error-text { font-size: 14px; color: var(--tg-theme-hint-color); }
+        
+        /* Tabs */
+        .tabs {
+            display: flex; gap: 8px;
+            overflow-x: auto; padding: 0 4px 12px;
+            -webkit-overflow-scrolling: touch;
+        }
+        .tabs::-webkit-scrollbar { display: none; }
+        .tab {
+            flex-shrink: 0;
+            padding: 8px 16px;
+            background: var(--tg-theme-secondary-bg-color);
+            border-radius: 20px;
+            font-size: 14px; font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .tab.active {
+            background: var(--tg-theme-button-color);
+            color: var(--tg-theme-button-text-color);
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div id="app">
-            <div class="loading">Загрузка...</div>
+            <div class="loading">
+                <div class="loading-spinner"></div>
+                <div class="loading-text">Загрузка...</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="bottom-nav" id="bottomNav" style="display:none;">
+        <div class="nav-item active" onclick="showPage('home')">
+            <div class="nav-icon">🏠</div>
+            <div class="nav-label">Главная</div>
+        </div>
+        <div class="nav-item" onclick="showPage('models')">
+            <div class="nav-icon">🎨</div>
+            <div class="nav-label">Модели</div>
+        </div>
+        <div class="nav-item" onclick="showPage('history')">
+            <div class="nav-icon">📋</div>
+            <div class="nav-label">История</div>
+        </div>
+        <div class="nav-item" onclick="openBot()">
+            <div class="nav-icon">🤖</div>
+            <div class="nav-label">Бот</div>
         </div>
     </div>
 
@@ -188,19 +249,16 @@
         const tg = window.Telegram.WebApp;
         tg.ready();
         tg.expand();
+        tg.enableClosingConfirmation();
         
         const API_BASE = '/webapp/api';
-        
-        function getInitData() {
-            return tg.initData || '';
-        }
+        let currentPage = 'home';
+        let appData = { user: null, balance: 0, models: [], categories: {} };
         
         async function apiCall(endpoint) {
             try {
                 const response = await fetch(`${API_BASE}${endpoint}`, {
-                    headers: {
-                        'X-Telegram-Init-Data': getInitData()
-                    }
+                    headers: { 'X-Telegram-Init-Data': tg.initData || '' }
                 });
                 return await response.json();
             } catch (error) {
@@ -209,79 +267,248 @@
             }
         }
         
-        function getUserFromTg() {
-            if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
-                return tg.initDataUnsafe.user;
-            }
-            return null;
+        function getUser() {
+            return tg.initDataUnsafe?.user || null;
         }
         
         function getInitial(name) {
             return name ? name.charAt(0).toUpperCase() : '?';
         }
         
+        function groupModelsByType(models) {
+            const categories = {
+                'text-to-image': { name: 'Текст → Фото', icon: '🖼️', models: [] },
+                'image-to-image': { name: 'Редактор фото', icon: '🧩', models: [] },
+                'text-to-video': { name: 'Текст → Видео', icon: '🎬', models: [] },
+                'image-to-video': { name: 'Фото → Видео', icon: '🎞️', models: [] },
+                'other': { name: 'Другое', icon: '🧰', models: [] }
+            };
+            
+            (models || []).forEach(m => {
+                const type = m.type || 'other';
+                if (categories[type]) {
+                    categories[type].models.push(m);
+                } else {
+                    categories['other'].models.push(m);
+                }
+            });
+            
+            return categories;
+        }
+        
         async function loadApp() {
             const app = document.getElementById('app');
-            const user = getUserFromTg();
+            const user = getUser();
             
             if (!user) {
                 app.innerHTML = `
-                    <div class="error">
-                        ⚠️ Откройте приложение через Telegram
+                    <div class="error-card">
+                        <div class="error-icon">⚠️</div>
+                        <div class="error-title">Откройте через Telegram</div>
+                        <div class="error-text">Это приложение работает только внутри Telegram</div>
                     </div>
                 `;
                 return;
             }
             
-            let balanceData = { balance: 0 };
-            let modelsData = { models: [], count: 0 };
+            appData.user = user;
             
             try {
-                [balanceData, modelsData] = await Promise.all([
+                const [balanceData, modelsData] = await Promise.all([
                     apiCall(`/user/${user.id}/balance`),
                     apiCall('/models')
                 ]);
+                
+                appData.balance = balanceData.balance || 0;
+                appData.models = modelsData.models || [];
+                appData.categories = groupModelsByType(appData.models);
+                
+                document.getElementById('bottomNav').style.display = 'flex';
+                showPage('home');
+                
             } catch (e) {
                 console.error('Load error:', e);
+                app.innerHTML = `
+                    <div class="error-card">
+                        <div class="error-icon">❌</div>
+                        <div class="error-title">Ошибка загрузки</div>
+                        <div class="error-text">${e.message}</div>
+                    </div>
+                `;
             }
+        }
+        
+        function showPage(page) {
+            currentPage = page;
+            document.querySelectorAll('.nav-item').forEach((el, i) => {
+                el.classList.toggle('active', ['home', 'models', 'history'][i] === page);
+            });
             
-            const modelCards = (modelsData.models || []).slice(0, 8).map(model => `
-                <div class="model-card" onclick="selectModel('${model.id}')">
-                    <div class="model-emoji">${model.emoji || '🎨'}</div>
-                    <div class="model-name">${model.name || model.id}</div>
-                </div>
-            `).join('');
+            const app = document.getElementById('app');
+            
+            if (page === 'home') {
+                renderHome(app);
+            } else if (page === 'models') {
+                renderModels(app);
+            } else if (page === 'history') {
+                renderHistory(app);
+            }
+        }
+        
+        function renderHome(app) {
+            const user = appData.user;
+            const cats = appData.categories;
             
             app.innerHTML = `
-                <div class="user-info">
-                    <div class="user-avatar">${getInitial(user.first_name)}</div>
-                    <div>
-                        <div class="user-name">${user.first_name} ${user.last_name || ''}</div>
-                        <div class="user-username">@${user.username || 'user'}</div>
+                <div class="header">
+                    <div class="header-top">
+                        <div class="user-avatar">${getInitial(user.first_name)}</div>
+                        <div class="user-info">
+                            <div class="user-name">${user.first_name} ${user.last_name || ''}</div>
+                            <div class="user-username">@${user.username || 'user'}</div>
+                        </div>
+                    </div>
+                    <div class="balance-card">
+                        <div class="balance-icon">💰</div>
+                        <div class="balance-info">
+                            <div class="balance-label">Баланс</div>
+                            <div class="balance-value">${appData.balance.toFixed(2)} <span class="currency">₽</span></div>
+                        </div>
+                        <button class="balance-btn" onclick="openBot()">Пополнить</button>
                     </div>
                 </div>
                 
-                <div class="card">
-                    <div class="card-title">💰 Баланс</div>
-                    <div class="card-value">
-                        ${(balanceData.balance || 0).toFixed(2)}
-                        <span class="currency">₽</span>
+                <div class="quick-actions">
+                    <div class="quick-action" onclick="showPage('models')">
+                        <div class="quick-action-icon">🎨</div>
+                        <div class="quick-action-label">Генерация</div>
+                    </div>
+                    <div class="quick-action" onclick="openBot()">
+                        <div class="quick-action-icon">⚡</div>
+                        <div class="quick-action-label">Бесплатно</div>
+                    </div>
+                    <div class="quick-action" onclick="showPage('history')">
+                        <div class="quick-action-icon">📋</div>
+                        <div class="quick-action-label">История</div>
+                    </div>
+                    <div class="quick-action" onclick="openBot()">
+                        <div class="quick-action-icon">🤝</div>
+                        <div class="quick-action-label">Партнёрка</div>
                     </div>
                 </div>
                 
-                <div class="section-title">🎨 Модели (${modelsData.count || 0})</div>
-                <div class="models-grid">
-                    ${modelCards || '<div class="loading">Нет моделей</div>'}
+                <div class="section">
+                    <div class="section-header">
+                        <div class="section-title">Категории</div>
+                        <div class="section-link" onclick="showPage('models')">Все модели →</div>
+                    </div>
+                    <div class="category-grid">
+                        ${Object.entries(cats).filter(([k,v]) => v.models.length > 0).slice(0, 4).map(([key, cat]) => `
+                            <div class="category-card" onclick="filterModels('${key}')">
+                                ${cat.models.some(m => m.type?.includes('free')) ? '<div class="category-badge">FREE</div>' : ''}
+                                <div class="category-icon">${cat.icon}</div>
+                                <div class="category-name">${cat.name}</div>
+                                <div class="category-count">${cat.models.length} моделей</div>
+                            </div>
+                        `).join('')}
+                    </div>
                 </div>
                 
-                <button class="btn" onclick="openBot()">
-                    🤖 Открыть бота
-                </button>
+                <div class="section">
+                    <div class="section-header">
+                        <div class="section-title">Популярные модели</div>
+                    </div>
+                    <div class="model-list">
+                        ${appData.models.slice(0, 5).map(m => `
+                            <div class="model-item" onclick="selectModel('${m.id}')">
+                                <div class="model-icon">${m.emoji || '🎨'}</div>
+                                <div class="model-info">
+                                    <div class="model-name">${m.name || m.id}</div>
+                                    <div class="model-type">${m.type || 'AI модель'}</div>
+                                </div>
+                                <div class="model-arrow">›</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
             `;
         }
         
+        function renderModels(app) {
+            const cats = appData.categories;
+            const types = Object.keys(cats).filter(k => cats[k].models.length > 0);
+            
+            app.innerHTML = `
+                <div style="padding-top: 16px;">
+                    <div class="section-title" style="padding: 0 4px 12px;">🎨 Все модели (${appData.models.length})</div>
+                    
+                    <div class="tabs">
+                        <div class="tab active" onclick="filterModels('all')">Все</div>
+                        ${types.map(t => `
+                            <div class="tab" onclick="filterModels('${t}')">${cats[t].icon} ${cats[t].name}</div>
+                        `).join('')}
+                    </div>
+                    
+                    <div class="model-list" id="modelList">
+                        ${appData.models.map(m => `
+                            <div class="model-item" onclick="selectModel('${m.id}')">
+                                <div class="model-icon">${m.emoji || '🎨'}</div>
+                                <div class="model-info">
+                                    <div class="model-name">${m.name || m.id}</div>
+                                    <div class="model-type">${m.type || 'AI модель'}</div>
+                                </div>
+                                <div class="model-arrow">›</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+        
+        function renderHistory(app) {
+            app.innerHTML = `
+                <div style="padding-top: 16px;">
+                    <div class="section-title" style="padding: 0 4px 16px;">📋 История генераций</div>
+                    <div class="error-card" style="background: var(--tg-theme-secondary-bg-color);">
+                        <div class="error-icon">📭</div>
+                        <div class="error-title" style="color: var(--tg-theme-text-color);">Пока пусто</div>
+                        <div class="error-text">Ваши генерации появятся здесь</div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function filterModels(type) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            const list = document.getElementById('modelList');
+            if (!list) { showPage('models'); return; }
+            
+            let models = appData.models;
+            if (type !== 'all') {
+                models = appData.categories[type]?.models || [];
+            }
+            
+            list.innerHTML = models.map(m => `
+                <div class="model-item" onclick="selectModel('${m.id}')">
+                    <div class="model-icon">${m.emoji || '🎨'}</div>
+                    <div class="model-info">
+                        <div class="model-name">${m.name || m.id}</div>
+                        <div class="model-type">${m.type || 'AI модель'}</div>
+                    </div>
+                    <div class="model-arrow">›</div>
+                </div>
+            `).join('');
+        }
+        
         function selectModel(modelId) {
-            tg.showAlert(`Модель: ${modelId}\n\nДля генерации откройте бота.`);
+            tg.showConfirm(
+                `Открыть модель "${modelId}" в боте?`,
+                (confirmed) => {
+                    if (confirmed) openBot();
+                }
+            );
         }
         
         function openBot() {
