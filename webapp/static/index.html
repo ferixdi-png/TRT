@@ -2775,7 +2775,9 @@
         }
         
         function openBot() {
-            tg.openTelegramLink('https://t.me/kie_ai_bot');
+            // Switch to bot chat - tg.switchInlineQuery opens bot in current chat
+            // For top-up, just close Mini App - user is already in bot chat
+            tg.close();
         }
         
         // Cleanup on close
