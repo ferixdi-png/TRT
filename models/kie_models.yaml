@@ -2158,6 +2158,7 @@ models:
         - high
     model_mode: image_to_image
   midjourney/text-to-image:
+    hidden: true
     model_type: text_to_image
     input:
       prompt:
@@ -2194,6 +2195,7 @@ models:
         - niji7
     model_mode: text_to_image
   midjourney/image-to-image:
+    hidden: true
     model_type: image_to_image
     input:
       prompt:
@@ -2232,6 +2234,7 @@ models:
         - niji7
     model_mode: image_to_image
   midjourney/image-to-video:
+    hidden: true
     model_type: image_to_video
     input:
       prompt:

@@ -59,6 +59,10 @@ class PricingService:
         # Фильтруем ТОЛЬКО text-to-image модели и сортируем
         valid_models = []
         for model_data in models_data:
+            # Пропускаем скрытые модели
+            if model_data.get('hidden', False):
+                continue
+            
             # СТРОГО: Fast Tools = только text-to-image
             model_type = model_data.get('model_type', '')
             model_mode = model_data.get('model_mode', '')
