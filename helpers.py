@@ -39,8 +39,9 @@ KIE_CREDITS_CACHE_TTL_SECONDS = int(os.getenv("KIE_CREDITS_CACHE_TTL_SECONDS", "
 KIE_CREDITS_TIMEOUT_SECONDS = float(os.getenv("KIE_CREDITS_TIMEOUT_SECONDS", "2.0"))
 
 # Константы (будут установлены из bot_kie.py)
-FREE_GENERATIONS_PER_DAY = 3
-REFERRAL_BONUS_GENERATIONS = 3
+# CRITICAL: Default must match config.py (5) for webapp which may not call set_constants
+FREE_GENERATIONS_PER_DAY = 5
+REFERRAL_BONUS_GENERATIONS = 5
 ADMIN_ID = None
 CREDIT_TO_USD = 0.005
 _get_usd_to_rub_rate = None

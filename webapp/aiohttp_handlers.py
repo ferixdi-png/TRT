@@ -408,6 +408,15 @@ async def webapp_generate(request: web.Request) -> web.Response:
             else:
                 session_params["image_url"] = image_url
         
+        # CRITICAL: Save job to unified storage IMMEDIATELY so it can be polled
+        await storage.add_generation_job(
+            job_id=job_id,
+            user_id=user_id,
+            model_id=model_id,
+            params=session_params,
+            correlation_id=correlation_id,
+        )
+        
         # Start generation in background
         import asyncio
         from app.generations.universal_engine import run_generation
@@ -422,29 +431,22 @@ async def webapp_generate(request: web.Request) -> web.Response:
                     job_id=job_id,
                     price=price,
                 )
-                # Store result for polling
-                await storage.write_json_file(
-                    f"webapp_jobs/{job_id}.json",
-                    {
-                        "job_id": job_id,
-                        "user_id": user_id,
-                        "model_id": model_id,
-                        "status": result.state if result else "failed",
-                        "result_url": result.result_url if result else None,
-                        "error": result.error if result else None,
-                    }
-                )
+                # Update job status in unified storage
+                if result:
+                    await storage.update_job_status(
+                        job_id=job_id,
+                        status=result.state if result.state else "success",
+                        result_url=result.result_url,
+                        result_urls=result.result_urls if hasattr(result, 'result_urls') else [],
+                    )
+                else:
+                    await storage.update_job_status(job_id=job_id, status="failed")
             except Exception as e:
                 logger.error("Webapp generation failed: %s", e)
-                await storage.write_json_file(
-                    f"webapp_jobs/{job_id}.json",
-                    {
-                        "job_id": job_id,
-                        "user_id": user_id,
-                        "model_id": model_id,
-                        "status": "failed",
-                        "error": str(e),
-                    }
+                await storage.update_job_status(
+                    job_id=job_id,
+                    status="failed",
+                    error_message=str(e),
                 )
         
         asyncio.create_task(run_gen())
