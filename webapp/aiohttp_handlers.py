@@ -565,7 +565,7 @@ async def webapp_generate(request: web.Request) -> web.Response:
         if not is_free_generation and balance < price:
             return web.json_response({
                 "error": "Недостаточно средств",
-                "error_en": "Insufficient balance",
+                "error_en": "Insufficient funds",
                 "balance": float(balance),
                 "price": price,
             }, status=402)
@@ -813,7 +813,7 @@ async def webapp_job_retry(request: web.Request) -> web.Response:
             if balance < price:
                 return web.json_response({
                     "error": "Недостаточно средств для повтора",
-                    "error_en": "Insufficient balance for retry",
+                    "error_en": "Insufficient funds for retry",
                     "balance": float(balance),
                     "price": price,
                 }, status=402)
