@@ -540,7 +540,12 @@ async def start_health_server(
         try:
             set_start_time()  # Устанавливаем время старта
 
-            app = web.Application(middlewares=[_log_all_requests_middleware])
+            # CRITICAL: Increase client_max_size for image uploads (default 1MB is too small)
+            # 20MB should be enough for most images
+            app = web.Application(
+                middlewares=[_log_all_requests_middleware],
+                client_max_size=20 * 1024 * 1024,  # 20MB
+            )
             app.router.add_get('/health', health_handler)
             app.router.add_get('/healthz', health_handler)
             app.router.add_get('/', health_handler)  # Для совместимости
