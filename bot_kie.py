@@ -14425,11 +14425,16 @@ async def _button_callback_impl(
             except:
                 pass
             
+            logger.info("IMAGE_DONE_CLICKED user_id=%s", user_id)
+            
             if user_id not in user_sessions:
+                logger.error("IMAGE_DONE_NO_SESSION user_id=%s", user_id)
                 await query.edit_message_text("❌ Сессия не найдена.")
                 return ConversationHandler.END
             session = user_sessions[user_id]
             waiting_for = session.get('waiting_for', 'image_input')
+            logger.info("IMAGE_DONE_SESSION user_id=%s waiting_for=%s params_keys=%s", 
+                       user_id, waiting_for, list(session.get('params', {}).keys()))
             # Normalize: if waiting_for is 'image', use the actual parameter name from properties
             if waiting_for == 'image':
                 properties = session.get('properties', {})
@@ -14458,9 +14463,14 @@ async def _button_callback_impl(
                 )
             session['waiting_for'] = None
             
+            logger.info("IMAGE_DONE_PARAMS_SET user_id=%s image_param=%s params_keys=%s required=%s", 
+                       user_id, image_param_name, list(session.get('params', {}).keys()), 
+                       session.get('required', [])[:5])
+            
             # Move to next parameter
             try:
                 next_param_result = await start_next_parameter(update, context, user_id)
+                logger.info("IMAGE_DONE_NEXT_PARAM_RESULT user_id=%s result=%s", user_id, next_param_result)
                 if next_param_result:
                     return next_param_result
                 else:
