@@ -23998,6 +23998,24 @@ async def unhandled_update_fallback(update: Update, context: ContextTypes.DEFAUL
                 await guard.check_and_ensure_response(update, context)
                 return
         user_lang = get_user_language(user_id) if user_id else "ru"
+        
+        # CRITICAL: If image param already has data, don't show "waiting for" - proceed to next step
+        if user_id and user_id in user_sessions:
+            session = user_sessions[user_id]
+            param_to_check = waiting_for or current_param
+            if param_to_check in ['image_input', 'image_urls', 'image']:
+                param_value = session.get(param_to_check, [])
+                if param_value and len(param_value) > 0:
+                    logger.info("FALLBACK_SKIP_WAITING: param=%s already has %d items, proceeding to next step", param_to_check, len(param_value))
+                    # Image already uploaded - proceed to next parameter
+                    session['waiting_for'] = None
+                    try:
+                        next_result = await start_next_parameter(update, context, user_id)
+                        if next_result:
+                            return
+                    except Exception as exc:
+                        logger.warning("Failed to proceed to next param: %s", exc)
+        
         raw_param = waiting_for or current_param or "параметр"
         # UX: Маппинг технических названий параметров на понятные инструкции
         param_labels_ru = {
