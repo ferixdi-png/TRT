@@ -247,8 +247,26 @@ async def webapp_model_info(request: web.Request) -> web.Response:
         return web.json_response({"error": str(e)}, status=500)
 
 
+# Supported media extensions
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff"}
+VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"}
+AUDIO_EXTENSIONS = {".mp3", ".wav", ".ogg", ".m4a", ".flac", ".aac"}
+
+
+def _get_media_type(filename: str) -> str:
+    """Determine media type from filename extension."""
+    ext = Path(filename).suffix.lower()
+    if ext in IMAGE_EXTENSIONS:
+        return "image"
+    elif ext in VIDEO_EXTENSIONS:
+        return "video"
+    elif ext in AUDIO_EXTENSIONS:
+        return "audio"
+    return "file"
+
+
 async def webapp_upload_image(request: web.Request) -> web.Response:
-    """Upload an image for generation. Accepts base64 or multipart."""
+    """Upload media file (image, video, audio) for generation. Accepts base64 or multipart."""
     init_data = request.headers.get("X-Telegram-Init-Data", "")
     user_id = get_user_id_from_init_data(init_data)
     
@@ -257,69 +275,112 @@ async def webapp_upload_image(request: web.Request) -> web.Response:
     
     try:
         content_type = request.content_type
-        image_data = None
+        file_data = None
         filename = f"{user_id}_{uuid.uuid4().hex[:8]}.jpg"
+        original_filename = None
         
         if "multipart" in content_type:
             # Handle multipart form data
             reader = await request.multipart()
             async for field in reader:
-                if field.name == "image":
-                    image_data = await field.read()
+                # Accept 'image', 'video', 'audio', or 'file' field names
+                if field.name in ("image", "video", "audio", "file", "media"):
+                    file_data = await field.read()
                     if field.filename:
-                        ext = Path(field.filename).suffix or ".jpg"
+                        original_filename = field.filename
+                        ext = Path(field.filename).suffix.lower() or ".jpg"
                         filename = f"{user_id}_{uuid.uuid4().hex[:8]}{ext}"
                     break
         else:
             # Handle JSON with base64
             data = await request.json()
-            base64_data = data.get("image", "")
+            # Check for image, video, audio, or file field
+            base64_data = data.get("image") or data.get("video") or data.get("audio") or data.get("file") or ""
             if base64_data:
-                # Remove data URL prefix if present
+                # Remove data URL prefix if present and extract extension
                 if "base64," in base64_data:
+                    # Try to extract mime type for extension
+                    prefix = base64_data.split("base64,")[0]
                     base64_data = base64_data.split("base64,")[1]
-                image_data = base64.b64decode(base64_data)
+                    # Extract extension from data URL (e.g., data:video/mp4;base64,...)
+                    if "video/" in prefix:
+                        mime_ext = prefix.split("video/")[1].split(";")[0]
+                        filename = f"{user_id}_{uuid.uuid4().hex[:8]}.{mime_ext}"
+                    elif "audio/" in prefix:
+                        mime_ext = prefix.split("audio/")[1].split(";")[0]
+                        if mime_ext == "mpeg":
+                            mime_ext = "mp3"
+                        filename = f"{user_id}_{uuid.uuid4().hex[:8]}.{mime_ext}"
+                    elif "image/" in prefix:
+                        mime_ext = prefix.split("image/")[1].split(";")[0]
+                        filename = f"{user_id}_{uuid.uuid4().hex[:8]}.{mime_ext}"
+                file_data = base64.b64decode(base64_data)
         
-        if not image_data:
-            return web.json_response({"error": "No image provided"}, status=400)
+        if not file_data:
+            return web.json_response({"error": "No file provided"}, status=400)
         
         # Save to uploads
         file_path = WEBAPP_UPLOADS_DIR / filename
-        file_path.write_bytes(image_data)
+        file_path.write_bytes(file_data)
         
         # Generate URL (relative to webapp)
-        image_url = f"/webapp/uploads/{filename}"
+        file_url = f"/webapp/uploads/{filename}"
+        media_type = _get_media_type(filename)
         
-        logger.info("Image uploaded: %s (%d bytes)", filename, len(image_data))
+        logger.info("Media uploaded: %s (%d bytes, type=%s)", filename, len(file_data), media_type)
         
         return web.json_response({
             "ok": True,
             "filename": filename,
-            "url": image_url,
-            "size": len(image_data),
+            "url": file_url,
+            "size": len(file_data),
+            "type": media_type,
+            "original_filename": original_filename,
         })
         
     except Exception as e:
-        logger.error("Image upload failed: %s", e)
+        logger.error("Media upload failed: %s", e)
         return web.json_response({"error": str(e)}, status=500)
 
 
+# Content-type mapping for all supported formats
+CONTENT_TYPE_MAP = {
+    # Images
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".bmp": "image/bmp",
+    ".tiff": "image/tiff",
+    # Videos
+    ".mp4": "video/mp4",
+    ".mov": "video/quicktime",
+    ".avi": "video/x-msvideo",
+    ".mkv": "video/x-matroska",
+    ".webm": "video/webm",
+    ".m4v": "video/x-m4v",
+    # Audio
+    ".mp3": "audio/mpeg",
+    ".wav": "audio/wav",
+    ".ogg": "audio/ogg",
+    ".m4a": "audio/mp4",
+    ".flac": "audio/flac",
+    ".aac": "audio/aac",
+}
+
+
 async def webapp_serve_upload(request: web.Request) -> web.Response:
-    """Serve uploaded files."""
+    """Serve uploaded files (images, videos, audio)."""
     filename = request.match_info.get("filename", "")
     file_path = WEBAPP_UPLOADS_DIR / filename
     
     if not file_path.exists() or not file_path.is_file():
         return web.Response(text="Not found", status=404)
     
-    # Determine content type
-    content_type = "image/jpeg"
-    if filename.endswith(".png"):
-        content_type = "image/png"
-    elif filename.endswith(".gif"):
-        content_type = "image/gif"
-    elif filename.endswith(".webp"):
-        content_type = "image/webp"
+    # Determine content type from extension
+    ext = Path(filename).suffix.lower()
+    content_type = CONTENT_TYPE_MAP.get(ext, "application/octet-stream")
     
     return web.Response(
         body=file_path.read_bytes(),
@@ -343,7 +404,11 @@ async def webapp_generate(request: web.Request) -> web.Response:
     model_id = data.get("model_id")
     prompt = data.get("prompt", "")
     params = data.get("params", {})
-    image_url = data.get("image_url")  # For image-to-image/video models
+    # Support image, video, and audio inputs
+    image_url = data.get("image_url")
+    video_url = data.get("video_url")
+    audio_url = data.get("audio_url")
+    media_url = data.get("media_url")  # Generic media field
     
     if not model_id:
         return web.json_response({"error": "model_id required"}, status=400)
@@ -407,22 +472,39 @@ async def webapp_generate(request: web.Request) -> web.Response:
         job_id = f"webapp-{uuid.uuid4().hex[:12]}"
         correlation_id = f"corr-webapp-{user_id}-{uuid.uuid4().hex[:8]}"
         
-        # Merge prompt and image into params
+        # Merge prompt into params
         session_params = {**params, "prompt": prompt}
         
-        # Add image if provided
-        if image_url:
-            # Convert relative URL to absolute file path or external URL
-            if image_url.startswith("/webapp/uploads/"):
-                filename = image_url.replace("/webapp/uploads/", "")
-                file_path = WEBAPP_UPLOADS_DIR / filename
-                if file_path.exists():
-                    # Read and encode as base64 for API
-                    image_bytes = file_path.read_bytes()
-                    image_base64 = base64.b64encode(image_bytes).decode()
-                    session_params["image"] = f"data:image/jpeg;base64,{image_base64}"
+        # Helper to process media URL (image, video, audio)
+        def _process_media_url(url: str, param_name: str, mime_prefix: str) -> None:
+            if not url:
+                return
+            if url.startswith("/webapp/uploads/"):
+                fname = url.replace("/webapp/uploads/", "")
+                fpath = WEBAPP_UPLOADS_DIR / fname
+                if fpath.exists():
+                    media_bytes = fpath.read_bytes()
+                    media_base64 = base64.b64encode(media_bytes).decode()
+                    # Detect mime type from extension
+                    ext = Path(fname).suffix.lower()
+                    mime_type = CONTENT_TYPE_MAP.get(ext, f"{mime_prefix}/octet-stream")
+                    session_params[param_name] = f"data:{mime_type};base64,{media_base64}"
             else:
-                session_params["image_url"] = image_url
+                session_params[f"{param_name}_url"] = url
+        
+        # Add image if provided
+        _process_media_url(image_url, "image", "image")
+        
+        # Add video if provided
+        _process_media_url(video_url, "video", "video")
+        
+        # Add audio if provided
+        _process_media_url(audio_url, "audio", "audio")
+        
+        # Add generic media if provided
+        if media_url:
+            media_type = _get_media_type(media_url)
+            _process_media_url(media_url, media_type, media_type)
         
         # CRITICAL: Save job to unified storage IMMEDIATELY so it can be polled
         model_name = getattr(spec, "name", model_id)
