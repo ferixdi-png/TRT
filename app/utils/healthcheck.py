@@ -82,19 +82,26 @@ async def check_kie_api_health() -> Dict[str, Any]:
         if not kie_api_key:
             return {"status": "warning", "message": "KIE_API_KEY not set"}
         
-        # Простая проверка доступности API
+        # KIE API may not have /health endpoint - just check if API responds
+        # 404 on /health is OK - it means API is up but endpoint doesn't exist
         import aiohttp
         timeout = aiohttp.ClientTimeout(total=3.0)
         
         async with aiohttp.ClientSession(timeout=timeout) as session:
             headers = {"Authorization": f"Bearer {kie_api_key}"}
+            # Try /health first, but accept 404 as "API is up"
             async with session.get(f"{kie_api_url}/health", headers=headers) as resp:
                 if resp.status == 200:
                     return {"status": "healthy", "message": "KIE API accessible"}
+                elif resp.status == 404:
+                    # 404 means API is responding but /health doesn't exist - that's OK
+                    return {"status": "healthy", "message": "KIE API accessible (no /health endpoint)"}
+                elif resp.status == 401:
+                    return {"status": "warning", "message": "KIE API key may be invalid"}
                 else:
-                    return {"status": "error", "message": f"KIE API returned {resp.status}"}
+                    return {"status": "warning", "message": f"KIE API returned {resp.status}"}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "warning", "message": f"KIE API check failed: {str(e)}"}
 
 
 async def health_handler(request):
