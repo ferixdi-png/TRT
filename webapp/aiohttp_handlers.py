@@ -631,6 +631,12 @@ async def webapp_generate(request: web.Request) -> web.Response:
         from app.generations.universal_engine import run_generation
         
         async def run_gen():
+            import time
+            gen_start_ts = time.monotonic()
+            logger.info(
+                "WEBAPP_GEN_START user_id=%s model_id=%s job_id=%s correlation_id=%s price=%s is_free=%s",
+                user_id, model_id, job_id, correlation_id, price, is_free_generation
+            )
             try:
                 result = await run_generation(
                     user_id=user_id,
@@ -641,8 +647,14 @@ async def webapp_generate(request: web.Request) -> web.Response:
                     price=price,
                     is_free=is_free_generation,
                 )
+                gen_duration_ms = int((time.monotonic() - gen_start_ts) * 1000)
                 # Update job status in unified storage
                 if result:
+                    logger.info(
+                        "WEBAPP_GEN_SUCCESS user_id=%s model_id=%s job_id=%s correlation_id=%s duration_ms=%s result_url=%s",
+                        user_id, model_id, job_id, correlation_id, gen_duration_ms,
+                        (result.result_url or "")[:80] if result.result_url else "none"
+                    )
                     await storage.update_job_status(
                         job_id=job_id,
                         status=result.state if result.state else "success",
@@ -684,9 +696,18 @@ async def webapp_generate(request: web.Request) -> web.Response:
                         except Exception as charge_err:
                             logger.error("Failed to charge balance: %s", charge_err)
                 else:
-                    await storage.update_job_status(job_id=job_id, status="failed")
+                    gen_duration_ms = int((time.monotonic() - gen_start_ts) * 1000)
+                    logger.warning(
+                        "WEBAPP_GEN_NO_RESULT user_id=%s model_id=%s job_id=%s correlation_id=%s duration_ms=%s",
+                        user_id, model_id, job_id, correlation_id, gen_duration_ms
+                    )
+                    await storage.update_job_status(job_id=job_id, status="failed", error_message="No result returned")
             except Exception as e:
-                logger.error("Webapp generation failed: %s", e)
+                gen_duration_ms = int((time.monotonic() - gen_start_ts) * 1000)
+                logger.error(
+                    "WEBAPP_GEN_ERROR user_id=%s model_id=%s job_id=%s correlation_id=%s duration_ms=%s error=%s",
+                    user_id, model_id, job_id, correlation_id, gen_duration_ms, str(e)[:200]
+                )
                 await storage.update_job_status(
                     job_id=job_id,
                     status="failed",

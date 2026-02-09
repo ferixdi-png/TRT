@@ -241,7 +241,7 @@ def resolve_price_quote(
         price_rub = real_price_rub
     if sku.sku_key not in _pricing_ok_logged:
         _pricing_ok_logged.add(sku.sku_key)
-        logger.info(
+        logger.debug(
             "PRICING_COVERAGE_OK model_id=%s sku_id=%s price_rub=%s sku_price_rub=%s free_sku=%s admin_free=%s",
             canonical_model_id,
             sku.sku_key,
