@@ -3306,12 +3306,12 @@ GENERATION_TYPES = {
     "text-to-video": {
         "name": "🎬 Текст в видео",
         "description": "Создавайте видео из текстового описания",
-        "models": ["sora-2-text-to-video", "kling-2.6/text-to-video", "kling/v2-5-turbo-text-to-video-pro", "wan/2-6-text-to-video", "wan/2-5-text-to-video", "hailuo/02-text-to-video-pro", "hailuo/02-text-to-video-standard", "kling/v2-1-master-text-to-video", "grok/imagine", "google/veo-3.1", "kling/v2-5-turbo", "hailuo/2.3", "runway/gen-4"]
+        "models": ["sora-2-text-to-video", "sora-2-pro-text-to-video", "kling-2.6/text-to-video", "kling/v2-5-turbo-text-to-video-pro", "wan/2-6-text-to-video", "wan/2-5-text-to-video", "hailuo/02-text-to-video-pro", "hailuo/02-text-to-video-standard", "kling/v2-1-master-text-to-video", "grok/imagine", "grok-imagine/text-to-video", "google/veo-3.1", "kling/v2-5-turbo", "hailuo/2.3", "runway/gen-4", "runway/aleph"]
     },
     "image-to-video": {
         "name": "📸 Фото в видео",
         "description": "Превращайте изображения в динамичные видео",
-        "models": ["sora-2-pro-image-to-video", "kling-2.6/image-to-video", "kling-2.6/motion-control", "kling/v2-5-turbo-image-to-video-pro", "wan/2-5-image-to-video", "hailuo/02-image-to-video-pro", "hailuo/02-image-to-video-standard", "bytedance/v1-pro-fast-image-to-video", "kling/v2-1-master-image-to-video", "kling/v2-1-standard", "kling/v2-1-pro", "grok/imagine", "google/veo-3.1", "kling/v2-5-turbo", "hailuo/2.3", "runway/gen-4", "midjourney/image-to-video"]
+        "models": ["sora-2-pro-image-to-video", "sora-2-image-to-video", "kling-2.6/image-to-video", "kling-2.6/motion-control", "kling/v2-5-turbo-image-to-video-pro", "wan/2-5-image-to-video", "hailuo/02-image-to-video-pro", "hailuo/02-image-to-video-standard", "bytedance/v1-pro-fast-image-to-video", "kling/v2-1-master-image-to-video", "kling/v2-1-standard", "kling/v2-1-pro", "grok/imagine", "google/veo-3.1", "kling/v2-5-turbo", "hailuo/2.3", "runway/gen-4", "midjourney/image-to-video"]
     },
     "video-editing": {
         "name": "✂️ Редактирование видео",
@@ -3332,7 +3332,7 @@ GENERATION_TYPES = {
     "text-to-image": {
         "name": "✨ Текст в фото",
         "description": "Создавайте изображения из текста",
-        "models": ["z-image", "google/nano-banana", "seedream/4.5-text-to-image", "flux-2/pro-text-to-image", "flux-2/flex-text-to-image", "bytedance/seedream-v4-text-to-image", "bytedance/seedream", "qwen/text-to-image", "ideogram/v3-text-to-image", "google/imagen4-ultra", "google/imagen4-fast", "google/imagen4", "grok/imagine", "openai/4o-image", "flux/kontext", "google/nanobanana-gemini-2.5-flash", "gpt-image/1.5-text-to-image", "midjourney/text-to-image"]
+        "models": ["z-image", "google/nano-banana", "seedream/4.5-text-to-image", "flux-2/pro-text-to-image", "flux-2/flex-text-to-image", "bytedance/seedream-v4-text-to-image", "bytedance/seedream", "qwen/text-to-image", "ideogram/v3-text-to-image", "google/imagen4-ultra", "google/imagen4-fast", "google/imagen4", "grok/imagine", "grok-imagine/text-to-image", "openai/4o-image", "flux/kontext", "google/nanobanana-gemini-2.5-flash", "gpt-image/1.5-text-to-image", "midjourney/text-to-image"]
     },
     "image-to-image": {
         "name": "🎨 Фото в фото",
@@ -3347,7 +3347,27 @@ GENERATION_TYPES = {
     "text-to-speech": {
         "name": "🗣️ Текст в речь",
         "description": "Генерация речи и диалогов из текста",
-        "models": ["elevenlabs/text-to-dialogue-v3"]
+        "models": ["elevenlabs/text-to-dialogue-v3", "elevenlabs/tts-multilingual-v2", "elevenlabs/tts-turbo-2-5"]
+    },
+    "speech-to-text": {
+        "name": "📝 Речь в текст",
+        "description": "Транскрибация аудио в текст",
+        "models": ["elevenlabs/speech-to-text"]
+    },
+    "audio-tools": {
+        "name": "🎵 Аудио инструменты",
+        "description": "Работа с аудио и звуковыми эффектами",
+        "models": ["elevenlabs/audio-isolation", "elevenlabs/sound-effect-v2"]
+    },
+    "text-to-music": {
+        "name": "🎶 Текст в музыку",
+        "description": "Создание музыки из текста",
+        "models": ["suno/v5"]
+    },
+    "chat": {
+        "name": "💬 Чат с AI",
+        "description": "Общение с языковыми моделями",
+        "models": ["gemini/2-5-flash", "gemini/2-5-pro", "gemini/3-flash", "gemini/3-pro"]
     }
 }
 
