@@ -640,6 +640,11 @@ async def webapp_generate(request: web.Request) -> web.Response:
                 "WEBAPP_GEN_START user_id=%s model_id=%s job_id=%s correlation_id=%s price=%s is_free=%s",
                 user_id, model_id, job_id, correlation_id, price, is_free_generation
             )
+            # Update status to processing immediately
+            try:
+                await storage.update_job_status(job_id=job_id, status="processing")
+            except Exception as e:
+                logger.warning("Failed to update job status to processing: %s", e)
             try:
                 result = await run_generation(
                     user_id=user_id,
@@ -649,6 +654,8 @@ async def webapp_generate(request: web.Request) -> web.Response:
                     job_id=job_id,
                     price=price,
                     is_free=is_free_generation,
+                    wait_for_result=True,
+                    timeout=600,
                 )
                 gen_duration_ms = int((time.monotonic() - gen_start_ts) * 1000)
                 # Update job status in unified storage
