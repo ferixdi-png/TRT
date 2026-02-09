@@ -105,10 +105,14 @@ async def webapp_user_balance(request: web.Request) -> web.Response:
         except Exception:
             pass
         
+        # Get support contact from ENV
+        support_telegram = os.getenv("SUPPORT_TELEGRAM", "").strip().replace("@", "")
+        
         return web.json_response({
             "user_id": user_id,
             "balance": float(balance),
             "free_remaining": free_remaining,
+            "support_telegram": support_telegram if support_telegram else None,
         })
     except Exception as e:
         logger.error("Failed to get balance for user %s: %s", user_id, e)

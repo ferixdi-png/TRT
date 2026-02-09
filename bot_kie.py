@@ -15458,11 +15458,21 @@ async def _button_callback_impl(
             current_balance = await get_user_balance_async(user_id)
             balance_str = format_rub_amount(current_balance)
             
+            # Get support contact for display
+            support_telegram, _, _ = _resolve_support_details()
+            support_line_ru = ""
+            support_line_en = ""
+            if support_telegram:
+                support_username = support_telegram.replace("@", "")
+                support_line_ru = f'💬 <b>Поддержка:</b> @{support_username}\n\n'
+                support_line_en = f'💬 <b>Support:</b> @{support_username}\n\n'
+            
             if user_lang == 'ru':
                 topup_text = (
                     f'💳 <b>ПОПОЛНЕНИЕ БАЛАНСА</b> 💳\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
                     f'💰 <b>Твой текущий баланс:</b> {balance_str}\n\n'
+                    f'{support_line_ru}'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
                     f'{payment_details}\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
@@ -15482,6 +15492,7 @@ async def _button_callback_impl(
                     f'💳 <b>TOP UP BALANCE</b> 💳\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
                     f'💰 <b>Your current balance:</b> {balance_str}\n\n'
+                    f'{support_line_en}'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
                     f'{payment_details}\n\n'
                     f'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
