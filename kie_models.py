@@ -3263,6 +3263,49 @@ KIE_MODELS = [
                 "enum": ["16:9", "9:16", "1:1"]
             }
         }
+    },
+    # Grok Imagine models
+    {
+        "id": "grok-imagine/text-to-image",
+        "name": "Grok Imagine",
+        "description": "Генерация изображений от xAI",
+        "category": "Изображения",
+        "emoji": "🖼️",
+        "input_params": {
+            "prompt": {"type": "string", "description": "Описание изображения", "required": True}
+        }
+    },
+    {
+        "id": "grok-imagine/text-to-video",
+        "name": "Grok Imagine Video",
+        "description": "Генерация видео от xAI",
+        "category": "Видео",
+        "emoji": "🎬",
+        "input_params": {
+            "prompt": {"type": "string", "description": "Описание видео", "required": True}
+        }
+    },
+    # Seedream 4.5 models
+    {
+        "id": "seedream/4.5-text-to-image",
+        "name": "Seedream 4.5",
+        "description": "Продвинутая генерация изображений от ByteDance",
+        "category": "Изображения",
+        "emoji": "🌱",
+        "input_params": {
+            "prompt": {"type": "string", "description": "Описание изображения", "required": True}
+        }
+    },
+    {
+        "id": "seedream/4.5-edit",
+        "name": "Seedream 4.5 Edit",
+        "description": "Редактирование изображений от ByteDance",
+        "category": "Редактирование",
+        "emoji": "✏️",
+        "input_params": {
+            "prompt": {"type": "string", "description": "Инструкция по редактированию", "required": True},
+            "image_urls": {"type": "array", "description": "Изображение для редактирования", "required": True}
+        }
     }
 ]
 
