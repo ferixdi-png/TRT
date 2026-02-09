@@ -2110,3 +2110,144 @@ models:
         - cs
         - uk
     model_mode: text_to_speech
+  gpt-image/1.5-text-to-image:
+    model_type: text_to_image
+    input:
+      prompt:
+        type: string
+        required: true
+        max: 3000
+      aspect_ratio:
+        type: enum
+        required: false
+        values:
+        - "1:1"
+        - "2:3"
+        - "3:2"
+      quality:
+        type: enum
+        required: false
+        values:
+        - medium
+        - high
+    model_mode: text_to_image
+  gpt-image/1.5-image-to-image:
+    model_type: image_to_image
+    input:
+      prompt:
+        type: string
+        required: true
+        max: 3000
+      input_urls:
+        type: file_url
+        required: true
+        accept: image/jpeg,image/png,image/webp
+        max_size: 10485760
+      aspect_ratio:
+        type: enum
+        required: false
+        values:
+        - "1:1"
+        - "2:3"
+        - "3:2"
+      quality:
+        type: enum
+        required: false
+        values:
+        - medium
+        - high
+    model_mode: image_to_image
+  midjourney/text-to-image:
+    model_type: text_to_image
+    input:
+      prompt:
+        type: string
+        required: true
+        max: 2000
+      speed:
+        type: enum
+        required: false
+        values:
+        - relaxed
+        - fast
+        - turbo
+      aspectRatio:
+        type: enum
+        required: false
+        values:
+        - "1:1"
+        - "16:9"
+        - "9:16"
+        - "4:3"
+        - "3:4"
+        - "2:3"
+        - "3:2"
+      version:
+        type: enum
+        required: false
+        values:
+        - "7"
+        - "6.1"
+        - "6"
+        - "5.2"
+        - niji6
+        - niji7
+    model_mode: text_to_image
+  midjourney/image-to-image:
+    model_type: image_to_image
+    input:
+      prompt:
+        type: string
+        required: true
+        max: 2000
+      fileUrls:
+        type: file_url
+        required: true
+        accept: image/jpeg,image/png,image/webp
+        max_size: 10485760
+      speed:
+        type: enum
+        required: false
+        values:
+        - relaxed
+        - fast
+        - turbo
+      aspectRatio:
+        type: enum
+        required: false
+        values:
+        - "1:1"
+        - "16:9"
+        - "9:16"
+        - "4:3"
+        - "3:4"
+      version:
+        type: enum
+        required: false
+        values:
+        - "7"
+        - "6.1"
+        - "6"
+        - niji6
+        - niji7
+    model_mode: image_to_image
+  midjourney/image-to-video:
+    model_type: image_to_video
+    input:
+      prompt:
+        type: string
+        required: true
+        max: 2000
+      fileUrls:
+        type: file_url
+        required: true
+        accept: image/jpeg,image/png,image/webp
+        max_size: 10485760
+      aspectRatio:
+        type: enum
+        required: false
+        values:
+        - "16:9"
+        - "9:16"
+        - "1:1"
+    model_mode: image_to_video

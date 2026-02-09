@@ -3097,20 +3097,172 @@ KIE_MODELS = [
         }
     },
     {
-        "id": "midjourney/api",
-        "name": "Midjourney API",
-        "description": "AI API от Kie.ai для генерации изображений и видео. Поддерживает text-to-image, image-to-image, image-to-video и upscaling с высоким качеством.",
+        "id": "gpt-image/1.5-text-to-image",
+        "name": "GPT Image 1.5",
+        "description": "OpenAI GPT Image 1.5 — генерация фотореалистичных изображений из текста. Выбор качества: medium (быстро) или high (детализация).",
         "category": "Изображения",
-        "emoji": "🎨",
-        "pricing": "Скоро появится",
+        "emoji": "🖼️",
+        "pricing": "10-20 кредитов (medium: $0.05, high: $0.10)",
         "input_params": {
             "prompt": {
                 "type": "string",
-                "description": "Текстовое описание (скоро появится)",
-                "required": True
+                "description": "Описание изображения (до 3000 символов)",
+                "required": True,
+                "max_length": 3000
+            },
+            "aspect_ratio": {
+                "type": "string",
+                "description": "Соотношение сторон",
+                "required": False,
+                "default": "1:1",
+                "enum": ["1:1", "2:3", "3:2"]
+            },
+            "quality": {
+                "type": "string",
+                "description": "Качество: medium (быстро) или high (детализация)",
+                "required": False,
+                "default": "medium",
+                "enum": ["medium", "high"]
             }
-        },
-        "coming_soon": True
+        }
+    },
+    {
+        "id": "gpt-image/1.5-image-to-image",
+        "name": "GPT Image 1.5 Edit",
+        "description": "OpenAI GPT Image 1.5 — редактирование изображений. Меняй одежду, фон, стиль с сохранением лица и позы.",
+        "category": "Изображения",
+        "emoji": "✏️",
+        "pricing": "10-20 кредитов (medium: $0.05, high: $0.10)",
+        "input_params": {
+            "prompt": {
+                "type": "string",
+                "description": "Описание изменений (до 3000 символов)",
+                "required": True,
+                "max_length": 3000
+            },
+            "input_urls": {
+                "type": "array",
+                "description": "URL изображения для редактирования",
+                "required": True,
+                "item_type": "string"
+            },
+            "aspect_ratio": {
+                "type": "string",
+                "description": "Соотношение сторон",
+                "required": False,
+                "default": "3:2",
+                "enum": ["1:1", "2:3", "3:2"]
+            },
+            "quality": {
+                "type": "string",
+                "description": "Качество: medium или high",
+                "required": False,
+                "default": "medium",
+                "enum": ["medium", "high"]
+            }
+        }
+    },
+    {
+        "id": "midjourney/text-to-image",
+        "name": "Midjourney",
+        "description": "Культовая модель для создания арта. Relaxed/Fast/Turbo режимы, версии 6-7, niji6/7 для аниме стиля.",
+        "category": "Изображения",
+        "emoji": "🎨",
+        "pricing": "3-16 кредитов (Relaxed: $0.015, Fast: $0.04, Turbo: $0.08)",
+        "input_params": {
+            "prompt": {
+                "type": "string",
+                "description": "Описание изображения (до 2000 символов)",
+                "required": True,
+                "max_length": 2000
+            },
+            "speed": {
+                "type": "string",
+                "description": "Скорость: relaxed (дёшево), fast, turbo (быстро)",
+                "required": False,
+                "default": "relaxed",
+                "enum": ["relaxed", "fast", "turbo"]
+            },
+            "aspectRatio": {
+                "type": "string",
+                "description": "Соотношение сторон",
+                "required": False,
+                "default": "1:1",
+                "enum": ["1:1", "16:9", "9:16", "4:3", "3:4", "2:3", "3:2"]
+            },
+            "version": {
+                "type": "string",
+                "description": "Версия модели",
+                "required": False,
+                "default": "7",
+                "enum": ["7", "6.1", "6", "5.2", "niji6", "niji7"]
+            }
+        }
+    },
+    {
+        "id": "midjourney/image-to-image",
+        "name": "Midjourney Remix",
+        "description": "Midjourney Image to Image — стилизация и переработка фото в арт. Все версии и режимы скорости.",
+        "category": "Изображения",
+        "emoji": "🖌️",
+        "pricing": "3-16 кредитов (Relaxed: $0.015, Fast: $0.04, Turbo: $0.08)",
+        "input_params": {
+            "prompt": {
+                "type": "string",
+                "description": "Описание изменений (до 2000 символов)",
+                "required": True,
+                "max_length": 2000
+            },
+            "fileUrls": {
+                "type": "array",
+                "description": "URL изображения для стилизации",
+                "required": True,
+                "item_type": "string"
+            },
+            "speed": {
+                "type": "string",
+                "description": "Скорость генерации",
+                "required": False,
+                "default": "relaxed",
+                "enum": ["relaxed", "fast", "turbo"]
+            },
+            "version": {
+                "type": "string",
+                "description": "Версия модели",
+                "required": False,
+                "default": "7",
+                "enum": ["7", "6.1", "6", "niji6", "niji7"]
+            }
+        }
+    },
+    {
+        "id": "midjourney/image-to-video",
+        "name": "Midjourney Video",
+        "description": "Midjourney Video — оживление изображений в короткие видео. Новая функция для создания анимаций.",
+        "category": "Видео",
+        "emoji": "🎬",
+        "pricing": "60 кредитов ($0.30) за видео",
+        "input_params": {
+            "prompt": {
+                "type": "string",
+                "description": "Описание движения (до 2000 символов)",
+                "required": True,
+                "max_length": 2000
+            },
+            "fileUrls": {
+                "type": "array",
+                "description": "URL изображения для анимации",
+                "required": True,
+                "item_type": "string"
+            },
+            "aspectRatio": {
+                "type": "string",
+                "description": "Соотношение сторон видео",
+                "required": False,
+                "default": "16:9",
+                "enum": ["16:9", "9:16", "1:1"]
+            }
+        }
     }
 ]
 
@@ -3159,7 +3311,7 @@ GENERATION_TYPES = {
     "image-to-video": {
         "name": "📸 Фото в видео",
         "description": "Превращайте изображения в динамичные видео",
-        "models": ["sora-2-pro-image-to-video", "kling-2.6/image-to-video", "kling-2.6/motion-control", "kling/v2-5-turbo-image-to-video-pro", "wan/2-5-image-to-video", "hailuo/02-image-to-video-pro", "hailuo/02-image-to-video-standard", "bytedance/v1-pro-fast-image-to-video", "kling/v2-1-master-image-to-video", "kling/v2-1-standard", "kling/v2-1-pro", "grok/imagine", "google/veo-3.1", "kling/v2-5-turbo", "hailuo/2.3", "runway/gen-4"]
+        "models": ["sora-2-pro-image-to-video", "kling-2.6/image-to-video", "kling-2.6/motion-control", "kling/v2-5-turbo-image-to-video-pro", "wan/2-5-image-to-video", "hailuo/02-image-to-video-pro", "hailuo/02-image-to-video-standard", "bytedance/v1-pro-fast-image-to-video", "kling/v2-1-master-image-to-video", "kling/v2-1-standard", "kling/v2-1-pro", "grok/imagine", "google/veo-3.1", "kling/v2-5-turbo", "hailuo/2.3", "runway/gen-4", "midjourney/image-to-video"]
     },
     "video-editing": {
         "name": "✂️ Редактирование видео",
@@ -3180,12 +3332,12 @@ GENERATION_TYPES = {
     "text-to-image": {
         "name": "✨ Текст в фото",
         "description": "Создавайте изображения из текста",
-        "models": ["z-image", "google/nano-banana", "seedream/4.5-text-to-image", "flux-2/pro-text-to-image", "flux-2/flex-text-to-image", "bytedance/seedream-v4-text-to-image", "bytedance/seedream", "qwen/text-to-image", "ideogram/v3-text-to-image", "google/imagen4-ultra", "google/imagen4-fast", "google/imagen4", "grok/imagine", "openai/4o-image", "flux/kontext", "google/nanobanana-gemini-2.5-flash"]
+        "models": ["z-image", "google/nano-banana", "seedream/4.5-text-to-image", "flux-2/pro-text-to-image", "flux-2/flex-text-to-image", "bytedance/seedream-v4-text-to-image", "bytedance/seedream", "qwen/text-to-image", "ideogram/v3-text-to-image", "google/imagen4-ultra", "google/imagen4-fast", "google/imagen4", "grok/imagine", "openai/4o-image", "flux/kontext", "google/nanobanana-gemini-2.5-flash", "gpt-image/1.5-text-to-image", "midjourney/text-to-image"]
     },
     "image-to-image": {
         "name": "🎨 Фото в фото",
         "description": "Трансформация и стилизация изображений",
-        "models": ["seedream/4.5-edit", "flux-2/pro-image-to-image", "flux-2/flex-image-to-image", "nano-banana-pro", "bytedance/seedream-v4-edit", "qwen/image-to-image", "ideogram/v3-remix", "openai/4o-image", "flux/kontext", "google/nanobanana-gemini-2.5-flash", "google/nano-banana-edit"]
+        "models": ["seedream/4.5-edit", "flux-2/pro-image-to-image", "flux-2/flex-image-to-image", "nano-banana-pro", "bytedance/seedream-v4-edit", "qwen/image-to-image", "ideogram/v3-remix", "openai/4o-image", "flux/kontext", "google/nanobanana-gemini-2.5-flash", "google/nano-banana-edit", "gpt-image/1.5-image-to-image", "midjourney/image-to-image"]
     },
     "image-editing": {
         "name": "🖼️ Редактирование фото",

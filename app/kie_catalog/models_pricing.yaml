@@ -1220,3 +1220,77 @@ models:
     notes: Output
   description_ru: Google Gemini 2.5 Pro — продвинутая chat модель. Качественные
     ответы для профессиональных задач.
+- id: gpt-image/1.5-text-to-image
+  title_ru: GPT Image 1.5 Text to Image
+  type: t2i
+  modes:
+  - unit: image
+    credits: 10.0
+    official_usd: 0.05
+    notes: medium quality
+  - unit: image
+    credits: 20.0
+    official_usd: 0.10
+    notes: high quality
+  description_ru: OpenAI GPT Image 1.5 — генерация изображений из текста. Фотореалистичные
+    результаты с выбором качества.
+- id: gpt-image/1.5-image-to-image
+  title_ru: GPT Image 1.5 Image to Image
+  type: i2i
+  modes:
+  - unit: image
+    credits: 10.0
+    official_usd: 0.05
+    notes: medium quality
+  - unit: image
+    credits: 20.0
+    official_usd: 0.10
+    notes: high quality
+  description_ru: OpenAI GPT Image 1.5 — редактирование изображений. Меняй одежду,
+    фон, стиль с сохранением лица и позы.
+- id: midjourney/text-to-image
+  title_ru: Midjourney Text to Image
+  type: t2i
+  modes:
+  - unit: image
+    credits: 3.0
+    official_usd: 0.015
+    notes: Relaxed mode
+  - unit: image
+    credits: 8.0
+    official_usd: 0.04
+    notes: Fast mode
+  - unit: image
+    credits: 16.0
+    official_usd: 0.08
+    notes: Turbo mode
+  description_ru: Midjourney — культовая модель для создания арта. Relaxed/Fast/Turbo
+    режимы на любой бюджет.
+- id: midjourney/image-to-image
+  title_ru: Midjourney Image to Image
+  type: i2i
+  modes:
+  - unit: image
+    credits: 3.0
+    official_usd: 0.015
+    notes: Relaxed mode
+  - unit: image
+    credits: 8.0
+    official_usd: 0.04
+    notes: Fast mode
+  - unit: image
+    credits: 16.0
+    official_usd: 0.08
+    notes: Turbo mode
+  description_ru: Midjourney Image to Image — стилизация и переработка фото в арт.
+    Версии 6, 6.1, 7, niji6, niji7.
+- id: midjourney/image-to-video
+  title_ru: Midjourney Image to Video
+  type: i2v
+  modes:
+  - unit: video
+    credits: 60.0
+    official_usd: 0.30
+    notes: per video
+  description_ru: Midjourney Video — оживление изображений в короткие видео. Новая
+    функция для создания анимаций.
