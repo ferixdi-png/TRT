@@ -271,6 +271,46 @@ models:
     price_hint_ru: "Цена за 1M токенов (вход/выход)"
     price_hint_en: "Price per 1M tokens (input/output)"
 
+  gemini/2-5-flash:
+    title_ru: "Gemini 2.5 Flash"
+    title_en: "Gemini 2.5 Flash"
+    one_liner_ru: "Экономичный чат-ассистент от Google"
+    one_liner_en: "Cost-effective chat assistant from Google"
+    best_for_ru:
+      - "Быстрые ответы"
+      - "Простые вопросы"
+      - "Тестирование"
+    best_for_en:
+      - "Quick answers"
+      - "Simple questions"
+      - "Testing"
+    you_need_ru: "Ваш вопрос"
+    you_need_en: "Your question"
+    you_get_ru: "Текстовый ответ"
+    you_get_en: "Text response"
+    price_hint_ru: "Цена за 1M токенов"
+    price_hint_en: "Price per 1M tokens"
+
+  gemini/2-5-pro:
+    title_ru: "Gemini 2.5 Pro"
+    title_en: "Gemini 2.5 Pro"
+    one_liner_ru: "Профессиональный чат-ассистент от Google"
+    one_liner_en: "Professional chat assistant from Google"
+    best_for_ru:
+      - "Сложные задачи"
+      - "Анализ текста"
+      - "Написание контента"
+    best_for_en:
+      - "Complex tasks"
+      - "Text analysis"
+      - "Content writing"
+    you_need_ru: "Ваш вопрос или задача"
+    you_need_en: "Your question or task"
+    you_get_ru: "Развёрнутый ответ"
+    you_get_en: "Detailed response"
+    price_hint_ru: "Цена за 1M токенов"
+    price_hint_en: "Price per 1M tokens"
+
 # Default fallback for models without descriptions
 default:
   title_ru: "AI Модель"
