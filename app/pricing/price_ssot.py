@@ -114,19 +114,29 @@ def list_all_models() -> List[str]:
 
 
 def resolve_sku_for_params(model_id: str, params: Dict[str, Any]) -> Optional[PriceSku]:
+    """Find the best matching SKU for given params.
+    
+    Prioritizes SKUs with more matching params (more specific).
+    If multiple SKUs have same specificity, returns the first one.
+    """
     skus = list_model_skus(model_id)
     if not skus:
         return None
     normalized = {k: _normalize_param_value(v) for k, v in (params or {}).items()}
-    matches: List[PriceSku] = []
+    matches: List[Tuple[int, PriceSku]] = []  # (specificity, sku)
     for sku in skus:
         sku_params = {k: _normalize_param_value(v) for k, v in sku.params.items()}
+        # Check all SKU params match the request
         if any(normalized.get(k) != v for k, v in sku_params.items()):
             continue
-        matches.append(sku)
-    if len(matches) == 1:
-        return matches[0]
-    return None
+        # Calculate specificity: number of matching params
+        specificity = len(sku_params)
+        matches.append((specificity, sku))
+    if not matches:
+        return None
+    # Return the most specific SKU (most params matched)
+    matches.sort(key=lambda x: x[0], reverse=True)
+    return matches[0][1]
 
 
 def get_price_for_params(model_id: str, selected_params: Dict[str, Any]) -> Optional[Decimal]:
