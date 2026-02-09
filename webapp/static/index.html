@@ -2705,7 +2705,7 @@
                         ${h.result_url ? `<img class="history-thumb" src="${h.result_url}" />` : '<div class="history-thumb"></div>'}
                         <div class="history-info">
                             <div class="history-model">${h.model_id || 'Неизвестно'}</div>
-                            <div class="history-status">${h.status === 'completed' ? '✅ Готово' : h.status === 'failed' ? '❌ Ошибка' : '⏳ В процессе'}</div>
+                            <div class="history-status">${h.result_url ? '✅ Готово' : h.status === 'failed' || h.error ? '❌ Ошибка' : '⏳ В процессе'}</div>
                             <div class="history-date">${h.created_at || ''}</div>
                         </div>
                     </div>
