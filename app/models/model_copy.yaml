@@ -262,6 +262,12 @@ kling-2.6/text-to-video:
     default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
       • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
     by_sku_key: {}
+kling-2.6/motion-control:
+  model_short: Перенос движений с видео на изображение. Создайте анимацию персонажа
+    по референсному видео.
+  sku_templates:
+    default: 'Разрешение: {mode} • Ориентация: {character_orientation}'
+    by_sku_key: {}
 kling/ai-avatar-v1-pro:
   model_short: 'Профессиональные AI-аватары: точная мимика, естественные движения.
     Для презентаций.'

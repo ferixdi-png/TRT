@@ -645,6 +645,20 @@ models:
     notes: with audio-10.0s
   description_ru: Создание видео из текста через Kling 2.6. Стабильный результат,
     точный промпт.
+- id: kling-2.6/motion-control
+  title_ru: Kling 2.6 Motion Control
+  type: i2v
+  modes:
+  - unit: second
+    credits: 6.0
+    official_usd: 0.03
+    notes: 720p per second
+  - unit: second
+    credits: 9.0
+    official_usd: 0.045
+    notes: 1080p per second
+  description_ru: Перенос движений с видео на изображение. Создайте анимацию персонажа
+    по референсному видео.
 - id: kling/v1-avatar-standard
   title_ru: Kling AI Avatar Lip Sync
   type: lip_sync

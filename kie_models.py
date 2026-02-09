@@ -203,6 +203,48 @@ KIE_MODELS = [
         }
     },
     {
+        "id": "kling-2.6/motion-control",
+        "name": "Kling 2.6 Motion Control",
+        "description": "Перенос движений с референсного видео на изображение персонажа. Создает анимацию с точным копированием движений.",
+        "category": "Видео",
+        "emoji": "🎭",
+        "pricing": "6-9 кредитов за секунду в зависимости от разрешения",
+        "input_params": {
+            "prompt": {
+                "type": "string",
+                "description": "Описание желаемого результата (макс. 2500 символов)",
+                "required": False,
+                "max_length": 2500
+            },
+            "input_urls": {
+                "type": "array",
+                "description": "URL изображения персонажа (JPEG/PNG, макс. 10MB, мин. 300px)",
+                "required": True,
+                "item_type": "string"
+            },
+            "video_urls": {
+                "type": "array",
+                "description": "URL референсного видео с движениями (MP4/MOV, макс. 100MB, 3-30 сек)",
+                "required": True,
+                "item_type": "string"
+            },
+            "character_orientation": {
+                "type": "string",
+                "description": "Ориентация персонажа: image (как на фото, макс 10с) или video (как в видео, макс 30с)",
+                "required": True,
+                "default": "video",
+                "enum": ["image", "video"]
+            },
+            "mode": {
+                "type": "string",
+                "description": "Разрешение выходного видео",
+                "required": True,
+                "default": "720p",
+                "enum": ["720p", "1080p"]
+            }
+        }
+    },
+    {
         "id": "flux-2/pro-image-to-image",
         "name": "Flux 2 Pro Image-to-Image",
         "description": "Black Forest Labs модель Flux 2 Pro для генерации изображений из референсов. Фотореалистичная детализация, сильная согласованность с несколькими референсами и точный рендеринг текста. Поддержка до 8 референсных изображений без дополнительной платы.",
@@ -2682,7 +2724,7 @@ GENERATION_TYPES = {
     "image-to-video": {
         "name": "📸 Фото в видео",
         "description": "Превращайте изображения в динамичные видео",
-        "models": ["sora-2-pro-image-to-video", "kling-2.6/image-to-video", "kling/v2-5-turbo-image-to-video-pro", "wan/2-5-image-to-video", "hailuo/02-image-to-video-pro", "hailuo/02-image-to-video-standard", "bytedance/v1-pro-fast-image-to-video", "kling/v2-1-master-image-to-video", "kling/v2-1-standard", "kling/v2-1-pro", "grok/imagine", "google/veo-3", "google/veo-3.1", "sora-2-pro-storyboard", "kling/v2-5-turbo", "hailuo/2.3", "runway/gen-4"]
+        "models": ["sora-2-pro-image-to-video", "kling-2.6/image-to-video", "kling-2.6/motion-control", "kling/v2-5-turbo-image-to-video-pro", "wan/2-5-image-to-video", "hailuo/02-image-to-video-pro", "hailuo/02-image-to-video-standard", "bytedance/v1-pro-fast-image-to-video", "kling/v2-1-master-image-to-video", "kling/v2-1-standard", "kling/v2-1-pro", "grok/imagine", "google/veo-3", "google/veo-3.1", "sora-2-pro-storyboard", "kling/v2-5-turbo", "hailuo/2.3", "runway/gen-4"]
     },
     "video-editing": {
         "name": "✂️ Редактирование видео",

@@ -283,6 +283,36 @@ models:
         - '5'
         - '10'
     model_mode: text_to_video
+  kling-2.6/motion-control:
+    model_type: image_to_video
+    input:
+      prompt:
+        type: string
+        required: false
+        max: 2500
+      input_urls:
+        type: array
+        item_type: string
+        required: true
+        max_items: 1
+      video_urls:
+        type: array
+        item_type: string
+        required: true
+        max_items: 1
+      character_orientation:
+        type: enum
+        required: true
+        values:
+        - 'image'
+        - 'video'
+      mode:
+        type: enum
+        required: true
+        values:
+        - '720p'
+        - '1080p'
+    model_mode: image_to_video
   flux-2/pro-image-to-image:
     model_type: image_to_image
     input:

@@ -440,6 +440,18 @@ models:
       - unit: video
         price_rub: 172.85
         notes: image-to-video WITH audio (duration not specified)
+  - id: kling-2.6/motion-control
+    skus:
+      - unit: second
+        price_rub: 4.62
+        params:
+          mode: "720p"
+        notes: motion-control 720p per second
+      - unit: second
+        price_rub: 6.93
+        params:
+          mode: "1080p"
+        notes: motion-control 1080p per second
   - id: flux-2/flex-text-to-image
     skus:
       - unit: image
