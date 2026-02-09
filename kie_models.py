@@ -2620,19 +2620,32 @@ KIE_MODELS = [
     },
     {
         "id": "flux/kontext",
-        "name": "Flux Kontext",
-        "description": "FLUX.1 Kontext API - редактирование изображений с помощью текстовых команд. Профессиональные результаты для e-commerce и маркетинга.",
+        "name": "🔥 Flux Kontext",
+        "description": "⭐ ТОП МОДЕЛЬ! Flux Kontext — редактирование изображений с пониманием контекста. Pro или Max качество. Идеально для e-commerce и маркетинга.",
         "category": "Изображения",
         "emoji": "🎭",
-        "pricing": "Скоро появится",
+        "is_featured": True,
+        "pricing": "5-10 кредитов (Pro: $0.025, Max: $0.05)",
         "input_params": {
             "prompt": {
                 "type": "string",
-                "description": "Текстовое описание изменений (скоро появится)",
-                "required": True
+                "description": "Описание желаемых изменений",
+                "required": True,
+                "max_length": 4000
+            },
+            "image_url": {
+                "type": "string",
+                "description": "URL изображения для редактирования",
+                "required": False
+            },
+            "quality": {
+                "type": "string",
+                "description": "Качество: Pro (5 кредитов) или Max (10 кредитов)",
+                "required": False,
+                "default": "Pro",
+                "enum": ["Pro", "Max"]
             }
-        },
-        "coming_soon": True
+        }
     },
     {
         "id": "google/veo-3",

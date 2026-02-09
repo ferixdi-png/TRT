@@ -1501,9 +1501,19 @@ models:
   - id: flux/kontext
     skus:
       - unit: image
-        price_rub: 3.93
-        params: {}
+        price_rub: 3.85
+        params:
+          quality: Pro
         notes: Pro
+      - unit: image
+        price_rub: 7.71
+        params:
+          quality: Max
+        notes: Max
+      - unit: image
+        price_rub: 3.85
+        params: {}
+        notes: Pro default
   - id: grok/imagine
     skus:
       - unit: video

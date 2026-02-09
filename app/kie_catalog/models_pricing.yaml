@@ -59,19 +59,19 @@ models:
   description_ru: Генерация фотореалистичных изображений из промпта. Разрешение определяет
     итоговую цену.
 - id: flux/kontext
-  title_ru: Flux Kontext
+  title_ru: 🔥 Flux Kontext
   type: t2i
   modes:
   - unit: image
-    credits: 4.0
-    official_usd: 0.02
+    credits: 5.0
+    official_usd: 0.025
     notes: Pro
   - unit: image
-    credits: 8.0
-    official_usd: 0.04
+    credits: 10.0
+    official_usd: 0.05
     notes: Max
-  description_ru: Создаёт картинки с учётом контекста и деталей. Pro или Max — твой
-    выбор качества.
+  description_ru: ⭐ ТОП МОДЕЛЬ! Flux Kontext — редактирование изображений с пониманием
+    контекста. Pro или Max качество. Идеально для e-commerce и маркетинга.
 - id: bytedance/v1-pro-fast-image-to-video
   title_ru: Seedance V1 Pro Fast Image to Video
   type: i2v
