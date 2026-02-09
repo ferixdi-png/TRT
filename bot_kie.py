@@ -30477,6 +30477,15 @@ async def main():
         if os.getenv("PRICING_AUDIT_MODE", "0").strip().lower() in {"1", "true", "yes"}:
             raise
 
+    # ==================== STARTUP HEALTH CHECK ====================
+    try:
+        from app.diagnostics.startup_health import run_startup_health_check
+        health_results = run_startup_health_check()
+        if health_results.get("issues"):
+            logger.warning("STARTUP_HEALTH_ISSUES count=%d", len(health_results["issues"]))
+    except Exception as exc:
+        logger.warning("STARTUP_HEALTH_CHECK_FAILED error=%s", exc)
+
     # ==================== PR-2: КРИТИЧЕСКАЯ ENV ВАЛИДАЦИЯ ====================
     # Проверяем обязательные переменные ПЕРЕД любой инициализацией
     validation_errors = []
