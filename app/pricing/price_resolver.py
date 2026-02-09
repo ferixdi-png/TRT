@@ -213,11 +213,14 @@ def resolve_price_quote(
             )
         sku = min(available_skus, key=lambda candidate: candidate.price_rub)
         fallback_used = True
-        logger.warning(
-            "PRICING_SKU_FALLBACK model_id=%s sku_id=%s params=%s reason=sku_not_resolved",
+        # INFO level - this is normal behavior, not an error
+        # System takes minimum price when exact SKU params don't match
+        logger.info(
+            "PRICING_SKU_FALLBACK model_id=%s sku_id=%s params=%s fallback_price=%.2f",
             canonical_model_id,
             sku.sku_key,
             effective_params,
+            float(sku.price_rub),
         )
 
     if sku.price_rub == Decimal("0") and not sku.is_free_sku:
