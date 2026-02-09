@@ -2319,11 +2319,56 @@ KIE_MODELS = [
         }
     },
     {
-        "id": "google/nano-banana",
-        "name": "Google Nano Banana",
-        "description": "Gemini 3 Image Preview (aka Nano Banana) is an advanced AI model excelling in natural language-driven image generation and editing. It produces hyper-realistic, physics-aware visuals with seamless style transformations.",
+        "id": "nano-banana-pro",
+        "name": "🔥 Nano Banana Pro",
+        "description": "⭐ ТОП МОДЕЛЬ! Премиальная версия Nano Banana с поддержкой 4K, до 8 референс-изображений. Hyper-realistic генерация с физически корректными визуалами.",
         "category": "Фото",
         "emoji": "🍌",
+        "pricing": "18-24 кредита за изображение (1K/2K: $0.09, 4K: $0.12)",
+        "is_featured": True,
+        "input_params": {
+            "prompt": {
+                "type": "string",
+                "description": "Текстовое описание изображения (до 20000 символов)",
+                "required": True,
+                "max_length": 20000
+            },
+            "image_input": {
+                "type": "array",
+                "description": "URL референс-изображений (до 8 шт, JPEG/PNG/WebP, макс 30MB)",
+                "required": False,
+                "item_type": "string"
+            },
+            "aspect_ratio": {
+                "type": "string",
+                "description": "Соотношение сторон",
+                "required": False,
+                "default": "1:1",
+                "enum": ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "auto"]
+            },
+            "resolution": {
+                "type": "string",
+                "description": "Разрешение выходного изображения",
+                "required": False,
+                "default": "1K",
+                "enum": ["1K", "2K", "4K"]
+            },
+            "output_format": {
+                "type": "string",
+                "description": "Формат выходного изображения",
+                "required": False,
+                "default": "png",
+                "enum": ["png", "jpg"]
+            }
+        }
+    },
+    {
+        "id": "google/nano-banana",
+        "name": "🔥 Google Nano Banana",
+        "description": "⭐ ТОП МОДЕЛЬ! Gemini 3 Image Preview — продвинутая AI модель для генерации изображений. Гиперреалистичные визуалы с поддержкой естественного языка.",
+        "category": "Фото",
+        "emoji": "🍌",
+        "is_featured": True,
         "pricing": "4 кредита за изображение (~$0.02)",
         "input_params": {
             "prompt": {
@@ -2350,10 +2395,11 @@ KIE_MODELS = [
     },
     {
         "id": "google/nano-banana-edit",
-        "name": "Google Nano Banana Edit",
-        "description": "Gemini 3 Image Preview (aka Nano Banana) is an advanced AI model excelling in natural language-driven image generation and editing. It produces hyper-realistic, physics-aware visuals with seamless style transformations.",
+        "name": "🔥 Google Nano Banana Edit",
+        "description": "⭐ ТОП МОДЕЛЬ! Gemini 3 для редактирования изображений. Гиперреалистичные трансформации с поддержкой естественного языка.",
         "category": "Фото",
         "emoji": "✏️",
+        "is_featured": True,
         "pricing": "4 кредита за изображение (~$0.02)",
         "input_params": {
             "prompt": {
