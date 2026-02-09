@@ -444,6 +444,10 @@ models:
     skus:
       - unit: second
         price_rub: 4.62
+        params: {}
+        notes: motion-control default (720p) per second
+      - unit: second
+        price_rub: 4.62
         params:
           mode: "720p"
         notes: motion-control 720p per second
