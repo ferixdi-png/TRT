@@ -497,6 +497,12 @@ wan/2-6-text-to-video:
   sku_templates:
     default: 'Длительность: {duration} • Разрешение: {resolution}'
     by_sku_key: {}
+elevenlabs/text-to-dialogue-v3:
+  model_short: Генерация диалогов и речи из текста. Поддержка 70+ языков, настройка
+    стабильности голоса.
+  sku_templates:
+    default: 'Язык: {language_code} • Стабильность: {stability}'
+    by_sku_key: {}
 z-image:
   model_short: 'Z-Image: экспериментальная модель генерации. Нестандартные стили и
     подходы.'

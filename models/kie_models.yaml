@@ -1939,3 +1939,43 @@ models:
         - 720p
         - 1080p
     model_mode: text_to_video
+  elevenlabs/text-to-dialogue-v3:
+    model_type: text_to_speech
+    input:
+      text:
+        type: string
+        required: true
+        max: 10000
+      stability:
+        type: number
+        required: false
+        min: 0
+        max: 1
+        step: 0.5
+      language_code:
+        type: enum
+        required: false
+        values:
+        - auto
+        - en
+        - ru
+        - zh
+        - es
+        - fr
+        - de
+        - it
+        - pt
+        - ja
+        - ko
+        - ar
+        - hi
+        - tr
+        - pl
+        - nl
+        - sv
+        - da
+        - no
+        - fi
+        - cs
+        - uk
+    model_mode: text_to_speech

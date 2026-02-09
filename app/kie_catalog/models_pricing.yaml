@@ -1026,3 +1026,13 @@ models:
     official_usd: 1.544
     notes: default-15.0s-1080p
   description_ru: Wan 2.6 - новейшая модель текст в видео. До 15 секунд, режим multi-shots.
+- id: elevenlabs/text-to-dialogue-v3
+  title_ru: ElevenLabs Text to Dialogue V3
+  type: text_to_speech
+  modes:
+  - unit: 1000_characters
+    credits: 14.0
+    official_usd: 0.07
+    notes: per 1000 characters
+  description_ru: Генерация диалогов и речи из текста. Поддержка 70+ языков, настройка
+    стабильности голоса.

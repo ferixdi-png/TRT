@@ -2646,6 +2646,35 @@ KIE_MODELS = [
         "coming_soon": True
     },
     {
+        "id": "elevenlabs/text-to-dialogue-v3",
+        "name": "ElevenLabs Text to Dialogue V3",
+        "description": "Генерация диалогов и речи из текста. Поддержка 70+ языков, настройка стабильности голоса. Идеально для озвучки, подкастов и аудиокниг.",
+        "category": "Аудио",
+        "emoji": "🗣️",
+        "pricing": "14 кредитов за 1000 символов",
+        "input_params": {
+            "text": {
+                "type": "string",
+                "description": "Текст для преобразования в речь (до 10000 символов)",
+                "required": True,
+                "max_length": 10000
+            },
+            "stability": {
+                "type": "number",
+                "description": "Стабильность голоса (0-1, шаг 0.5)",
+                "required": False,
+                "default": 0.5
+            },
+            "language_code": {
+                "type": "string",
+                "description": "Код языка (auto, en, ru, zh и др.)",
+                "required": False,
+                "default": "auto",
+                "enum": ["auto", "en", "ru", "zh", "es", "fr", "de", "it", "pt", "ja", "ko", "ar", "hi", "tr", "pl", "nl", "sv", "da", "no", "fi", "cs", "uk"]
+            }
+        }
+    },
+    {
         "id": "suno/v5",
         "name": "Suno API",
         "description": "Kie AI Music API - AI модель генерации музыки, преобразующая текстовые промпты в полные вокальные и инструментальные треки с естественной динамикой. Поддерживает последнюю модель V5.",
@@ -2757,8 +2786,11 @@ GENERATION_TYPES = {
         "description": "Редактирование и улучшение изображений",
         "models": ["topaz/image-upscale", "recraft/crisp-upscale", "recraft/remove-background", "ideogram/v3-reframe", "qwen/image-edit", "ideogram/character-edit", "ideogram/character-remix", "ideogram/character", "ideogram/v3-edit"]
     },
-    # NOTE: speech-to-text, text-to-speech, text-to-music, audio-to-audio categories
-    # removed - models not yet integrated (no pricing/catalog)
+    "text-to-speech": {
+        "name": "🗣️ Текст в речь",
+        "description": "Генерация речи и диалогов из текста",
+        "models": ["elevenlabs/text-to-dialogue-v3"]
+    }
 }
 
 

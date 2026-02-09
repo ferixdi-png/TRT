@@ -1618,3 +1618,9 @@ models:
           duration: "5"
           resolution: 1080p
         notes: text-to-video 5s 1080p
+  - id: elevenlabs/text-to-dialogue-v3
+    skus:
+      - unit: 1000_characters
+        price_rub: 10.79
+        params: {}
+        notes: text-to-dialogue per 1000 characters
