@@ -935,6 +935,8 @@ async def webapp_user_history(request: web.Request) -> web.Response:
                 "status": job.get("status"),
                 "result_url": job.get("result_url"),
                 "result_urls": job.get("result_urls", []),
+                "error_message": job.get("error_message"),
+                "error_code": job.get("error_code"),
                 "created_at": job.get("created_at"),
             })
         

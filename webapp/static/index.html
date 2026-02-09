@@ -2845,16 +2845,27 @@
                 <div class="page-header">
                     <div class="page-title">📋 История генераций</div>
                 </div>
-                ${history.map(h => `
+                ${history.map(h => {
+                    let statusText = '⏳ В процессе';
+                    let statusClass = '';
+                    if (h.result_url) {
+                        statusText = '✅ Готово';
+                    } else if (h.status === 'failed' || h.error) {
+                        const errorMsg = h.error_message || h.error || '';
+                        const shortError = errorMsg.length > 50 ? errorMsg.slice(0, 50) + '...' : errorMsg;
+                        statusText = '❌ ' + (shortError || 'Ошибка');
+                        statusClass = 'color: #ff6b6b;';
+                    }
+                    return `
                     <div class="history-item" onclick="${h.result_url ? `window.open('${h.result_url}', '_blank')` : ''}">
                         ${h.result_url ? `<img class="history-thumb" src="${h.result_url}" />` : '<div class="history-thumb"></div>'}
                         <div class="history-info">
                             <div class="history-model">${h.model_id || 'Неизвестно'}</div>
-                            <div class="history-status">${h.result_url ? '✅ Готово' : h.status === 'failed' || h.error ? '❌ Ошибка' : '⏳ В процессе'}</div>
+                            <div class="history-status" style="${statusClass}">${statusText}</div>
                             <div class="history-date">${h.created_at || ''}</div>
                         </div>
                     </div>
-                `).join('')}
+                `}).join('')}
             `;
         }
         
