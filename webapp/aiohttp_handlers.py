@@ -1,7 +1,9 @@
 """Native aiohttp handlers for Mini App (no ASGI bridge needed)."""
+import base64
 import json
 import logging
 import os
+import uuid
 from pathlib import Path
 
 from aiohttp import web
@@ -11,6 +13,8 @@ from webapp.api.auth import validate_webapp_data, get_user_id_from_init_data
 logger = logging.getLogger(__name__)
 
 WEBAPP_STATIC_DIR = Path(__file__).parent / "static"
+WEBAPP_UPLOADS_DIR = Path(__file__).parent / "uploads"
+WEBAPP_UPLOADS_DIR.mkdir(exist_ok=True)
 
 
 async def webapp_index(request: web.Request) -> web.Response:
@@ -126,6 +130,86 @@ async def webapp_model_info(request: web.Request) -> web.Response:
         return web.json_response({"error": str(e)}, status=500)
 
 
+async def webapp_upload_image(request: web.Request) -> web.Response:
+    """Upload an image for generation. Accepts base64 or multipart."""
+    init_data = request.headers.get("X-Telegram-Init-Data", "")
+    user_id = get_user_id_from_init_data(init_data)
+    
+    if not user_id:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+    
+    try:
+        content_type = request.content_type
+        image_data = None
+        filename = f"{user_id}_{uuid.uuid4().hex[:8]}.jpg"
+        
+        if "multipart" in content_type:
+            # Handle multipart form data
+            reader = await request.multipart()
+            async for field in reader:
+                if field.name == "image":
+                    image_data = await field.read()
+                    if field.filename:
+                        ext = Path(field.filename).suffix or ".jpg"
+                        filename = f"{user_id}_{uuid.uuid4().hex[:8]}{ext}"
+                    break
+        else:
+            # Handle JSON with base64
+            data = await request.json()
+            base64_data = data.get("image", "")
+            if base64_data:
+                # Remove data URL prefix if present
+                if "base64," in base64_data:
+                    base64_data = base64_data.split("base64,")[1]
+                image_data = base64.b64decode(base64_data)
+        
+        if not image_data:
+            return web.json_response({"error": "No image provided"}, status=400)
+        
+        # Save to uploads
+        file_path = WEBAPP_UPLOADS_DIR / filename
+        file_path.write_bytes(image_data)
+        
+        # Generate URL (relative to webapp)
+        image_url = f"/webapp/uploads/{filename}"
+        
+        logger.info("Image uploaded: %s (%d bytes)", filename, len(image_data))
+        
+        return web.json_response({
+            "ok": True,
+            "filename": filename,
+            "url": image_url,
+            "size": len(image_data),
+        })
+        
+    except Exception as e:
+        logger.error("Image upload failed: %s", e)
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def webapp_serve_upload(request: web.Request) -> web.Response:
+    """Serve uploaded files."""
+    filename = request.match_info.get("filename", "")
+    file_path = WEBAPP_UPLOADS_DIR / filename
+    
+    if not file_path.exists() or not file_path.is_file():
+        return web.Response(text="Not found", status=404)
+    
+    # Determine content type
+    content_type = "image/jpeg"
+    if filename.endswith(".png"):
+        content_type = "image/png"
+    elif filename.endswith(".gif"):
+        content_type = "image/gif"
+    elif filename.endswith(".webp"):
+        content_type = "image/webp"
+    
+    return web.Response(
+        body=file_path.read_bytes(),
+        content_type=content_type,
+    )
+
+
 async def webapp_generate(request: web.Request) -> web.Response:
     """Start a generation task."""
     init_data = request.headers.get("X-Telegram-Init-Data", "")
@@ -142,6 +226,7 @@ async def webapp_generate(request: web.Request) -> web.Response:
     model_id = data.get("model_id")
     prompt = data.get("prompt", "")
     params = data.get("params", {})
+    image_url = data.get("image_url")  # For image-to-image/video models
     
     if not model_id:
         return web.json_response({"error": "model_id required"}, status=400)
@@ -150,7 +235,6 @@ async def webapp_generate(request: web.Request) -> web.Response:
         return web.json_response({"error": "prompt required"}, status=400)
     
     try:
-        import uuid
         from app.kie_catalog import get_model_map
         from app.storage import get_storage
         
@@ -158,6 +242,13 @@ async def webapp_generate(request: web.Request) -> web.Response:
         spec = catalog.get(model_id)
         if not spec:
             return web.json_response({"error": f"Model {model_id} not found"}, status=404)
+        
+        # Check if image is required
+        model_mode = getattr(spec, "model_mode", "")
+        requires_image = model_mode in ["image-to-image", "image-to-video"]
+        
+        if requires_image and not image_url:
+            return web.json_response({"error": "Image required for this model"}, status=400)
         
         # Check balance
         storage = get_storage()
@@ -183,8 +274,22 @@ async def webapp_generate(request: web.Request) -> web.Response:
         job_id = f"webapp-{uuid.uuid4().hex[:12]}"
         correlation_id = f"corr-webapp-{user_id}-{uuid.uuid4().hex[:8]}"
         
-        # Merge prompt into params
+        # Merge prompt and image into params
         session_params = {**params, "prompt": prompt}
+        
+        # Add image if provided
+        if image_url:
+            # Convert relative URL to absolute file path or external URL
+            if image_url.startswith("/webapp/uploads/"):
+                filename = image_url.replace("/webapp/uploads/", "")
+                file_path = WEBAPP_UPLOADS_DIR / filename
+                if file_path.exists():
+                    # Read and encode as base64 for API
+                    image_bytes = file_path.read_bytes()
+                    image_base64 = base64.b64encode(image_bytes).decode()
+                    session_params["image"] = f"data:image/jpeg;base64,{image_base64}"
+            else:
+                session_params["image_url"] = image_url
         
         # Start generation in background
         import asyncio
@@ -329,6 +434,8 @@ def register_webapp_routes(app: web.Application) -> None:
     app.router.add_get("/webapp/api/user/{user_id}/history", webapp_user_history)
     app.router.add_get("/webapp/api/models", webapp_models)
     app.router.add_get("/webapp/api/models/{model_id}", webapp_model_info)
+    app.router.add_post("/webapp/api/upload", webapp_upload_image)
     app.router.add_post("/webapp/api/generate", webapp_generate)
     app.router.add_get("/webapp/api/jobs/{job_id}", webapp_job_status)
+    app.router.add_get("/webapp/uploads/{filename}", webapp_serve_upload)
     app.router.add_get("/webapp/static/{filename}", webapp_static)

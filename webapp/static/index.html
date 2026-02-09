@@ -147,6 +147,22 @@
         }
         .form-textarea { min-height: 120px; }
         
+        /* Image Upload */
+        .image-upload-area {
+            background: var(--tg-theme-secondary-bg-color);
+            border: 2px dashed var(--tg-theme-hint-color);
+            border-radius: 16px;
+            padding: 32px 16px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: var(--tg-theme-hint-color);
+        }
+        .image-upload-area:active {
+            border-color: var(--tg-theme-button-color);
+            background: rgba(36, 129, 204, 0.1);
+        }
+        
         /* Button */
         .btn {
             display: block;
@@ -586,6 +602,8 @@
             }
             
             const requiresImage = modelInfo.requires_image;
+            appData.currentModel = modelInfo;
+            appData.uploadedImageUrl = null;
             
             app.innerHTML = `
                 <div class="page-header">
@@ -601,36 +619,92 @@
                     <div class="price-value">${(modelInfo.price || 0).toFixed(2)} ₽</div>
                 </div>
                 
-                <form id="genForm" onsubmit="submitGeneration(event, '${modelId}')">
+                <form id="genForm" onsubmit="submitGeneration(event, '${modelId}', ${requiresImage})">
+                    ${requiresImage ? `
+                        <div class="form-group">
+                            <label class="form-label">📷 Загрузите изображение</label>
+                            <div id="imageUploadArea" class="image-upload-area" onclick="document.getElementById('imageInput').click()">
+                                <div id="uploadPlaceholder">
+                                    <div style="font-size: 48px; margin-bottom: 12px;">📷</div>
+                                    <div>Нажмите чтобы выбрать фото</div>
+                                    <div style="font-size: 12px; margin-top: 8px; opacity: 0.7;">JPG, PNG до 10MB</div>
+                                </div>
+                                <img id="imagePreview" style="display: none; width: 100%; border-radius: 12px;" />
+                            </div>
+                            <input type="file" id="imageInput" accept="image/*" style="display: none;" onchange="handleImageSelect(this)" />
+                        </div>
+                    ` : ''}
+                    
                     <div class="form-group">
-                        <label class="form-label">✍️ Опишите что хотите создать</label>
+                        <label class="form-label">✍️ ${requiresImage ? 'Опишите что хотите сделать с изображением' : 'Опишите что хотите создать'}</label>
                         <textarea 
                             class="form-input form-textarea" 
                             id="promptInput"
-                            placeholder="Например: Красивый закат над морем, яркие краски, реалистичный стиль..."
+                            placeholder="${requiresImage ? 'Например: Сделай изображение в стиле аниме, добавь эффект заката...' : 'Например: Красивый закат над морем, яркие краски, реалистичный стиль...'}"
                             required
                         ></textarea>
                     </div>
                     
-                    ${requiresImage ? `
-                        <div class="error-card" style="margin-bottom: 16px;">
-                            <div class="error-icon">📷</div>
-                            <div class="error-title">Требуется изображение</div>
-                            <div class="error-text">Для этой модели нужно загрузить фото. Используйте бота для загрузки.</div>
-                            <button type="button" class="btn btn-secondary" style="margin-top: 12px;" onclick="openBot()">
-                                Открыть в боте
-                            </button>
-                        </div>
-                    ` : `
-                        <button type="submit" class="btn" id="submitBtn">
-                            ✨ Сгенерировать за ${(modelInfo.price || 0).toFixed(2)} ₽
-                        </button>
-                    `}
+                    <button type="submit" class="btn" id="submitBtn">
+                        ✨ Сгенерировать за ${(modelInfo.price || 0).toFixed(2)} ₽
+                    </button>
                 </form>
             `;
         }
         
-        async function submitGeneration(event, modelId) {
+        async function handleImageSelect(input) {
+            const file = input.files[0];
+            if (!file) return;
+            
+            if (file.size > 10 * 1024 * 1024) {
+                tg.showAlert('Файл слишком большой. Максимум 10MB.');
+                return;
+            }
+            
+            const preview = document.getElementById('imagePreview');
+            const placeholder = document.getElementById('uploadPlaceholder');
+            const uploadArea = document.getElementById('imageUploadArea');
+            
+            // Show loading
+            placeholder.innerHTML = '<div class="loading-spinner" style="width: 30px; height: 30px;"></div><div style="margin-top: 12px;">Загрузка...</div>';
+            
+            try {
+                // Read file as base64
+                const base64 = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+                
+                // Upload to server
+                const result = await apiCall('/upload', {
+                    method: 'POST',
+                    body: JSON.stringify({ image: base64 })
+                });
+                
+                if (result.error) {
+                    throw new Error(result.error);
+                }
+                
+                // Store URL and show preview
+                appData.uploadedImageUrl = result.url;
+                preview.src = base64;
+                preview.style.display = 'block';
+                placeholder.style.display = 'none';
+                uploadArea.style.padding = '0';
+                uploadArea.style.background = 'transparent';
+                
+            } catch (e) {
+                tg.showAlert('Ошибка загрузки: ' + e.message);
+                placeholder.innerHTML = `
+                    <div style="font-size: 48px; margin-bottom: 12px;">📷</div>
+                    <div>Нажмите чтобы выбрать фото</div>
+                `;
+            }
+        }
+        
+        async function submitGeneration(event, modelId, requiresImage = false) {
             event.preventDefault();
             
             const prompt = document.getElementById('promptInput').value.trim();
@@ -639,17 +713,30 @@
                 return;
             }
             
+            // Check if image is required but not uploaded
+            if (requiresImage && !appData.uploadedImageUrl) {
+                tg.showAlert('Загрузите изображение для этой модели');
+                return;
+            }
+            
             const submitBtn = document.getElementById('submitBtn');
             submitBtn.disabled = true;
             submitBtn.textContent = '⏳ Отправка...';
             
+            const payload = {
+                model_id: modelId,
+                prompt: prompt,
+                params: {}
+            };
+            
+            // Add image URL if uploaded
+            if (appData.uploadedImageUrl) {
+                payload.image_url = appData.uploadedImageUrl;
+            }
+            
             const result = await apiCall('/generate', {
                 method: 'POST',
-                body: JSON.stringify({
-                    model_id: modelId,
-                    prompt: prompt,
-                    params: {}
-                })
+                body: JSON.stringify(payload)
             });
             
             if (result.error) {
