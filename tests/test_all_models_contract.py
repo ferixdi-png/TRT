@@ -41,11 +41,19 @@ def _build_dummy_params(model_spec):
     return params
 
 
-def _expected_primary_input(model_mode: str) -> str:
-    text_modes = {"text_to_image", "text_to_video", "text_to_audio", "text_to_speech", "text"}
+def _expected_primary_input(model_mode: str, model_id: str = "") -> str:
+    # Special cases where model_mode doesn't match primary input
+    special_cases = {
+        "kling-2.6/motion-control": "video",  # Uses video_urls as primary
+    }
+    if model_id in special_cases:
+        return special_cases[model_id]
+    
+    text_modes = {"text_to_image", "text_to_video", "text_to_audio", "text_to_speech", "text",
+                  "text_to_music", "text_to_chat", "text_to_dialogue"}
     image_modes = {"image_to_image", "image_edit", "image_to_video", "outpaint", "upscale"}
     video_modes = {"video_editing", "video_upscale"}
-    audio_modes = {"speech_to_text", "audio_to_audio", "speech_to_video", "lip_sync"}
+    audio_modes = {"speech_to_text", "audio_to_audio", "speech_to_video", "lip_sync", "audio_isolation", "sound_effect"}
     if model_mode in text_modes:
         return "prompt"
     if model_mode in image_modes:
@@ -61,7 +69,7 @@ def test_all_models_require_correct_primary_input():
     catalog = get_model_map()
     for model_id, spec in catalog.items():
         model_mode = spec.model_mode or spec.model_type or ""
-        expected_type = _expected_primary_input(model_mode)
+        expected_type = _expected_primary_input(model_mode, model_id)
         primary = _determine_primary_input({"model_mode": model_mode, "model_type": spec.model_type}, spec.schema_properties)
         assert primary is not None, f"{model_id} missing primary input"
         assert primary["type"] == expected_type, f"{model_id} expected {expected_type}, got {primary}"

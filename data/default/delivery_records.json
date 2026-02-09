@@ -2,10 +2,10 @@
   "8888:task-123": {
     "user_id": 8888,
     "task_id": "task-123",
-    "job_id": "job-86bd8b2d591d",
+    "job_id": "job-9ae496e5dcd0",
     "model_id": "test-model",
-    "request_id": "corr-1-8888-b6be958e",
-    "correlation_id": "corr-1-8888-b6be958e",
+    "request_id": "corr-1-8888-04b45022",
+    "correlation_id": "corr-1-8888-04b45022",
     "prompt_hash": "a7d766d8d25f",
     "chat_id": 12345,
     "message_id": 1,
@@ -15,8 +15,8 @@
     "is_admin_user": false,
     "status": "delivered",
     "created_at": "2026-01-27T16:51:54.434425",
-    "updated_at": "2026-02-06T12:27:04.806142",
-    "delivered_at": "2026-02-06T12:27:04.806166",
+    "updated_at": "2026-02-09T09:33:06.272069",
+    "delivered_at": "2026-02-09T09:33:06.272076",
     "result_urls": [
       "https://example.com/result.png"
     ]
@@ -24,10 +24,10 @@
   "777:task-send-fail": {
     "user_id": 777,
     "task_id": "task-send-fail",
-    "job_id": "job-6ffbf9211c17",
+    "job_id": "job-beb557dd8994",
     "model_id": "test-model",
-    "request_id": "corr-1-777-936be63a",
-    "correlation_id": "corr-1-777-936be63a",
+    "request_id": "corr-1-777-df364ed8",
+    "correlation_id": "corr-1-777-df364ed8",
     "prompt_hash": "a7d766d8d25f",
     "chat_id": 12345,
     "message_id": 1,
@@ -37,26 +37,26 @@
     "is_admin_user": false,
     "status": "failed",
     "created_at": "2026-01-27T16:52:00.937091",
-    "updated_at": "2026-02-06T12:27:17.479975"
+    "updated_at": "2026-02-09T09:33:17.765343"
   },
   "9911:task-123": {
     "user_id": 9911,
     "task_id": "task-123",
-    "job_id": "job-7d28c08d2f8b",
-    "model_id": "test-model",
-    "request_id": "corr-1-9911-c7fd005e",
-    "correlation_id": "corr-1-9911-c7fd005e",
-    "prompt_hash": "a7d766d8d25f",
+    "job_id": "job-657605b3b53a",
+    "model_id": "flux-2/flex-image-to-image",
+    "request_id": "corr-203-9911-d5591915",
+    "correlation_id": "corr-203-9911-d5591915",
+    "prompt_hash": "9f86d081884c",
     "chat_id": 12345,
     "message_id": 1,
-    "sku_id": "z-image::aspect_ratio=1:1",
-    "price": 0.0,
-    "is_free": true,
+    "sku_id": "flux-2/flex-image-to-image::test",
+    "price": 12.0,
+    "is_free": false,
     "is_admin_user": false,
     "status": "delivered",
     "created_at": "2026-01-27T16:52:03.657569",
-    "updated_at": "2026-02-06T12:27:21.170070",
-    "delivered_at": "2026-02-06T12:27:21.170077",
+    "updated_at": "2026-02-09T09:34:33.806029",
+    "delivered_at": "2026-02-09T09:34:33.806036",
     "result_urls": [
       "https://example.com/result.png"
     ]
@@ -64,10 +64,10 @@
   "7777:task-123": {
     "user_id": 7777,
     "task_id": "task-123",
-    "job_id": "job-31a7c6486336",
+    "job_id": "job-861c1a86a462",
     "model_id": "test-model",
-    "request_id": "corr-1-7777-5ac3f8c4",
-    "correlation_id": "corr-1-7777-5ac3f8c4",
+    "request_id": "corr-1-7777-abcd5c64",
+    "correlation_id": "corr-1-7777-abcd5c64",
     "prompt_hash": "a7d766d8d25f",
     "chat_id": 12345,
     "message_id": 1,
@@ -77,8 +77,8 @@
     "is_admin_user": false,
     "status": "delivered",
     "created_at": "2026-01-27T16:52:03.865478",
-    "updated_at": "2026-02-06T12:27:21.418667",
-    "delivered_at": "2026-02-06T12:27:21.418676",
+    "updated_at": "2026-02-09T09:33:21.420851",
+    "delivered_at": "2026-02-09T09:33:21.420859",
     "result_urls": [
       "https://example.com/result.png"
     ]
@@ -86,7 +86,7 @@
   "42:task-123": {
     "user_id": 42,
     "task_id": "task-123",
-    "job_id": "job-fe84748053a0",
+    "job_id": "job-67b0240a0222",
     "model_id": "sora-2-text-to-video",
     "request_id": "corr-test",
     "prompt_hash": "2cf24dba5fb0",
@@ -98,7 +98,7 @@
     "is_admin_user": false,
     "status": "pending",
     "created_at": "2026-01-27T16:53:48.209806",
-    "updated_at": "2026-02-03T16:20:03.879127"
+    "updated_at": "2026-02-09T09:35:35.492911"
   },
   "1:1d16481e-0f9b-4d43-a4d4-635ce6652b0f": {
     "user_id": 1,

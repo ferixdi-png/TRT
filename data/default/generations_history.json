@@ -571,6 +571,17 @@
       ],
       "price": 0.0,
       "timestamp": "2026-02-06T12:27:04.824011"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-09T09:33:06.282589"
     }
   ],
   "9911": [
@@ -1468,6 +1479,35 @@
       ],
       "price": 0.0,
       "timestamp": "2026-02-06T12:27:21.198444"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-09T09:33:21.131514"
+    },
+    {
+      "id": "task-123",
+      "model_id": "flux-2/flex-image-to-image",
+      "model_name": "Flux 2 Flex Image to Image",
+      "params": {
+        "prompt": "test",
+        "image_input": [
+          "https://example.com/file"
+        ],
+        "aspect_ratio": "1:1",
+        "resolution": "1K"
+      },
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 12.0,
+      "timestamp": "2026-02-09T09:34:33.817935"
     }
   ],
   "7777": [
@@ -1987,6 +2027,17 @@
       ],
       "price": 0.0,
       "timestamp": "2026-02-06T12:27:21.429350"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-09T09:33:21.432814"
     }
   ]
 }

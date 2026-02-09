@@ -152,6 +152,9 @@ MODEL_TYPE_TO_MEDIA = {
     "text_to_audio": "audio",
     "audio_to_audio": "audio",
     "text_to_music": "audio",
+    "text_to_dialogue": "audio",
+    "sound_effect": "audio",
+    "audio_isolation": "audio",
     "text_to_chat": "text",
     "speech_to_text": "text",
     "text": "text",
@@ -182,6 +185,9 @@ MODEL_TYPE_DESCRIPTION_RU = {
     "audio_to_audio": "Обработка и улучшение аудио.",
     "speech_to_text": "Распознавание речи в текст.",
     "text": "Генерация текстового результата.",
+    "text_to_dialogue": "Генерация диалога из текста.",
+    "sound_effect": "Генерация звуковых эффектов.",
+    "audio_isolation": "Изоляция и очистка аудио.",
 }
 
 
@@ -464,7 +470,9 @@ def _verify_catalog_internal(models: List[ModelSpec]) -> None:
     
     # Проверяем типы
     allowed_types = {'t2i', 'i2i', 't2v', 'i2v', 'v2v', 'tts', 'stt', 'sfx', 'audio_isolation', 
-                     'upscale', 'bg_remove', 'watermark_remove', 'music', 'lip_sync'}
+                     'upscale', 'bg_remove', 'watermark_remove', 'music', 'lip_sync',
+                     'text_to_speech', 'speech_to_text', 'text_to_music', 'text_to_audio',
+                     'audio_to_audio', 'text_to_chat'}
     invalid_types = [m.id for m in models if m.type not in allowed_types]
     if invalid_types:
         logger.warning(f"Catalog warning: models with invalid types: {invalid_types[:5]}")
