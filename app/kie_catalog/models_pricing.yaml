@@ -237,26 +237,19 @@ models:
   description_ru: 'Профессиональная версия Nano Banana: больше деталей, выше точность.
     Для серьёзных задач.'
 - id: grok/imagine
-  title_ru: Grok Imagine Image to Video
+  title_ru: 🔥 Grok Imagine Video
   type: i2v
   modes:
   - unit: video
     credits: 20.0
     official_usd: 0.1
-    notes: 6.0s
+    notes: 6s video
   - unit: video
-    credits: 20.0
-    official_usd: 0.1
-    notes: 6.0s
-  - unit: video
-    credits: 4.0
-    official_usd: 0.02
-  - unit: video
-    credits: 10.0
-    official_usd: 0.05
-    notes: 360p→720p
-  description_ru: Генерация изображений от Grok. Понимает сарказм и нестандартные
-    промпты.
+    credits: 30.0
+    official_usd: 0.15
+    notes: 10s video
+  description_ru: ⭐ ТОП МОДЕЛЬ! Grok Imagine — генерация видео из изображений и текста.
+    6 или 10 секунд, режимы fun/normal/spicy. Отличное следование промпту.
 - id: grok-imagine/text-to-image
   title_ru: Grok Imagine Text to Image
   type: t2i

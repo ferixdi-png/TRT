@@ -1710,12 +1710,31 @@ models:
         - auto
     model_mode: image_edit
   grok/imagine:
-    model_type: text_to_image
+    model_type: image_to_video
     input:
+      image_urls:
+        type: array
+        item_type: string
+        required: false
+        max_items: 1
       prompt:
         type: string
-        required: true
-    model_mode: text_to_image
+        required: false
+        max: 5000
+      mode:
+        type: enum
+        required: false
+        values:
+        - fun
+        - normal
+        - spicy
+      duration:
+        type: enum
+        required: false
+        values:
+        - '6'
+        - '10'
+    model_mode: image_to_video
   grok-imagine/text-to-image:
     model_type: text_to_image
     input:

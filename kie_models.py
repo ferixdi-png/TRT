@@ -2547,19 +2547,40 @@ KIE_MODELS = [
     # Новые модели с сайта KIE.ai (скоро появятся в API)
     {
         "id": "grok/imagine",
-        "name": "Grok Imagine",
-        "description": "Grok Imagine - мультимодальная модель генерации изображений и видео от xAI. Преобразует текст или изображения в короткие визуальные выходы с согласованным движением и синхронизированным аудио.",
-        "category": "Изображения",
-        "emoji": "🤖",
-        "pricing": "Скоро появится",
+        "name": "🔥 Grok Imagine Video",
+        "description": "⭐ ТОП МОДЕЛЬ! Grok Imagine — генерация видео из изображений и текста. 6 или 10 секунд, режимы fun/normal/spicy. Отличное следование промпту.",
+        "category": "Видео",
+        "emoji": "🎬",
+        "is_featured": True,
+        "pricing": "20-30 кредитов (6s: $0.10, 10s: $0.15)",
         "input_params": {
+            "image_urls": {
+                "type": "array",
+                "description": "URL изображения для image-to-video (1 изображение)",
+                "required": False,
+                "item_type": "string"
+            },
             "prompt": {
                 "type": "string",
-                "description": "Текстовое описание (скоро появится)",
-                "required": True
+                "description": "Описание желаемого движения (до 5000 символов)",
+                "required": False,
+                "max_length": 5000
+            },
+            "mode": {
+                "type": "string",
+                "description": "Режим генерации: fun, normal, spicy",
+                "required": False,
+                "default": "normal",
+                "enum": ["fun", "normal", "spicy"]
+            },
+            "duration": {
+                "type": "string",
+                "description": "Длительность видео: 6 или 10 секунд",
+                "required": False,
+                "default": "6",
+                "enum": ["6", "10"]
             }
-        },
-        "coming_soon": True
+        }
     },
     {
         "id": "openai/4o-image",

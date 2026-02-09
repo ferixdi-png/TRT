@@ -1507,9 +1507,19 @@ models:
   - id: grok/imagine
     skus:
       - unit: video
-        price_rub: 15.71
+        price_rub: 15.41
+        params:
+          duration: "6"
+        notes: 6s video
+      - unit: video
+        price_rub: 23.12
+        params:
+          duration: "10"
+        notes: 10s video
+      - unit: video
+        price_rub: 15.41
         params: {}
-        notes: text-to-video 6s
+        notes: default 6s
   - id: grok-imagine/text-to-image
     skus:
       - unit: image
