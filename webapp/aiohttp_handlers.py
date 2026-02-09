@@ -3,6 +3,7 @@ import base64
 import json
 import logging
 import os
+import re
 import uuid
 from pathlib import Path
 
@@ -80,7 +81,10 @@ async def webapp_user_balance(request: web.Request) -> web.Response:
     if not auth_user_id:
         return web.json_response({"error": "Unauthorized"}, status=401)
     
-    user_id = int(request.match_info.get("user_id", 0))
+    try:
+        user_id = int(request.match_info.get("user_id", 0))
+    except (ValueError, TypeError):
+        return web.json_response({"error": "Invalid user_id"}, status=400)
     if not user_id:
         return web.json_response({"error": "user_id required"}, status=400)
     
@@ -278,6 +282,9 @@ def _get_media_type(filename: str) -> str:
     return "file"
 
 
+MAX_UPLOAD_SIZE = 20 * 1024 * 1024  # 20MB limit
+
+
 async def webapp_upload_image(request: web.Request) -> web.Response:
     """Upload media file (image, video, audio) for generation. Accepts base64 or multipart."""
     init_data = request.headers.get("X-Telegram-Init-Data", "")
@@ -285,6 +292,15 @@ async def webapp_upload_image(request: web.Request) -> web.Response:
     
     if not user_id:
         return web.json_response({"error": "Unauthorized"}, status=401)
+    
+    # Check content-length header
+    content_length = request.content_length
+    if content_length and content_length > MAX_UPLOAD_SIZE:
+        return web.json_response({
+            "error": "Файл слишком большой",
+            "error_en": "File too large",
+            "max_size_mb": MAX_UPLOAD_SIZE // (1024 * 1024),
+        }, status=413)
     
     try:
         content_type = request.content_type
@@ -331,6 +347,15 @@ async def webapp_upload_image(request: web.Request) -> web.Response:
         
         if not file_data:
             return web.json_response({"error": "No file provided"}, status=400)
+        
+        # Check actual file size after reading
+        if len(file_data) > MAX_UPLOAD_SIZE:
+            return web.json_response({
+                "error": "Файл слишком большой",
+                "error_en": "File too large",
+                "max_size_mb": MAX_UPLOAD_SIZE // (1024 * 1024),
+                "actual_size_mb": len(file_data) // (1024 * 1024),
+            }, status=413)
         
         # Save to uploads
         file_path = WEBAPP_UPLOADS_DIR / filename
@@ -386,7 +411,24 @@ CONTENT_TYPE_MAP = {
 async def webapp_serve_upload(request: web.Request) -> web.Response:
     """Serve uploaded files (images, videos, audio)."""
     filename = request.match_info.get("filename", "")
+    
+    # SECURITY: Prevent path traversal attacks
+    if not filename or ".." in filename or "/" in filename or "\\" in filename:
+        return web.Response(text="Invalid filename", status=400)
+    
+    # Only allow alphanumeric, underscore, hyphen, and dot
+    if not re.match(r'^[a-zA-Z0-9_\-\.]+$', filename):
+        return web.Response(text="Invalid filename", status=400)
+    
     file_path = WEBAPP_UPLOADS_DIR / filename
+    
+    # SECURITY: Ensure file is within uploads directory
+    try:
+        file_path = file_path.resolve()
+        if not str(file_path).startswith(str(WEBAPP_UPLOADS_DIR.resolve())):
+            return web.Response(text="Forbidden", status=403)
+    except Exception:
+        return web.Response(text="Invalid path", status=400)
     
     if not file_path.exists() or not file_path.is_file():
         return web.Response(text="Not found", status=404)
@@ -426,9 +468,6 @@ async def webapp_generate(request: web.Request) -> web.Response:
     if not model_id:
         return web.json_response({"error": "model_id required"}, status=400)
     
-    if not prompt:
-        return web.json_response({"error": "prompt required"}, status=400)
-    
     try:
         from app.kie_catalog import get_model_map
         from app.storage import get_storage
@@ -437,6 +476,14 @@ async def webapp_generate(request: web.Request) -> web.Response:
         spec = catalog.get(model_id)
         if not spec:
             return web.json_response({"error": f"Model {model_id} not found"}, status=404)
+        
+        # Check if prompt is required for this model (some i2v models don't require it)
+        model_mode = getattr(spec, "model_mode", "")
+        model_type = getattr(spec, "type", "")
+        prompt_optional = model_mode in ["image-to-video", "i2v"] or model_type in ["i2v"]
+        
+        if not prompt and not prompt_optional:
+            return web.json_response({"error": "prompt required"}, status=400)
         
         # Check if media input is required based on model mode
         model_mode = getattr(spec, "model_mode", "")
@@ -584,6 +631,7 @@ async def webapp_generate(request: web.Request) -> web.Response:
                     correlation_id=correlation_id,
                     job_id=job_id,
                     price=price,
+                    is_free=is_free_generation,
                 )
                 # Update job status in unified storage
                 if result:
@@ -593,6 +641,40 @@ async def webapp_generate(request: web.Request) -> web.Response:
                         result_url=result.result_url,
                         result_urls=result.result_urls if hasattr(result, 'result_urls') else [],
                     )
+                    
+                    # CRITICAL: Charge balance or consume free generation AFTER successful result
+                    task_id = result.task_id if hasattr(result, 'task_id') else job_id
+                    if is_free_generation:
+                        # Consume free generation
+                        try:
+                            if hasattr(storage, 'consume_free_generation_once'):
+                                await storage.consume_free_generation_once(
+                                    user_id,
+                                    task_id=task_id,
+                                    sku_id=model_id,
+                                )
+                            else:
+                                # Fallback: decrement free generations counter
+                                from app.services.user_service import consume_free_generation
+                                await consume_free_generation(user_id)
+                        except Exception as free_err:
+                            logger.warning("Failed to consume free generation: %s", free_err)
+                    elif price > 0:
+                        # Charge balance
+                        try:
+                            if hasattr(storage, 'charge_balance_once'):
+                                await storage.charge_balance_once(
+                                    user_id,
+                                    price,
+                                    task_id=task_id,
+                                    sku_id=model_id,
+                                    model_id=model_id,
+                                )
+                            else:
+                                # Fallback: subtract balance directly
+                                await storage.subtract_user_balance(user_id, price)
+                        except Exception as charge_err:
+                            logger.error("Failed to charge balance: %s", charge_err)
                 else:
                     await storage.update_job_status(job_id=job_id, status="failed")
             except Exception as e:
@@ -603,7 +685,9 @@ async def webapp_generate(request: web.Request) -> web.Response:
                     error_message=str(e),
                 )
         
-        asyncio.create_task(run_gen())
+        task = asyncio.create_task(run_gen(), name=f"webapp_gen_{job_id}")
+        # Log task creation for debugging
+        logger.info("Generation task created: %s for job %s", task.get_name(), job_id)
         
         return web.json_response({
             "ok": True,
@@ -716,6 +800,18 @@ async def webapp_job_retry(request: web.Request) -> web.Response:
         params = job.get("params", {})
         price = job.get("price", 0)
         prompt = params.get("prompt", "")
+        is_free = job.get("is_free", False)
+        
+        # Check balance before retry (unless original was free)
+        if not is_free and price > 0:
+            balance = await storage.get_user_balance(user_id)
+            if balance < price:
+                return web.json_response({
+                    "error": "Недостаточно средств для повтора",
+                    "error_en": "Insufficient balance for retry",
+                    "balance": float(balance),
+                    "price": price,
+                }, status=402)
         
         # CRITICAL: Save retry job immediately so it can be polled
         await storage.add_generation_job(
@@ -728,6 +824,7 @@ async def webapp_job_retry(request: web.Request) -> web.Response:
             correlation_id=correlation_id,
             prompt=prompt,
             status="pending",
+            is_free=is_free,
         )
         
         import asyncio
@@ -742,6 +839,7 @@ async def webapp_job_retry(request: web.Request) -> web.Response:
                     correlation_id=correlation_id,
                     job_id=new_job_id,
                     price=price,
+                    is_free=is_free,
                 )
                 # Update job status
                 if result:
@@ -751,6 +849,23 @@ async def webapp_job_retry(request: web.Request) -> web.Response:
                         result_url=result.result_url,
                         result_urls=result.result_urls if hasattr(result, 'result_urls') else [],
                     )
+                    
+                    # CRITICAL: Charge balance for retry
+                    task_id = result.task_id if hasattr(result, 'task_id') else new_job_id
+                    if is_free:
+                        try:
+                            if hasattr(storage, 'consume_free_generation_once'):
+                                await storage.consume_free_generation_once(user_id, task_id=task_id, sku_id=model_id)
+                        except Exception as free_err:
+                            logger.warning("Failed to consume free generation on retry: %s", free_err)
+                    elif price > 0:
+                        try:
+                            if hasattr(storage, 'charge_balance_once'):
+                                await storage.charge_balance_once(user_id, price, task_id=task_id, sku_id=model_id, model_id=model_id)
+                            else:
+                                await storage.subtract_user_balance(user_id, price)
+                        except Exception as charge_err:
+                            logger.error("Failed to charge balance on retry: %s", charge_err)
                 else:
                     await storage.update_job_status(job_id=new_job_id, status="failed")
             except Exception as e:
@@ -761,7 +876,8 @@ async def webapp_job_retry(request: web.Request) -> web.Response:
                     error_message=str(e),
                 )
         
-        asyncio.create_task(run_gen())
+        task = asyncio.create_task(run_gen(), name=f"webapp_retry_{new_job_id}")
+        logger.info("Retry task created: %s for job %s", task.get_name(), new_job_id)
         
         return web.json_response({
             "ok": True,
@@ -782,7 +898,10 @@ async def webapp_user_history(request: web.Request) -> web.Response:
     if not auth_user_id:
         return web.json_response({"error": "Unauthorized"}, status=401)
     
-    user_id = int(request.match_info.get("user_id", 0))
+    try:
+        user_id = int(request.match_info.get("user_id", 0))
+    except (ValueError, TypeError):
+        return web.json_response({"error": "Invalid user_id"}, status=400)
     if not user_id:
         return web.json_response({"error": "user_id required"}, status=400)
     
