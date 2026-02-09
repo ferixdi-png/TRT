@@ -2,10 +2,12 @@
 import hashlib
 import hmac
 import json
+import logging
 import os
 import urllib.parse
 from typing import Optional, Dict, Any
 
+logger = logging.getLogger(__name__)
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 
 
@@ -57,7 +59,16 @@ def validate_webapp_data(init_data: str) -> Optional[Dict[str, Any]]:
 
 def get_user_id_from_init_data(init_data: str) -> Optional[int]:
     """Extract user_id from validated initData."""
+    if not init_data:
+        logger.warning("WEBAPP_AUTH_FAIL reason=no_init_data")
+        return None
+    if not BOT_TOKEN:
+        logger.warning("WEBAPP_AUTH_FAIL reason=no_bot_token")
+        return None
     user_data = validate_webapp_data(init_data)
     if user_data and "id" in user_data:
-        return int(user_data["id"])
+        user_id = int(user_data["id"])
+        logger.debug("WEBAPP_AUTH_OK user_id=%s", user_id)
+        return user_id
+    logger.warning("WEBAPP_AUTH_FAIL reason=validation_failed init_data_len=%d", len(init_data))
     return None

@@ -2310,7 +2310,10 @@
             if (modelInfo.ux_schema && modelInfo.ux_schema.fields) {
                 // Sort: for i2i/i2v models - image fields FIRST, then prompt
                 // For t2i/t2v models - prompt first
+                const modelType = (modelInfo.type || '').toLowerCase();
                 const isImageInput = modelInfo.requires_image || 
+                    modelType.includes('i2i') || modelType.includes('i2v') ||
+                    modelType.includes('image-to') ||
                     modelInfo.ux_schema.fields.some(f => 
                         f.type === 'file_urls' || 
                         f.name.includes('image_input') || 

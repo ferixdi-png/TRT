@@ -83,19 +83,22 @@ async def webapp_models(request: web.Request) -> web.Response:
     """Get list of available models with pricing info."""
     try:
         from app.kie_catalog import get_model_map
+        from app.pricing.price_ssot import model_has_free_sku
         catalog = get_model_map()
         
         models = []
         for model_id, spec in catalog.items():
             # Get price info
             price = 0
-            is_free = False
+            is_free = model_has_free_sku(model_id)  # Check directly from SSOT
             try:
                 from app.pricing.price_resolver import resolve_price
                 price_info = await resolve_price(model_id, {})
                 if price_info:
                     price = price_info.get('price_rub', 0)
-                    is_free = price_info.get('free_sku', False) or price == 0
+                    # Also check from resolve_price
+                    if price_info.get('free_sku', False):
+                        is_free = True
             except Exception:
                 pass
             
@@ -185,16 +188,27 @@ async def webapp_model_info(request: web.Request) -> web.Response:
         except Exception:
             pass
         
+        # Determine if model requires image input
+        model_mode = getattr(spec, "model_mode", "")
+        model_type = getattr(spec, "type", "")
+        requires_image = (
+            model_mode in ["image-to-image", "image-to-video", "i2i", "i2v"] or
+            model_type in ["i2i", "i2v"] or
+            "image-to" in model_id or
+            "edit" in model_id.lower() or
+            "remix" in model_id.lower()
+        )
+        
         return web.json_response({
             "id": model_id,
             "name": getattr(spec, "name", model_id),
-            "type": getattr(spec, "model_mode", "unknown"),
+            "type": model_mode or model_type or "unknown",
             "emoji": getattr(spec, "emoji", "🎨"),
             "description": getattr(spec, "description", ""),
             "ux_schema": ux_schema,
             "schema": legacy_schema,
             "price": price,
-            "requires_image": getattr(spec, "model_mode", "") in ["image-to-image", "image-to-video"],
+            "requires_image": requires_image,
         })
     except Exception as e:
         logger.error("Failed to get model %s: %s", model_id, e)
