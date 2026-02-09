@@ -32,6 +32,20 @@
         
         .container { max-width: 100%; padding: 0 16px; }
         
+        /* Page Header */
+        .page-header {
+            display: flex; align-items: center; gap: 12px;
+            padding: 16px 0; margin-bottom: 8px;
+        }
+        .back-btn {
+            width: 36px; height: 36px;
+            background: var(--tg-theme-secondary-bg-color);
+            border: none; border-radius: 50%;
+            font-size: 18px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .page-title { font-size: 20px; font-weight: 600; flex: 1; }
+        
         /* Header */
         .header {
             background: var(--accent-gradient);
@@ -73,25 +87,6 @@
             cursor: pointer;
         }
         
-        /* Quick Actions */
-        .quick-actions {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 8px;
-            margin-bottom: 20px;
-        }
-        .quick-action {
-            background: var(--tg-theme-secondary-bg-color);
-            border-radius: 16px;
-            padding: 14px 8px;
-            text-align: center;
-            cursor: pointer;
-            transition: transform 0.15s, opacity 0.15s;
-        }
-        .quick-action:active { transform: scale(0.95); opacity: 0.8; }
-        .quick-action-icon { font-size: 26px; margin-bottom: 6px; }
-        .quick-action-label { font-size: 11px; font-weight: 500; color: var(--tg-theme-hint-color); }
-        
         /* Section */
         .section { margin-bottom: 20px; }
         .section-header {
@@ -106,32 +101,15 @@
         .category-card {
             background: var(--tg-theme-secondary-bg-color);
             border-radius: 16px;
-            padding: 16px;
+            padding: 20px 16px;
             cursor: pointer;
-            transition: transform 0.15s, box-shadow 0.15s;
-            position: relative;
-            overflow: hidden;
+            transition: transform 0.15s;
+            text-align: center;
         }
         .category-card:active { transform: scale(0.97); }
-        .category-card::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; right: 0;
-            height: 4px;
-            background: var(--accent-gradient);
-            opacity: 0;
-            transition: opacity 0.2s;
-        }
-        .category-card:active::before { opacity: 1; }
-        .category-icon { font-size: 32px; margin-bottom: 8px; }
-        .category-name { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+        .category-icon { font-size: 40px; margin-bottom: 10px; }
+        .category-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
         .category-count { font-size: 12px; color: var(--tg-theme-hint-color); }
-        .category-badge {
-            position: absolute; top: 12px; right: 12px;
-            background: var(--success-color);
-            color: white; font-size: 10px; font-weight: 600;
-            padding: 3px 8px; border-radius: 10px;
-        }
         
         /* Model List */
         .model-list { display: flex; flex-direction: column; gap: 8px; }
@@ -139,16 +117,119 @@
             display: flex; align-items: center; gap: 12px;
             background: var(--tg-theme-secondary-bg-color);
             border-radius: 14px;
-            padding: 12px 14px;
+            padding: 14px;
             cursor: pointer;
             transition: transform 0.15s;
         }
         .model-item:active { transform: scale(0.98); }
-        .model-icon { font-size: 28px; }
+        .model-icon { font-size: 32px; }
         .model-info { flex: 1; }
-        .model-name { font-size: 15px; font-weight: 500; }
-        .model-type { font-size: 12px; color: var(--tg-theme-hint-color); }
-        .model-arrow { color: var(--tg-theme-hint-color); font-size: 18px; }
+        .model-name { font-size: 15px; font-weight: 600; margin-bottom: 2px; }
+        .model-desc { font-size: 12px; color: var(--tg-theme-hint-color); }
+        .model-price { font-size: 14px; font-weight: 600; color: var(--tg-theme-button-color); }
+        
+        /* Form */
+        .form-group { margin-bottom: 16px; }
+        .form-label { font-size: 14px; font-weight: 500; margin-bottom: 8px; display: block; }
+        .form-input {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid var(--tg-theme-secondary-bg-color);
+            border-radius: 12px;
+            font-size: 16px;
+            background: var(--tg-theme-bg-color);
+            color: var(--tg-theme-text-color);
+            resize: none;
+        }
+        .form-input:focus {
+            outline: none;
+            border-color: var(--tg-theme-button-color);
+        }
+        .form-textarea { min-height: 120px; }
+        
+        /* Button */
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 16px;
+            background: var(--accent-gradient);
+            color: white;
+            border: none;
+            border-radius: 14px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 16px;
+        }
+        .btn:active { opacity: 0.9; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-secondary {
+            background: var(--tg-theme-secondary-bg-color);
+            color: var(--tg-theme-text-color);
+        }
+        
+        /* Price Card */
+        .price-card {
+            background: var(--tg-theme-secondary-bg-color);
+            border-radius: 14px;
+            padding: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        .price-label { font-size: 14px; color: var(--tg-theme-hint-color); }
+        .price-value { font-size: 24px; font-weight: 700; color: var(--tg-theme-button-color); }
+        
+        /* Result */
+        .result-card {
+            background: var(--tg-theme-secondary-bg-color);
+            border-radius: 16px;
+            overflow: hidden;
+            margin-bottom: 16px;
+        }
+        .result-image {
+            width: 100%;
+            aspect-ratio: 1;
+            object-fit: cover;
+        }
+        .result-video {
+            width: 100%;
+            border-radius: 16px;
+        }
+        .result-actions {
+            padding: 16px;
+            display: flex;
+            gap: 12px;
+        }
+        .result-btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        
+        /* Status */
+        .status-card {
+            text-align: center;
+            padding: 40px 20px;
+        }
+        .status-spinner {
+            width: 60px; height: 60px;
+            border: 4px solid var(--tg-theme-secondary-bg-color);
+            border-top-color: var(--tg-theme-button-color);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 20px;
+        }
+        .status-icon { font-size: 60px; margin-bottom: 16px; }
+        .status-title { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+        .status-text { font-size: 14px; color: var(--tg-theme-hint-color); }
+        
+        @keyframes spin { to { transform: rotate(360deg); } }
         
         /* Bottom Nav */
         .bottom-nav {
@@ -182,38 +263,37 @@
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
         }
-        @keyframes spin { to { transform: rotate(360deg); } }
         .loading-text { color: var(--tg-theme-hint-color); font-size: 14px; }
         
         /* Error */
         .error-card {
-            background: #fff5f5; border-radius: 16px;
+            background: var(--tg-theme-secondary-bg-color);
+            border-radius: 16px;
             padding: 24px; text-align: center; margin: 20px 0;
         }
         .error-icon { font-size: 48px; margin-bottom: 12px; }
-        .error-title { font-size: 17px; font-weight: 600; margin-bottom: 8px; color: var(--tg-theme-destructive-text-color); }
+        .error-title { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
         .error-text { font-size: 14px; color: var(--tg-theme-hint-color); }
         
-        /* Tabs */
-        .tabs {
-            display: flex; gap: 8px;
-            overflow-x: auto; padding: 0 4px 12px;
-            -webkit-overflow-scrolling: touch;
-        }
-        .tabs::-webkit-scrollbar { display: none; }
-        .tab {
-            flex-shrink: 0;
-            padding: 8px 16px;
+        /* History Item */
+        .history-item {
+            display: flex; gap: 12px;
             background: var(--tg-theme-secondary-bg-color);
-            border-radius: 20px;
-            font-size: 14px; font-weight: 500;
+            border-radius: 14px;
+            padding: 12px;
+            margin-bottom: 10px;
             cursor: pointer;
-            transition: all 0.2s;
         }
-        .tab.active {
-            background: var(--tg-theme-button-color);
-            color: var(--tg-theme-button-text-color);
+        .history-thumb {
+            width: 60px; height: 60px;
+            border-radius: 10px;
+            background: var(--tg-theme-hint-color);
+            object-fit: cover;
         }
+        .history-info { flex: 1; }
+        .history-model { font-size: 14px; font-weight: 600; }
+        .history-status { font-size: 12px; color: var(--tg-theme-hint-color); }
+        .history-date { font-size: 11px; color: var(--tg-theme-hint-color); margin-top: 4px; }
     </style>
 </head>
 <body>
@@ -227,15 +307,15 @@
     </div>
     
     <div class="bottom-nav" id="bottomNav" style="display:none;">
-        <div class="nav-item active" onclick="showPage('home')">
+        <div class="nav-item active" onclick="goHome()">
             <div class="nav-icon">🏠</div>
             <div class="nav-label">Главная</div>
         </div>
-        <div class="nav-item" onclick="showPage('models')">
+        <div class="nav-item" onclick="showCategories()">
             <div class="nav-icon">🎨</div>
-            <div class="nav-label">Модели</div>
+            <div class="nav-label">Генерация</div>
         </div>
-        <div class="nav-item" onclick="showPage('history')">
+        <div class="nav-item" onclick="showHistory()">
             <div class="nav-icon">📋</div>
             <div class="nav-label">История</div>
         </div>
@@ -249,16 +329,22 @@
         const tg = window.Telegram.WebApp;
         tg.ready();
         tg.expand();
-        tg.enableClosingConfirmation();
         
         const API_BASE = '/webapp/api';
-        let currentPage = 'home';
         let appData = { user: null, balance: 0, models: [], categories: {} };
+        let navHistory = [];
+        let currentJobId = null;
+        let pollInterval = null;
         
-        async function apiCall(endpoint) {
+        async function apiCall(endpoint, options = {}) {
             try {
                 const response = await fetch(`${API_BASE}${endpoint}`, {
-                    headers: { 'X-Telegram-Init-Data': tg.initData || '' }
+                    ...options,
+                    headers: { 
+                        'X-Telegram-Init-Data': tg.initData || '',
+                        'Content-Type': 'application/json',
+                        ...options.headers 
+                    }
                 });
                 return await response.json();
             } catch (error) {
@@ -267,33 +353,45 @@
             }
         }
         
-        function getUser() {
-            return tg.initDataUnsafe?.user || null;
-        }
-        
-        function getInitial(name) {
-            return name ? name.charAt(0).toUpperCase() : '?';
-        }
+        function getUser() { return tg.initDataUnsafe?.user || null; }
+        function getInitial(name) { return name ? name.charAt(0).toUpperCase() : '?'; }
         
         function groupModelsByType(models) {
             const categories = {
-                'text-to-image': { name: 'Текст → Фото', icon: '🖼️', models: [] },
-                'image-to-image': { name: 'Редактор фото', icon: '🧩', models: [] },
-                'text-to-video': { name: 'Текст → Видео', icon: '🎬', models: [] },
-                'image-to-video': { name: 'Фото → Видео', icon: '🎞️', models: [] },
-                'other': { name: 'Другое', icon: '🧰', models: [] }
+                'text-to-image': { key: 'text-to-image', name: 'Текст → Фото', icon: '🖼️', desc: 'Создайте изображение по описанию', models: [] },
+                'image-to-image': { key: 'image-to-image', name: 'Редактор фото', icon: '🧩', desc: 'Измените или улучшите фото', models: [] },
+                'text-to-video': { key: 'text-to-video', name: 'Текст → Видео', icon: '🎬', desc: 'Создайте видео по сценарию', models: [] },
+                'image-to-video': { key: 'image-to-video', name: 'Фото → Видео', icon: '🎞️', desc: 'Оживите ваше изображение', models: [] },
+                'other': { key: 'other', name: 'Другое', icon: '🧰', desc: 'Специальные инструменты', models: [] }
             };
             
             (models || []).forEach(m => {
                 const type = m.type || 'other';
-                if (categories[type]) {
-                    categories[type].models.push(m);
-                } else {
-                    categories['other'].models.push(m);
-                }
+                if (categories[type]) categories[type].models.push(m);
+                else categories['other'].models.push(m);
             });
             
             return categories;
+        }
+        
+        function updateNav(active) {
+            document.querySelectorAll('.nav-item').forEach((el, i) => {
+                el.classList.toggle('active', i === active);
+            });
+        }
+        
+        function navigate(renderFn) {
+            navHistory.push(renderFn);
+            renderFn();
+        }
+        
+        function goBack() {
+            if (navHistory.length > 1) {
+                navHistory.pop();
+                navHistory[navHistory.length - 1]();
+            } else {
+                goHome();
+            }
         }
         
         async function loadApp() {
@@ -302,7 +400,7 @@
             
             if (!user) {
                 app.innerHTML = `
-                    <div class="error-card">
+                    <div class="error-card" style="margin-top: 40px;">
                         <div class="error-icon">⚠️</div>
                         <div class="error-title">Откройте через Telegram</div>
                         <div class="error-text">Это приложение работает только внутри Telegram</div>
@@ -324,12 +422,12 @@
                 appData.categories = groupModelsByType(appData.models);
                 
                 document.getElementById('bottomNav').style.display = 'flex';
-                showPage('home');
+                goHome();
                 
             } catch (e) {
                 console.error('Load error:', e);
                 app.innerHTML = `
-                    <div class="error-card">
+                    <div class="error-card" style="margin-top: 40px;">
                         <div class="error-icon">❌</div>
                         <div class="error-title">Ошибка загрузки</div>
                         <div class="error-text">${e.message}</div>
@@ -338,26 +436,16 @@
             }
         }
         
-        function showPage(page) {
-            currentPage = page;
-            document.querySelectorAll('.nav-item').forEach((el, i) => {
-                el.classList.toggle('active', ['home', 'models', 'history'][i] === page);
-            });
-            
-            const app = document.getElementById('app');
-            
-            if (page === 'home') {
-                renderHome(app);
-            } else if (page === 'models') {
-                renderModels(app);
-            } else if (page === 'history') {
-                renderHistory(app);
-            }
+        function goHome() {
+            navHistory = [];
+            updateNav(0);
+            renderHome();
         }
         
-        function renderHome(app) {
+        function renderHome() {
+            const app = document.getElementById('app');
             const user = appData.user;
-            const cats = appData.categories;
+            const cats = Object.values(appData.categories).filter(c => c.models.length > 0);
             
             app.innerHTML = `
                 <div class="header">
@@ -378,34 +466,13 @@
                     </div>
                 </div>
                 
-                <div class="quick-actions">
-                    <div class="quick-action" onclick="showPage('models')">
-                        <div class="quick-action-icon">🎨</div>
-                        <div class="quick-action-label">Генерация</div>
-                    </div>
-                    <div class="quick-action" onclick="openBot()">
-                        <div class="quick-action-icon">⚡</div>
-                        <div class="quick-action-label">Бесплатно</div>
-                    </div>
-                    <div class="quick-action" onclick="showPage('history')">
-                        <div class="quick-action-icon">📋</div>
-                        <div class="quick-action-label">История</div>
-                    </div>
-                    <div class="quick-action" onclick="openBot()">
-                        <div class="quick-action-icon">🤝</div>
-                        <div class="quick-action-label">Партнёрка</div>
-                    </div>
-                </div>
-                
                 <div class="section">
                     <div class="section-header">
-                        <div class="section-title">Категории</div>
-                        <div class="section-link" onclick="showPage('models')">Все модели →</div>
+                        <div class="section-title">Выберите тип генерации</div>
                     </div>
                     <div class="category-grid">
-                        ${Object.entries(cats).filter(([k,v]) => v.models.length > 0).slice(0, 4).map(([key, cat]) => `
-                            <div class="category-card" onclick="filterModels('${key}')">
-                                ${cat.models.some(m => m.type?.includes('free')) ? '<div class="category-badge">FREE</div>' : ''}
+                        ${cats.slice(0, 4).map(cat => `
+                            <div class="category-card" onclick="showCategoryModels('${cat.key}')">
                                 <div class="category-icon">${cat.icon}</div>
                                 <div class="category-name">${cat.name}</div>
                                 <div class="category-count">${cat.models.length} моделей</div>
@@ -414,106 +481,348 @@
                     </div>
                 </div>
                 
-                <div class="section">
-                    <div class="section-header">
-                        <div class="section-title">Популярные модели</div>
-                    </div>
-                    <div class="model-list">
-                        ${appData.models.slice(0, 5).map(m => `
-                            <div class="model-item" onclick="selectModel('${m.id}')">
-                                <div class="model-icon">${m.emoji || '🎨'}</div>
-                                <div class="model-info">
-                                    <div class="model-name">${m.name || m.id}</div>
-                                    <div class="model-type">${m.type || 'AI модель'}</div>
+                ${cats.length > 4 ? `
+                    <div class="section">
+                        <div class="category-grid">
+                            ${cats.slice(4).map(cat => `
+                                <div class="category-card" onclick="showCategoryModels('${cat.key}')">
+                                    <div class="category-icon">${cat.icon}</div>
+                                    <div class="category-name">${cat.name}</div>
+                                    <div class="category-count">${cat.models.length} моделей</div>
                                 </div>
-                                <div class="model-arrow">›</div>
-                            </div>
-                        `).join('')}
+                            `).join('')}
+                        </div>
                     </div>
-                </div>
+                ` : ''}
             `;
         }
         
-        function renderModels(app) {
-            const cats = appData.categories;
-            const types = Object.keys(cats).filter(k => cats[k].models.length > 0);
+        function showCategories() {
+            updateNav(1);
+            navigate(renderCategories);
+        }
+        
+        function renderCategories() {
+            const app = document.getElementById('app');
+            const cats = Object.values(appData.categories).filter(c => c.models.length > 0);
             
             app.innerHTML = `
-                <div style="padding-top: 16px;">
-                    <div class="section-title" style="padding: 0 4px 12px;">🎨 Все модели (${appData.models.length})</div>
-                    
-                    <div class="tabs">
-                        <div class="tab active" onclick="filterModels('all')">Все</div>
-                        ${types.map(t => `
-                            <div class="tab" onclick="filterModels('${t}')">${cats[t].icon} ${cats[t].name}</div>
-                        `).join('')}
-                    </div>
-                    
-                    <div class="model-list" id="modelList">
-                        ${appData.models.map(m => `
-                            <div class="model-item" onclick="selectModel('${m.id}')">
-                                <div class="model-icon">${m.emoji || '🎨'}</div>
-                                <div class="model-info">
-                                    <div class="model-name">${m.name || m.id}</div>
-                                    <div class="model-type">${m.type || 'AI модель'}</div>
-                                </div>
-                                <div class="model-arrow">›</div>
-                            </div>
-                        `).join('')}
-                    </div>
+                <div class="page-header">
+                    <div class="page-title">🎨 Выберите категорию</div>
+                </div>
+                <div class="category-grid">
+                    ${cats.map(cat => `
+                        <div class="category-card" onclick="showCategoryModels('${cat.key}')">
+                            <div class="category-icon">${cat.icon}</div>
+                            <div class="category-name">${cat.name}</div>
+                            <div class="category-count">${cat.models.length} моделей</div>
+                        </div>
+                    `).join('')}
                 </div>
             `;
         }
         
-        function renderHistory(app) {
+        function showCategoryModels(categoryKey) {
+            updateNav(1);
+            navigate(() => renderCategoryModels(categoryKey));
+        }
+        
+        function renderCategoryModels(categoryKey) {
+            const app = document.getElementById('app');
+            const cat = appData.categories[categoryKey];
+            
+            if (!cat) { goHome(); return; }
+            
             app.innerHTML = `
-                <div style="padding-top: 16px;">
-                    <div class="section-title" style="padding: 0 4px 16px;">📋 История генераций</div>
-                    <div class="error-card" style="background: var(--tg-theme-secondary-bg-color);">
-                        <div class="error-icon">📭</div>
-                        <div class="error-title" style="color: var(--tg-theme-text-color);">Пока пусто</div>
-                        <div class="error-text">Ваши генерации появятся здесь</div>
-                    </div>
+                <div class="page-header">
+                    <button class="back-btn" onclick="goBack()">←</button>
+                    <div class="page-title">${cat.icon} ${cat.name}</div>
+                </div>
+                <div class="model-list">
+                    ${cat.models.map(m => `
+                        <div class="model-item" onclick="showModelForm('${m.id}')">
+                            <div class="model-icon">${m.emoji || '🎨'}</div>
+                            <div class="model-info">
+                                <div class="model-name">${m.name || m.id}</div>
+                                <div class="model-desc">${m.id}</div>
+                            </div>
+                            <div class="model-price">›</div>
+                        </div>
+                    `).join('')}
                 </div>
             `;
         }
         
-        function filterModels(type) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            event.target.classList.add('active');
+        async function showModelForm(modelId) {
+            updateNav(1);
+            navigate(() => renderModelForm(modelId));
+        }
+        
+        async function renderModelForm(modelId) {
+            const app = document.getElementById('app');
             
-            const list = document.getElementById('modelList');
-            if (!list) { showPage('models'); return; }
+            app.innerHTML = `
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text">Загрузка модели...</div>
+                </div>
+            `;
             
-            let models = appData.models;
-            if (type !== 'all') {
-                models = appData.categories[type]?.models || [];
+            const modelInfo = await apiCall(`/models/${modelId}`);
+            
+            if (modelInfo.error) {
+                app.innerHTML = `
+                    <div class="page-header">
+                        <button class="back-btn" onclick="goBack()">←</button>
+                        <div class="page-title">Ошибка</div>
+                    </div>
+                    <div class="error-card">
+                        <div class="error-icon">❌</div>
+                        <div class="error-title">Модель не найдена</div>
+                        <div class="error-text">${modelInfo.error}</div>
+                    </div>
+                `;
+                return;
             }
             
-            list.innerHTML = models.map(m => `
-                <div class="model-item" onclick="selectModel('${m.id}')">
-                    <div class="model-icon">${m.emoji || '🎨'}</div>
-                    <div class="model-info">
-                        <div class="model-name">${m.name || m.id}</div>
-                        <div class="model-type">${m.type || 'AI модель'}</div>
-                    </div>
-                    <div class="model-arrow">›</div>
+            const requiresImage = modelInfo.requires_image;
+            
+            app.innerHTML = `
+                <div class="page-header">
+                    <button class="back-btn" onclick="goBack()">←</button>
+                    <div class="page-title">${modelInfo.emoji || '🎨'} ${modelInfo.name || modelId}</div>
                 </div>
-            `).join('');
+                
+                <div class="price-card">
+                    <div>
+                        <div class="price-label">Стоимость генерации</div>
+                        <div style="font-size: 12px; color: var(--tg-theme-hint-color);">Баланс: ${appData.balance.toFixed(2)} ₽</div>
+                    </div>
+                    <div class="price-value">${(modelInfo.price || 0).toFixed(2)} ₽</div>
+                </div>
+                
+                <form id="genForm" onsubmit="submitGeneration(event, '${modelId}')">
+                    <div class="form-group">
+                        <label class="form-label">✍️ Опишите что хотите создать</label>
+                        <textarea 
+                            class="form-input form-textarea" 
+                            id="promptInput"
+                            placeholder="Например: Красивый закат над морем, яркие краски, реалистичный стиль..."
+                            required
+                        ></textarea>
+                    </div>
+                    
+                    ${requiresImage ? `
+                        <div class="error-card" style="margin-bottom: 16px;">
+                            <div class="error-icon">📷</div>
+                            <div class="error-title">Требуется изображение</div>
+                            <div class="error-text">Для этой модели нужно загрузить фото. Используйте бота для загрузки.</div>
+                            <button type="button" class="btn btn-secondary" style="margin-top: 12px;" onclick="openBot()">
+                                Открыть в боте
+                            </button>
+                        </div>
+                    ` : `
+                        <button type="submit" class="btn" id="submitBtn">
+                            ✨ Сгенерировать за ${(modelInfo.price || 0).toFixed(2)} ₽
+                        </button>
+                    `}
+                </form>
+            `;
         }
         
-        function selectModel(modelId) {
-            tg.showConfirm(
-                `Открыть модель "${modelId}" в боте?`,
-                (confirmed) => {
-                    if (confirmed) openBot();
+        async function submitGeneration(event, modelId) {
+            event.preventDefault();
+            
+            const prompt = document.getElementById('promptInput').value.trim();
+            if (!prompt) {
+                tg.showAlert('Введите описание для генерации');
+                return;
+            }
+            
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = '⏳ Отправка...';
+            
+            const result = await apiCall('/generate', {
+                method: 'POST',
+                body: JSON.stringify({
+                    model_id: modelId,
+                    prompt: prompt,
+                    params: {}
+                })
+            });
+            
+            if (result.error) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '✨ Сгенерировать';
+                
+                if (result.error === 'Insufficient balance') {
+                    tg.showAlert(`Недостаточно средств!\n\nНужно: ${result.price} ₽\nБаланс: ${result.balance} ₽`);
+                } else {
+                    tg.showAlert(`Ошибка: ${result.error}`);
                 }
-            );
+                return;
+            }
+            
+            currentJobId = result.job_id;
+            navigate(() => renderGenerating(modelId, result.job_id));
+        }
+        
+        function renderGenerating(modelId, jobId) {
+            const app = document.getElementById('app');
+            
+            app.innerHTML = `
+                <div class="status-card">
+                    <div class="status-spinner"></div>
+                    <div class="status-title">Генерация...</div>
+                    <div class="status-text">Это может занять от 10 секунд до нескольких минут</div>
+                    <div style="margin-top: 20px; font-size: 12px; color: var(--tg-theme-hint-color);">
+                        ID: ${jobId}
+                    </div>
+                </div>
+            `;
+            
+            // Start polling
+            if (pollInterval) clearInterval(pollInterval);
+            pollInterval = setInterval(() => pollJobStatus(jobId), 3000);
+            
+            // Also poll immediately
+            setTimeout(() => pollJobStatus(jobId), 1000);
+        }
+        
+        async function pollJobStatus(jobId) {
+            const result = await apiCall(`/jobs/${jobId}`);
+            
+            if (result.error && result.error !== 'Job not found') {
+                // Still processing
+                return;
+            }
+            
+            if (result.status === 'completed' || result.status === 'success') {
+                if (pollInterval) clearInterval(pollInterval);
+                renderResult(result);
+            } else if (result.status === 'failed') {
+                if (pollInterval) clearInterval(pollInterval);
+                renderError(result.error || 'Генерация не удалась');
+            }
+            // If pending, continue polling
+        }
+        
+        function renderResult(job) {
+            const app = document.getElementById('app');
+            const isVideo = job.result_url && (job.result_url.includes('.mp4') || job.result_url.includes('video'));
+            
+            app.innerHTML = `
+                <div class="page-header">
+                    <button class="back-btn" onclick="goHome()">←</button>
+                    <div class="page-title">✨ Результат</div>
+                </div>
+                
+                <div class="result-card">
+                    ${isVideo ? `
+                        <video class="result-video" src="${job.result_url}" controls autoplay loop></video>
+                    ` : `
+                        <img class="result-image" src="${job.result_url}" alt="Result" />
+                    `}
+                </div>
+                
+                <button class="btn" onclick="window.open('${job.result_url}', '_blank')">
+                    📥 Скачать
+                </button>
+                <button class="btn btn-secondary" onclick="goHome()">
+                    🏠 На главную
+                </button>
+            `;
+        }
+        
+        function renderError(errorMsg) {
+            const app = document.getElementById('app');
+            
+            app.innerHTML = `
+                <div class="page-header">
+                    <button class="back-btn" onclick="goHome()">←</button>
+                    <div class="page-title">Ошибка</div>
+                </div>
+                
+                <div class="error-card">
+                    <div class="error-icon">😔</div>
+                    <div class="error-title">Генерация не удалась</div>
+                    <div class="error-text">${errorMsg}</div>
+                </div>
+                
+                <button class="btn" onclick="goBack()">
+                    🔄 Попробовать снова
+                </button>
+                <button class="btn btn-secondary" onclick="goHome()">
+                    🏠 На главную
+                </button>
+            `;
+        }
+        
+        function showHistory() {
+            updateNav(2);
+            navigate(renderHistory);
+        }
+        
+        async function renderHistory() {
+            const app = document.getElementById('app');
+            
+            app.innerHTML = `
+                <div class="page-header">
+                    <div class="page-title">📋 История генераций</div>
+                </div>
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                </div>
+            `;
+            
+            const result = await apiCall(`/user/${appData.user.id}/history`);
+            const history = result.history || [];
+            
+            if (history.length === 0) {
+                app.innerHTML = `
+                    <div class="page-header">
+                        <div class="page-title">📋 История генераций</div>
+                    </div>
+                    <div class="error-card">
+                        <div class="error-icon">📭</div>
+                        <div class="error-title">Пока пусто</div>
+                        <div class="error-text">Ваши генерации появятся здесь</div>
+                    </div>
+                    <button class="btn" onclick="showCategories()">
+                        🎨 Создать генерацию
+                    </button>
+                `;
+                return;
+            }
+            
+            app.innerHTML = `
+                <div class="page-header">
+                    <div class="page-title">📋 История генераций</div>
+                </div>
+                ${history.map(h => `
+                    <div class="history-item" onclick="${h.result_url ? `window.open('${h.result_url}', '_blank')` : ''}">
+                        ${h.result_url ? `<img class="history-thumb" src="${h.result_url}" />` : '<div class="history-thumb"></div>'}
+                        <div class="history-info">
+                            <div class="history-model">${h.model_id || 'Неизвестно'}</div>
+                            <div class="history-status">${h.status === 'completed' ? '✅ Готово' : h.status === 'failed' ? '❌ Ошибка' : '⏳ В процессе'}</div>
+                            <div class="history-date">${h.created_at || ''}</div>
+                        </div>
+                    </div>
+                `).join('')}
+            `;
         }
         
         function openBot() {
             tg.close();
         }
+        
+        // Cleanup on close
+        tg.onEvent('viewportChanged', () => {
+            if (tg.viewportHeight === 0 && pollInterval) {
+                clearInterval(pollInterval);
+            }
+        });
         
         loadApp();
     </script>
