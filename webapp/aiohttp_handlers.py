@@ -613,6 +613,8 @@ async def webapp_generate(request: web.Request) -> web.Response:
         
         # CRITICAL: Save job to unified storage IMMEDIATELY so it can be polled
         model_name = getattr(spec, "name", model_id)
+        logger.info("WEBAPP_JOB_CREATE job_id=%s user_id=%s model_id=%s partner_id=%s", 
+                    job_id, user_id, model_id, getattr(storage, 'partner_id', 'unknown'))
         await storage.add_generation_job(
             job_id=job_id,
             user_id=user_id,
@@ -625,6 +627,7 @@ async def webapp_generate(request: web.Request) -> web.Response:
             status="pending",
             is_free=is_free_generation,
         )
+        logger.info("WEBAPP_JOB_CREATED job_id=%s", job_id)
         
         # Start generation in background
         import asyncio
@@ -745,7 +748,9 @@ async def webapp_job_status(request: web.Request) -> web.Response:
         
         # Use unified storage.get_job instead of separate webapp_jobs
         job = await storage.get_job(job_id)
+        logger.debug("WEBAPP_JOB_STATUS job_id=%s found=%s partner_id=%s", job_id, job is not None, getattr(storage, 'partner_id', 'unknown'))
         if not job:
+            logger.warning("WEBAPP_JOB_NOT_FOUND job_id=%s", job_id)
             return web.json_response({"error": "Job not found"}, status=404)
         
         # UX-friendly status mapping
