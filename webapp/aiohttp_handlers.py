@@ -560,7 +560,8 @@ async def webapp_generate(request: web.Request) -> web.Response:
         # Check balance only if not a free generation
         if not is_free_generation and balance < price:
             return web.json_response({
-                "error": "Insufficient balance",
+                "error": "Недостаточно средств",
+                "error_en": "Insufficient balance",
                 "balance": float(balance),
                 "price": price,
             }, status=402)

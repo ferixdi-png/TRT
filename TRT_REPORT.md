@@ -1,5 +1,76 @@
 # TRT_REPORT.md
 
+## ✅ 2026-02-09 UX NEWBIE + DEDUCTIONS + MINI APP AUDIT
+
+### СТАТУС: GO
+
+### Фокус сессии:
+1. **UX новичка** — 60 секунд до первой генерации
+2. **Корректность списаний** — ровно 1 раз
+3. **Mini App** — одинаковые тексты и логика с ботом
+
+---
+
+### 1. UX новичка ✅
+
+| Компонент | Статус | Детали |
+|-----------|--------|--------|
+| Подсказки ввода | ✅ OK | `input_schema.py`: placeholder, hint, example |
+| Шаги генерации | ✅ OK | "Шаг 1 · Промпт", "Опишите изображение" |
+| Прогресс | ✅ OK | `progress_callback`, "⏳ Генерирую ~30 сек" |
+| Результат | ✅ OK | Отправка через `send_result_file` |
+
+---
+
+### 2. Корректность списаний ✅
+
+| Механизм | Статус | Детали |
+|----------|--------|--------|
+| Bot: `_charge_balance_once` | ✅ OK | Deduplication по task_id |
+| Webapp: `charge_balance_once` | ✅ OK | Deduplication по task_id |
+| Free: `consume_free_generation_once` | ✅ OK | Deduplication по task_id |
+| DB Lock | ✅ OK | `FOR UPDATE` в PostgreSQL |
+| Charge timing | ✅ OK | ТОЛЬКО после успешного результата |
+
+---
+
+### 3. Mini App ↔ Bot ✅
+
+| Аспект | Статус | Детали |
+|--------|--------|--------|
+| UX Schema | ✅ OK | Общий `get_ux_schema_for_webapp` |
+| Тексты ошибок | ✅ FIXED | Добавлен RU для "Недостаточно средств" |
+| Логика списания | ✅ OK | Одинаковый `charge_balance_once` |
+| Модели/Цены | ✅ OK | Общий `kie_catalog` + `price_resolver` |
+
+---
+
+### Исправлено в этой сессии:
+
+1. ✅ **Недостаточно средств** — унифицирован текст RU/EN в webapp
+2. ✅ **Path traversal** — защита в upload (regex + resolve)
+3. ✅ **File size limit** — MAX_UPLOAD_SIZE = 20MB
+4. ✅ **prompt optional для i2v** — не требуется для image-to-video
+5. ✅ **is_free в retry job** — передаётся корректно
+6. ✅ **asyncio task naming** — для отладки
+7. ✅ **int() exception handling** — для user_id
+
+---
+
+### Коммиты:
+```
+7bdacedf fix: TOP-9 critical issues in webapp
+6363dbc5 docs: add system audit artifacts
+```
+
+### Артефакты:
+- `TRT_SYSTEM_AUDIT.md` — системная карта + ТОП-10 рисков
+- `UX_MAP.md` — user journeys bot ↔ webapp
+- `JOB_PIPELINE.md` — job lifecycle + states
+- `ENV_CHECKLIST.md` — required ENV + fail-fast
+
+---
+
 ## ✅ 2026-01-28 FINAL STABILIZATION (SESSION 10-11)
 
 ### СТАТУС: GO — 669 ТЕСТОВ ПРОХОДЯТ
