@@ -13,6 +13,9 @@ from webapp.api.auth import validate_webapp_data, get_user_id_from_init_data
 
 logger = logging.getLogger(__name__)
 
+# CRITICAL: Store background tasks to prevent GC from collecting them before completion
+_background_tasks: set = set()
+
 WEBAPP_STATIC_DIR = Path(__file__).parent / "static"
 
 
@@ -691,8 +694,10 @@ async def webapp_generate(request: web.Request) -> web.Response:
                 )
         
         task = asyncio.create_task(run_gen(), name=f"webapp_gen_{job_id}")
-        # Log task creation for debugging
-        logger.info("Generation task created: %s for job %s", task.get_name(), job_id)
+        # CRITICAL: Store task in set to prevent GC from collecting it before completion
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
+        logger.info("Generation task created: %s for job %s (tasks_count=%d)", task.get_name(), job_id, len(_background_tasks))
         
         return web.json_response({
             "ok": True,
