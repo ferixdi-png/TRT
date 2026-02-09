@@ -1,0 +1,293 @@
+# Model UX Descriptions Catalog
+# Single source of truth for Bot and Mini App
+# RU/EN localization
+
+models:
+  # === VIDEO MODELS ===
+  
+  sora-2-text-to-video:
+    title_ru: "Sora 2 — Видео из текста"
+    title_en: "Sora 2 — Text to Video"
+    one_liner_ru: "Создаёт реалистичное видео по текстовому описанию"
+    one_liner_en: "Creates realistic video from text description"
+    best_for_ru:
+      - "Рекламные ролики и промо"
+      - "Визуализация идей для презентаций"
+      - "Контент для соцсетей"
+    best_for_en:
+      - "Ads and promo videos"
+      - "Idea visualization for presentations"
+      - "Social media content"
+    you_need_ru: "Текстовое описание сцены"
+    you_need_en: "Text description of the scene"
+    you_get_ru: "Видео 10-15 секунд в формате MP4"
+    you_get_en: "10-15 second video in MP4 format"
+    price_hint_ru: "Цена зависит от длительности видео"
+    price_hint_en: "Price depends on video duration"
+
+  sora-2-image-to-video:
+    title_ru: "Sora 2 — Видео из фото"
+    title_en: "Sora 2 — Image to Video"
+    one_liner_ru: "Оживляет статичное изображение в видео"
+    one_liner_en: "Animates a static image into video"
+    best_for_ru:
+      - "Оживление фотографий"
+      - "Анимация иллюстраций"
+      - "Динамичные посты из картинок"
+    best_for_en:
+      - "Bringing photos to life"
+      - "Animating illustrations"
+      - "Dynamic posts from images"
+    you_need_ru: "Фото + описание движения"
+    you_need_en: "Photo + motion description"
+    you_get_ru: "Видео 10-15 секунд в формате MP4"
+    you_get_en: "10-15 second video in MP4 format"
+    price_hint_ru: "Цена зависит от длительности видео"
+    price_hint_en: "Price depends on video duration"
+
+  google/veo-3.1:
+    title_ru: "Google Veo 3.1"
+    title_en: "Google Veo 3.1"
+    one_liner_ru: "Видео от Google с кинематографическим качеством"
+    one_liner_en: "Cinematic quality video from Google"
+    best_for_ru:
+      - "Высококачественные видеоролики"
+      - "Креативные проекты"
+      - "Профессиональный контент"
+    best_for_en:
+      - "High-quality video clips"
+      - "Creative projects"
+      - "Professional content"
+    you_need_ru: "Текст или изображение"
+    you_need_en: "Text or image"
+    you_get_ru: "Видео до 4K разрешения"
+    you_get_en: "Video up to 4K resolution"
+    price_hint_ru: "Цена зависит от режима (Fast/Quality) и разрешения"
+    price_hint_en: "Price depends on mode (Fast/Quality) and resolution"
+
+  runway/gen-4:
+    title_ru: "Runway Gen-4"
+    title_en: "Runway Gen-4"
+    one_liner_ru: "Профессиональная видеогенерация для креативщиков"
+    one_liner_en: "Professional video generation for creatives"
+    best_for_ru:
+      - "Рекламные ролики"
+      - "Музыкальные клипы"
+      - "Художественные проекты"
+    best_for_en:
+      - "Commercial videos"
+      - "Music videos"
+      - "Art projects"
+    you_need_ru: "Текст или изображение"
+    you_need_en: "Text or image"
+    you_get_ru: "Видео 5-10 секунд, 720p/1080p"
+    you_get_en: "5-10 second video, 720p/1080p"
+    price_hint_ru: "Цена зависит от длительности и разрешения"
+    price_hint_en: "Price depends on duration and resolution"
+
+  runway/aleph:
+    title_ru: "Runway Aleph"
+    title_en: "Runway Aleph"
+    one_liner_ru: "Флагманская модель Runway с максимальным качеством"
+    one_liner_en: "Runway's flagship model with maximum quality"
+    best_for_ru:
+      - "Премиум видеоконтент"
+      - "Кинематографические эффекты"
+      - "Профессиональная продукция"
+    best_for_en:
+      - "Premium video content"
+      - "Cinematic effects"
+      - "Professional production"
+    you_need_ru: "Текстовое описание"
+    you_need_en: "Text description"
+    you_get_ru: "Видео высочайшего качества"
+    you_get_en: "Highest quality video"
+    price_hint_ru: "Фиксированная цена за видео"
+    price_hint_en: "Fixed price per video"
+
+  grok/imagine:
+    title_ru: "Grok Imagine Video"
+    title_en: "Grok Imagine Video"
+    one_liner_ru: "Быстрая генерация видео от xAI"
+    one_liner_en: "Fast video generation from xAI"
+    best_for_ru:
+      - "Быстрые видео для соцсетей"
+      - "Эксперименты с идеями"
+      - "Короткие клипы"
+    best_for_en:
+      - "Quick social media videos"
+      - "Experimenting with ideas"
+      - "Short clips"
+    you_need_ru: "Изображение + описание"
+    you_need_en: "Image + description"
+    you_get_ru: "Видео 6-10 секунд"
+    you_get_en: "6-10 second video"
+    price_hint_ru: "Цена зависит от длительности"
+    price_hint_en: "Price depends on duration"
+
+  # === IMAGE MODELS ===
+
+  openai/4o-image:
+    title_ru: "OpenAI 4o Image"
+    title_en: "OpenAI 4o Image"
+    one_liner_ru: "Генерация и редактирование изображений от OpenAI"
+    one_liner_en: "Image generation and editing from OpenAI"
+    best_for_ru:
+      - "Создание иллюстраций"
+      - "Редактирование фото"
+      - "Генерация вариаций"
+    best_for_en:
+      - "Creating illustrations"
+      - "Photo editing"
+      - "Generating variations"
+    you_need_ru: "Текстовое описание"
+    you_need_en: "Text description"
+    you_get_ru: "Изображение в формате PNG"
+    you_get_en: "Image in PNG format"
+    price_hint_ru: "Фиксированная цена за изображение"
+    price_hint_en: "Fixed price per image"
+
+  flux/kontext:
+    title_ru: "Flux Kontext"
+    title_en: "Flux Kontext"
+    one_liner_ru: "Редактирование изображений с пониманием контекста"
+    one_liner_en: "Context-aware image editing"
+    best_for_ru:
+      - "Редактирование товарных фото"
+      - "Изменение стиля изображений"
+      - "Маркетинговые материалы"
+    best_for_en:
+      - "Product photo editing"
+      - "Changing image style"
+      - "Marketing materials"
+    you_need_ru: "Изображение + описание изменений"
+    you_need_en: "Image + description of changes"
+    you_get_ru: "Отредактированное изображение"
+    you_get_en: "Edited image"
+    price_hint_ru: "Цена зависит от качества (Pro/Max)"
+    price_hint_en: "Price depends on quality (Pro/Max)"
+
+  google/nano-banana:
+    title_ru: "Imagen 3"
+    title_en: "Imagen 3"
+    one_liner_ru: "Фотореалистичные изображения от Google"
+    one_liner_en: "Photorealistic images from Google"
+    best_for_ru:
+      - "Реалистичные фото"
+      - "Портреты и пейзажи"
+      - "Качественные иллюстрации"
+    best_for_en:
+      - "Realistic photos"
+      - "Portraits and landscapes"
+      - "Quality illustrations"
+    you_need_ru: "Текстовое описание"
+    you_need_en: "Text description"
+    you_get_ru: "Изображение высокого качества"
+    you_get_en: "High quality image"
+    price_hint_ru: "Фиксированная цена за изображение"
+    price_hint_en: "Fixed price per image"
+
+  # === AUDIO MODELS ===
+
+  suno/v5:
+    title_ru: "Suno V5 Music"
+    title_en: "Suno V5 Music"
+    one_liner_ru: "Генерация музыки и песен из текста"
+    one_liner_en: "Music and song generation from text"
+    best_for_ru:
+      - "Создание музыки для видео"
+      - "Песни с вокалом"
+      - "Фоновая музыка"
+    best_for_en:
+      - "Music for videos"
+      - "Songs with vocals"
+      - "Background music"
+    you_need_ru: "Описание стиля и настроения"
+    you_need_en: "Style and mood description"
+    you_get_ru: "Аудио трек в формате MP3"
+    you_get_en: "Audio track in MP3 format"
+    price_hint_ru: "Цена зависит от операции"
+    price_hint_en: "Price depends on operation"
+
+  elevenlabs/tts-turbo-2-5:
+    title_ru: "ElevenLabs TTS Turbo"
+    title_en: "ElevenLabs TTS Turbo"
+    one_liner_ru: "Быстрое озвучивание текста"
+    one_liner_en: "Fast text-to-speech"
+    best_for_ru:
+      - "Озвучка видео"
+      - "Аудиокниги"
+      - "Голосовые ассистенты"
+    best_for_en:
+      - "Video voiceover"
+      - "Audiobooks"
+      - "Voice assistants"
+    you_need_ru: "Текст для озвучки"
+    you_need_en: "Text to voice"
+    you_get_ru: "Аудио файл с речью"
+    you_get_en: "Audio file with speech"
+    price_hint_ru: "Цена за 1000 символов"
+    price_hint_en: "Price per 1000 characters"
+
+  # === CHAT MODELS ===
+
+  gemini/3-flash:
+    title_ru: "Gemini 3 Flash"
+    title_en: "Gemini 3 Flash"
+    one_liner_ru: "Быстрый чат-ассистент от Google"
+    one_liner_en: "Fast chat assistant from Google"
+    best_for_ru:
+      - "Быстрые ответы на вопросы"
+      - "Анализ текста"
+      - "Простые задачи"
+    best_for_en:
+      - "Quick answers"
+      - "Text analysis"
+      - "Simple tasks"
+    you_need_ru: "Ваш вопрос или задача"
+    you_need_en: "Your question or task"
+    you_get_ru: "Текстовый ответ"
+    you_get_en: "Text response"
+    price_hint_ru: "Цена за 1M токенов (вход/выход)"
+    price_hint_en: "Price per 1M tokens (input/output)"
+
+  gemini/3-pro:
+    title_ru: "Gemini 3 Pro"
+    title_en: "Gemini 3 Pro"
+    one_liner_ru: "Мощный чат-ассистент для сложных задач"
+    one_liner_en: "Powerful chat assistant for complex tasks"
+    best_for_ru:
+      - "Сложный анализ"
+      - "Написание текстов"
+      - "Профессиональные задачи"
+    best_for_en:
+      - "Complex analysis"
+      - "Writing content"
+      - "Professional tasks"
+    you_need_ru: "Ваш вопрос или задача"
+    you_need_en: "Your question or task"
+    you_get_ru: "Развёрнутый текстовый ответ"
+    you_get_en: "Detailed text response"
+    price_hint_ru: "Цена за 1M токенов (вход/выход)"
+    price_hint_en: "Price per 1M tokens (input/output)"
+
+# Default fallback for models without descriptions
+default:
+  title_ru: "AI Модель"
+  title_en: "AI Model"
+  one_liner_ru: "Генерация контента с помощью ИИ"
+  one_liner_en: "AI-powered content generation"
+  best_for_ru:
+    - "Создание контента"
+    - "Автоматизация задач"
+    - "Творческие проекты"
+  best_for_en:
+    - "Content creation"
+    - "Task automation"
+    - "Creative projects"
+  you_need_ru: "Входные данные согласно модели"
+  you_need_en: "Input data according to model"
+  you_get_ru: "Результат генерации"
+  you_get_en: "Generation result"
+  price_hint_ru: "Цена уточняется"
+  price_hint_en: "Pricing TBD"

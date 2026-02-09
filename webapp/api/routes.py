@@ -128,6 +128,40 @@ async def get_model_info(model_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@webapp_api.get("/api/models/{model_id}/intro")
+async def get_model_intro(
+    model_id: str,
+    lang: str = "ru",
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data")
+):
+    """Get Model Intro Card data for Mini App."""
+    try:
+        from app.model_descriptions import get_intro_card_data
+        from app.pricing.price_ssot import list_model_skus
+        
+        # Get first SKU price if available
+        price_rub = None
+        unit = None
+        skus = list_model_skus(model_id)
+        if skus:
+            price_rub = float(skus[0].price_rub)
+            unit = skus[0].unit
+        
+        return get_intro_card_data(model_id, lang=lang, price_rub=price_rub, unit=unit)
+    except Exception as e:
+        logger.error("Failed to get intro for model %s: %s", model_id, e)
+        return {
+            "model_id": model_id,
+            "lang": lang,
+            "title": model_id,
+            "one_liner": "",
+            "best_for": [],
+            "you_need": "",
+            "you_get": "",
+            "price_hint": "Цена уточняется" if lang == "ru" else "Pricing TBD",
+        }
+
+
 @webapp_api.get("/api/user/{user_id}/history")
 async def get_user_history(
     user_id: int,

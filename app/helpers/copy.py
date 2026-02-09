@@ -257,6 +257,8 @@ def build_step1_prompt_text(
     correlation_id: str | None = None,
     user_lang: str = "ru",
 ) -> str:
+    from app.model_descriptions import format_intro_card
+    
     model_short, model_fallback, _ = _resolve_model_short(model_id, correlation_id, user_lang)
     sku_short, sku_fallback, _ = _resolve_sku_short(model_id, sku, correlation_id, user_lang)
 
@@ -314,11 +316,18 @@ def build_step1_prompt_text(
         correlation_id,
     )
 
+    # Build Model Intro Card
+    intro_card = format_intro_card(
+        model_id,
+        lang=user_lang,
+        price_rub=float(display_price) if display_price else None,
+        unit=_resolve_sku_unit(sku),
+    )
+    
     if user_lang == "en":
         lines = [
+            intro_card,
             "📝 Step 1/3: Enter prompt:",
-            model_short,
-            sku_short,
             "Max length: 5000 characters",
             "💡 Format: text",
             "💡 What to do:",
@@ -327,9 +336,8 @@ def build_step1_prompt_text(
         ]
     else:
         lines = [
+            intro_card,
             "📝 Шаг 1/3: Введите prompt:",
-            model_short,
-            sku_short,
             "Макс. длина: 5000 символов",
             "💡 Формат: текст",
             "💡 Что делать:",
@@ -340,3 +348,14 @@ def build_step1_prompt_text(
 
     text = "\n".join(line for line in lines if line)
     return text
+
+
+def _resolve_sku_unit(sku: Any) -> str:
+    """Extract unit from SKU for price display."""
+    if sku is None:
+        return "ед."
+    if hasattr(sku, "unit"):
+        return str(sku.unit) or "ед."
+    if isinstance(sku, dict):
+        return sku.get("unit", "ед.")
+    return "ед."
