@@ -1764,19 +1764,10 @@ models:
         params:
           instrumental: false
         notes: Generate Music false
-      - unit: generation
-        price_rub: 9.25
-        params:
-          instrumental: "true"
-        notes: Generate Instrumental string
-      - unit: generation
-        price_rub: 9.25
-        params:
-          instrumental: "True"
-        notes: Generate Instrumental Python
       - unit: request
         price_rub: 0.31
-        params: {}
+        params:
+          action: lyrics
         notes: Generate Lyrics
   - id: google/veo-3.1
     skus:
