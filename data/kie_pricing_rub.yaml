@@ -1648,6 +1648,54 @@ models:
         price_rub: 84.76
         params: {}
         notes: per video
+  - id: gemini/3-flash
+    skus:
+      - unit: 1m_tokens
+        price_rub: 23.12
+        params:
+          type: input
+        notes: Input per 1M tokens
+      - unit: 1m_tokens
+        price_rub: 138.69
+        params:
+          type: output
+        notes: Output per 1M tokens
+  - id: gemini/3-pro
+    skus:
+      - unit: 1m_tokens
+        price_rub: 77.05
+        params:
+          type: input
+        notes: Input per 1M tokens
+      - unit: 1m_tokens
+        price_rub: 539.35
+        params:
+          type: output
+        notes: Output per 1M tokens
+  - id: gemini/2-5-flash
+    skus:
+      - unit: 1m_tokens
+        price_rub: 13.87
+        params:
+          type: input
+        notes: Input per 1M tokens
+      - unit: 1m_tokens
+        price_rub: 115.58
+        params:
+          type: output
+        notes: Output per 1M tokens
+  - id: gemini/2-5-pro
+    skus:
+      - unit: 1m_tokens
+        price_rub: 58.56
+        params:
+          type: input
+        notes: Input per 1M tokens
+      - unit: 1m_tokens
+        price_rub: 462.30
+        params:
+          type: output
+        notes: Output per 1M tokens
   - id: elevenlabs/text-to-dialogue-v3
     skus:
       - unit: 1000_characters

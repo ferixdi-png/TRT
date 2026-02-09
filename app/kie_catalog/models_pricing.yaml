@@ -1114,3 +1114,59 @@ models:
     notes: Style Boost
   description_ru: ⭐ ТОП МОДЕЛЬ! Suno V5 — генерация музыки из текста. Создание треков,
     расширение, добавление вокала/инструментов, отделение голоса, конвертация.
+- id: gemini/3-flash
+  title_ru: Gemini 3 Flash
+  type: text_to_chat
+  modes:
+  - unit: 1m_tokens
+    credits: 30.0
+    official_usd: 0.15
+    notes: Input
+  - unit: 1m_tokens
+    credits: 180.0
+    official_usd: 0.90
+    notes: Output
+  description_ru: Google Gemini 3 Flash — быстрая chat модель. Оптимальный баланс
+    скорости и качества для диалогов и анализа.
+- id: gemini/3-pro
+  title_ru: Gemini 3 Pro
+  type: text_to_chat
+  modes:
+  - unit: 1m_tokens
+    credits: 100.0
+    official_usd: 0.50
+    notes: Input
+  - unit: 1m_tokens
+    credits: 700.0
+    official_usd: 3.50
+    notes: Output
+  description_ru: Google Gemini 3 Pro — профессиональная chat модель. Максимальное
+    качество для сложных задач и глубокого анализа.
+- id: gemini/2-5-flash
+  title_ru: Gemini 2.5 Flash
+  type: text_to_chat
+  modes:
+  - unit: 1m_tokens
+    credits: 18.0
+    official_usd: 0.09
+    notes: Input
+  - unit: 1m_tokens
+    credits: 150.0
+    official_usd: 0.75
+    notes: Output
+  description_ru: Google Gemini 2.5 Flash — экономичная chat модель. Быстрые ответы
+    для простых задач.
+- id: gemini/2-5-pro
+  title_ru: Gemini 2.5 Pro
+  type: text_to_chat
+  modes:
+  - unit: 1m_tokens
+    credits: 76.0
+    official_usd: 0.38
+    notes: Input
+  - unit: 1m_tokens
+    credits: 600.0
+    official_usd: 3.00
+    notes: Output
+  description_ru: Google Gemini 2.5 Pro — продвинутая chat модель. Качественные
+    ответы для профессиональных задач.

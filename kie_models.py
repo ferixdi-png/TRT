@@ -2884,6 +2884,70 @@ KIE_MODELS = [
         }
     },
     {
+        "id": "gemini/3-flash",
+        "name": "Gemini 3 Flash",
+        "description": "Google Gemini 3 Flash — быстрая chat модель. Оптимальный баланс скорости и качества для диалогов и анализа.",
+        "category": "Chat",
+        "emoji": "⚡",
+        "pricing": "30-180 кредитов/1M tokens (Input: $0.15, Output: $0.90)",
+        "input_params": {
+            "prompt": {
+                "type": "string",
+                "description": "Текст запроса",
+                "required": True,
+                "max_length": 100000
+            }
+        }
+    },
+    {
+        "id": "gemini/3-pro",
+        "name": "Gemini 3 Pro",
+        "description": "Google Gemini 3 Pro — профессиональная chat модель. Максимальное качество для сложных задач и глубокого анализа.",
+        "category": "Chat",
+        "emoji": "🧠",
+        "pricing": "100-700 кредитов/1M tokens (Input: $0.50, Output: $3.50)",
+        "input_params": {
+            "prompt": {
+                "type": "string",
+                "description": "Текст запроса",
+                "required": True,
+                "max_length": 100000
+            }
+        }
+    },
+    {
+        "id": "gemini/2-5-flash",
+        "name": "Gemini 2.5 Flash",
+        "description": "Google Gemini 2.5 Flash — экономичная chat модель. Быстрые ответы для простых задач.",
+        "category": "Chat",
+        "emoji": "💨",
+        "pricing": "18-150 кредитов/1M tokens (Input: $0.09, Output: $0.75)",
+        "input_params": {
+            "prompt": {
+                "type": "string",
+                "description": "Текст запроса",
+                "required": True,
+                "max_length": 100000
+            }
+        }
+    },
+    {
+        "id": "gemini/2-5-pro",
+        "name": "Gemini 2.5 Pro",
+        "description": "Google Gemini 2.5 Pro — продвинутая chat модель. Качественные ответы для профессиональных задач.",
+        "category": "Chat",
+        "emoji": "🎯",
+        "pricing": "76-600 кредитов/1M tokens (Input: $0.38, Output: $3.00)",
+        "input_params": {
+            "prompt": {
+                "type": "string",
+                "description": "Текст запроса",
+                "required": True,
+                "max_length": 100000
+            }
+        }
+    },
+    {
         "id": "elevenlabs/text-to-dialogue-v3",
         "name": "ElevenLabs Text to Dialogue V3",
         "description": "Генерация диалогов и речи из текста. Поддержка 70+ языков, настройка стабильности голоса. Идеально для озвучки, подкастов и аудиокниг.",
