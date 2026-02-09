@@ -1966,6 +1966,47 @@ models:
         required: true
         max: 5000
     model_mode: text_to_video
+  elevenlabs/tts-turbo-2-5:
+    model_type: text_to_speech
+    input:
+      text:
+        type: string
+        required: true
+        max: 10000
+    model_mode: text_to_speech
+  elevenlabs/tts-multilingual-v2:
+    model_type: text_to_speech
+    input:
+      text:
+        type: string
+        required: true
+        max: 10000
+    model_mode: text_to_speech
+  elevenlabs/speech-to-text:
+    model_type: speech_to_text
+    input:
+      audio_url:
+        type: string
+        required: true
+    model_mode: speech_to_text
+  elevenlabs/sound-effect-v2:
+    model_type: text_to_audio
+    input:
+      prompt:
+        type: string
+        required: true
+        max: 1000
+      duration:
+        type: number
+        required: false
+    model_mode: text_to_audio
+  elevenlabs/audio-isolation:
+    model_type: audio_to_audio
+    input:
+      audio_url:
+        type: string
+        required: true
+    model_mode: audio_to_audio
   gemini/3-flash:
     model_type: text_to_chat
     input:

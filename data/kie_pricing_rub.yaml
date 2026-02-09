@@ -1648,6 +1648,36 @@ models:
         price_rub: 84.76
         params: {}
         notes: per video
+  - id: elevenlabs/tts-turbo-2-5
+    skus:
+      - unit: 1000_characters
+        price_rub: 4.62
+        params: {}
+        notes: per 1000 characters
+  - id: elevenlabs/tts-multilingual-v2
+    skus:
+      - unit: 1000_characters
+        price_rub: 9.25
+        params: {}
+        notes: per 1000 characters
+  - id: elevenlabs/speech-to-text
+    skus:
+      - unit: minute
+        price_rub: 2.70
+        params: {}
+        notes: per minute
+  - id: elevenlabs/sound-effect-v2
+    skus:
+      - unit: second
+        price_rub: 0.18
+        params: {}
+        notes: per second
+  - id: elevenlabs/audio-isolation
+    skus:
+      - unit: second
+        price_rub: 0.15
+        params: {}
+        notes: per second
   - id: gemini/3-flash
     skus:
       - unit: 1m_tokens

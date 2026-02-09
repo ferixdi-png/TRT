@@ -1114,6 +1114,56 @@ models:
     notes: Style Boost
   description_ru: ⭐ ТОП МОДЕЛЬ! Suno V5 — генерация музыки из текста. Создание треков,
     расширение, добавление вокала/инструментов, отделение голоса, конвертация.
+- id: elevenlabs/tts-turbo-2-5
+  title_ru: ElevenLabs TTS Turbo 2.5
+  type: text_to_speech
+  modes:
+  - unit: 1000_characters
+    credits: 6.0
+    official_usd: 0.03
+    notes: per 1000 characters
+  description_ru: ElevenLabs Text-to-Speech Turbo 2.5 — быстрая генерация речи.
+    Низкая задержка, отлично для real-time.
+- id: elevenlabs/tts-multilingual-v2
+  title_ru: ElevenLabs TTS Multilingual V2
+  type: text_to_speech
+  modes:
+  - unit: 1000_characters
+    credits: 12.0
+    official_usd: 0.06
+    notes: per 1000 characters
+  description_ru: ElevenLabs Text-to-Speech Multilingual V2 — качественная многоязычная
+    генерация речи. 29+ языков.
+- id: elevenlabs/speech-to-text
+  title_ru: ElevenLabs Speech to Text
+  type: speech_to_text
+  modes:
+  - unit: minute
+    credits: 3.5
+    official_usd: 0.0175
+    notes: per minute
+  description_ru: ElevenLabs Speech-to-Text — транскрибация аудио в текст.
+    Высокая точность распознавания.
+- id: elevenlabs/sound-effect-v2
+  title_ru: ElevenLabs Sound Effect V2
+  type: text_to_audio
+  modes:
+  - unit: second
+    credits: 0.24
+    official_usd: 0.0012
+    notes: per second
+  description_ru: ElevenLabs Sound Effect V2 — генерация звуковых эффектов из
+    текстового описания.
+- id: elevenlabs/audio-isolation
+  title_ru: ElevenLabs Audio Isolation
+  type: audio_to_audio
+  modes:
+  - unit: second
+    credits: 0.2
+    official_usd: 0.001
+    notes: per second
+  description_ru: ElevenLabs Audio Isolation — изоляция голоса от фонового шума.
+    Очистка аудио для подкастов и озвучки.
 - id: gemini/3-flash
   title_ru: Gemini 3 Flash
   type: text_to_chat

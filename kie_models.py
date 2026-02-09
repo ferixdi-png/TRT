@@ -2884,6 +2884,84 @@ KIE_MODELS = [
         }
     },
     {
+        "id": "elevenlabs/tts-turbo-2-5",
+        "name": "ElevenLabs TTS Turbo 2.5",
+        "description": "Быстрая генерация речи с низкой задержкой. Отлично для real-time приложений.",
+        "category": "Аудио",
+        "emoji": "🗣️",
+        "pricing": "6 кредитов за 1000 символов ($0.03)",
+        "input_params": {
+            "text": {
+                "type": "string",
+                "description": "Текст для озвучки",
+                "required": True,
+                "max_length": 10000
+            }
+        }
+    },
+    {
+        "id": "elevenlabs/tts-multilingual-v2",
+        "name": "ElevenLabs TTS Multilingual V2",
+        "description": "Качественная многоязычная генерация речи. Поддержка 29+ языков.",
+        "category": "Аудио",
+        "emoji": "🌍",
+        "pricing": "12 кредитов за 1000 символов ($0.06)",
+        "input_params": {
+            "text": {
+                "type": "string",
+                "description": "Текст для озвучки",
+                "required": True,
+                "max_length": 10000
+            }
+        }
+    },
+    {
+        "id": "elevenlabs/speech-to-text",
+        "name": "ElevenLabs Speech to Text",
+        "description": "Транскрибация аудио в текст. Высокая точность распознавания речи.",
+        "category": "Аудио",
+        "emoji": "📝",
+        "pricing": "3.5 кредита за минуту ($0.0175)",
+        "input_params": {
+            "audio_url": {
+                "type": "string",
+                "description": "URL аудиофайла",
+                "required": True
+            }
+        }
+    },
+    {
+        "id": "elevenlabs/sound-effect-v2",
+        "name": "ElevenLabs Sound Effect V2",
+        "description": "Генерация звуковых эффектов из текстового описания.",
+        "category": "Аудио",
+        "emoji": "🔊",
+        "pricing": "0.24 кредита за секунду ($0.0012)",
+        "input_params": {
+            "prompt": {
+                "type": "string",
+                "description": "Описание звукового эффекта",
+                "required": True,
+                "max_length": 1000
+            }
+        }
+    },
+    {
+        "id": "elevenlabs/audio-isolation",
+        "name": "ElevenLabs Audio Isolation",
+        "description": "Изоляция голоса от фонового шума. Очистка аудио для подкастов и озвучки.",
+        "category": "Аудио",
+        "emoji": "🎧",
+        "pricing": "0.2 кредита за секунду ($0.001)",
+        "input_params": {
+            "audio_url": {
+                "type": "string",
+                "description": "URL аудиофайла для обработки",
+                "required": True
+            }
+        }
+    },
+    {
         "id": "gemini/3-flash",
         "name": "Gemini 3 Flash",
         "description": "Google Gemini 3 Flash — быстрая chat модель. Оптимальный баланс скорости и качества для диалогов и анализа.",
