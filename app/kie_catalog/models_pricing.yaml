@@ -3,7 +3,7 @@ source: KIE AI Models Pricing Table
 last_updated: '2025-12-21'
 models:
 - id: flux-2/flex-image-to-image
-  title_ru: Flux 2 Flex Image to Image
+  title_ru: ✨ Flux 2 Flex Image to Image
   type: i2i
   modes:
   - unit: image
@@ -17,7 +17,7 @@ models:
   description_ru: Трансформация фото в новый стиль с сохранением композиции. Режим
     влияет на разрешение и цену.
 - id: flux-2/flex-text-to-image
-  title_ru: Flux 2 Flex Text to Image
+  title_ru: ✨ Flux 2 Flex Text to Image
   type: t2i
   modes:
   - unit: image
@@ -31,7 +31,7 @@ models:
   description_ru: Создание картинок из текста с гибкими настройками. Два режима разрешения
     — выбор за тобой.
 - id: flux-2/pro-image-to-image
-  title_ru: Flux 2 Pro Image to Image
+  title_ru: ✨ Flux 2 Pro Image to Image
   type: i2i
   modes:
   - unit: image
@@ -45,7 +45,7 @@ models:
   description_ru: 'Профессиональная переработка изображений: меняй стиль, сохраняя
     суть. Быстро и точно.'
 - id: flux-2/pro-text-to-image
-  title_ru: Flux 2 Pro Text to Image
+  title_ru: ✨ Flux 2 Pro Text to Image
   type: t2i
   modes:
   - unit: image
@@ -73,7 +73,7 @@ models:
   description_ru: ⭐ ТОП МОДЕЛЬ! Flux Kontext — редактирование изображений с пониманием
     контекста. Pro или Max качество. Идеально для e-commerce и маркетинга.
 - id: bytedance/v1-pro-fast-image-to-video
-  title_ru: Seedance V1 Pro Fast Image to Video
+  title_ru: 🎬 Seedance V1 Pro Fast Image to Video
   type: i2v
   modes:
   - unit: video
@@ -95,7 +95,7 @@ models:
   description_ru: Оживи фото в короткое видео за секунды. Длительность и разрешение
     влияют на списание.
 - id: bytedance/seedream
-  title_ru: Seedream 3.0 Text to Image
+  title_ru: 🌱 Seedream 3.0 Text to Image
   type: t2i
   description_ru: Генерация изображений по текстовому описанию (Seedream 3.0).
   required_inputs_ru:
@@ -118,7 +118,7 @@ models:
     title_ru: Быстрый
     short_hint_ru: Ускоренная генерация
 - id: bytedance/seedream-v4-text-to-image
-  title_ru: Seedream V4 Text to Image
+  title_ru: 🌱 Seedream V4 Text to Image
   type: t2i
   modes:
   - unit: image
@@ -127,7 +127,7 @@ models:
   description_ru: 'Версия 4.0: точнее понимает промпт, детальнее прорисовывает. Качество
     стоит своих денег.'
 - id: bytedance/seedream-v4-edit
-  title_ru: Seedream V4 Image Edit
+  title_ru: 🌱 Seedream V4 Image Edit
   type: i2i
   modes:
   - unit: image
@@ -136,7 +136,7 @@ models:
   description_ru: 'Редактирование готового изображения: замени детали или стиль без
     пересоздания с нуля.'
 - id: seedream/4.5-text-to-image
-  title_ru: Seedream 4.5 Text to Image
+  title_ru: 🌱 Seedream 4.5 Text to Image
   type: t2i
   modes:
   - unit: image
@@ -150,7 +150,7 @@ models:
   description_ru: Свежая версия 4.5 с улучшенной точностью деталей. Цена зависит от
     качества рендера.
 - id: seedream/4.5-edit
-  title_ru: Seedream 4.5 Image Edit
+  title_ru: 🌱 Seedream 4.5 Image Edit
   type: i2i
   modes:
   - unit: image
@@ -164,7 +164,7 @@ models:
   description_ru: 'Правь готовые картинки: меняй элементы, сохраняя общий образ. Быстрая
     коррекция.'
 - id: google/imagen4
-  title_ru: Google Imagen 4
+  title_ru: 🔍 Google Imagen 4
   type: t2i
   modes:
   - unit: image
@@ -174,7 +174,7 @@ models:
   description_ru: 'Imagen 4: качественная генерация изображений от Google. Стабильный
     результат, точный промпт.'
 - id: google/imagen4-fast
-  title_ru: Google Imagen 4 Fast
+  title_ru: 🔍 Google Imagen 4 Fast
   type: t2i
   modes:
   - unit: image
@@ -183,7 +183,7 @@ models:
   description_ru: Быстрая версия Imagen 4 — жертвуй деталями ради скорости. Для набросков
     и тестов.
 - id: google/imagen4-ultra
-  title_ru: Google Imagen 4
+  title_ru: 🔍 Google Imagen 4
   type: t2i
   modes:
   - unit: image
@@ -192,7 +192,7 @@ models:
   description_ru: 'Максимальное качество Imagen 4: детализация и точность. Дороже,
     но результат того стоит.'
 - id: google/nano-banana
-  title_ru: Google Nano Banana Text to Image
+  title_ru: 🔍 Google Nano Banana Text to Image
   type: t2i
   modes:
   - unit: image
@@ -201,7 +201,7 @@ models:
   description_ru: Компактная модель для простых задач генерации. Быстро, недорого,
     без излишеств.
 - id: google/nanobanana-gemini-2.5-flash
-  title_ru: Google Nano Banana Gemini 2.5 Flash
+  title_ru: 🔍 Google Nano Banana Gemini 2.5 Flash
   type: t2i
   modes:
   - unit: image
@@ -210,7 +210,7 @@ models:
   description_ru: 'Nano Banana + Gemini 2.5: быстрая генерация с AI-подсказками. Удобно
     для экспериментов.'
 - id: google/nano-banana-edit
-  title_ru: Google Nano Banana Edit
+  title_ru: 🔍 Google Nano Banana Edit
   type: i2i
   modes:
   - unit: image
@@ -219,7 +219,7 @@ models:
   description_ru: Редактирование изображений через Nano Banana. Лёгкие правки без
     тяжёлых моделей.
 - id: nano-banana-pro
-  title_ru: Nano Banana Pro
+  title_ru: 🍌 Nano Banana Pro
   type: i2i
   modes:
   - unit: image
@@ -251,7 +251,7 @@ models:
   description_ru: ⭐ ТОП МОДЕЛЬ! Grok Imagine — генерация видео из изображений и текста.
     6 или 10 секунд, режимы fun/normal/spicy. Отличное следование промпту.
 - id: grok-imagine/text-to-image
-  title_ru: Grok Imagine Text to Image
+  title_ru: 🤖 Grok Imagine Text to Image
   type: t2i
   modes:
   - unit: image
@@ -261,7 +261,7 @@ models:
   description_ru: Текст в картинку через Grok Imagine. Креативный подход к интерпретации
     запросов.
 - id: grok-imagine/text-to-video
-  title_ru: Grok Imagine Text to Video
+  title_ru: 🤖 Grok Imagine Text to Video
   type: t2v
   modes:
   - unit: video
@@ -271,7 +271,7 @@ models:
   description_ru: Создаёт короткие видео из текста. Быстрая генерация для соцсетей
     и мемов.
 - id: hailuo/02-image-to-video-standard
-  title_ru: Hailuo 02 Image to Video
+  title_ru: 🎥 Hailuo 02 Image to Video
   type: i2v
   modes:
   - unit: video
@@ -292,7 +292,7 @@ models:
     notes: Standard-10.0s-768p
   description_ru: Фото в видео, стандартное качество. Базовый режим для простых задач.
 - id: hailuo/02-text-to-video-standard
-  title_ru: Hailuo 02 Text to Video
+  title_ru: 🎥 Hailuo 02 Text to Video
   type: t2v
   modes:
   - unit: video
@@ -309,7 +309,7 @@ models:
     notes: Standard-10.0s-768p
   description_ru: Текст в видео, стандарт. Создаёт короткие ролики без лишних затрат.
 - id: hailuo/02-text-to-video-pro
-  title_ru: Hailuo 02 Text to Video Pro
+  title_ru: 🎥 Hailuo 02 Text to Video Pro
   type: t2v
   modes:
   - unit: video
@@ -319,7 +319,7 @@ models:
   description_ru: Профессиональная генерация видео из текста. Выше качество, дольше
     просчёт, больше цена.
 - id: hailuo/02-image-to-video-pro
-  title_ru: Hailuo 02 Image to Video Pro
+  title_ru: 🎥 Hailuo 02 Image to Video Pro
   type: i2v
   modes:
   - unit: video
@@ -328,7 +328,7 @@ models:
     notes: Pro-6.0s-1080p
   description_ru: Превращает фото в видео с Pro-качеством. Плавная анимация и детали.
 - id: hailuo/2.3
-  title_ru: Hailuo 2.3 Image to Video
+  title_ru: 🎥 Hailuo 2.3 Image to Video
   type: i2v
   modes:
   - unit: video
@@ -358,7 +358,7 @@ models:
   description_ru: 'Версия 2.3: улучшенная стабильность и скорость генерации. Универсальный
     вариант.'
 - id: ideogram/v3-text-to-image
-  title_ru: Ideogram V3 Text to Image
+  title_ru: 🎨 Ideogram V3 Text to Image
   type: t2i
   modes:
   - unit: image
@@ -376,7 +376,7 @@ models:
   description_ru: 'Ideogram v3: генерация с акцентом на текст и надписи в изображении.
     Логотипы, баннеры.'
 - id: ideogram/v3-reframe
-  title_ru: Ideogram V3 Reframe
+  title_ru: 🎨 Ideogram V3 Reframe
   type: i2i
   modes:
   - unit: image
@@ -394,7 +394,7 @@ models:
   description_ru: Изменение композиции и кадрирования готового изображения. Переформатирование
     без потери качества.
 - id: ideogram/v3-edit
-  title_ru: Ideogram V3 Edit
+  title_ru: 🎨 Ideogram V3 Edit
   type: i2i
   modes:
   - unit: image
@@ -412,7 +412,7 @@ models:
   description_ru: 'Редактирование элементов картинки: меняй цвета, объекты, детали.
     Точечная коррекция.'
 - id: ideogram/v3-remix
-  title_ru: Ideogram V3 Remix
+  title_ru: 🎨 Ideogram V3 Remix
   type: i2i
   modes:
   - unit: image
@@ -430,7 +430,7 @@ models:
   description_ru: Создание вариаций существующего изображения. Экспериментируй со
     стилями и деталями.
 - id: ideogram/character
-  title_ru: Ideogram Character
+  title_ru: 🎨 Ideogram Character
   type: t2i
   modes:
   - unit: image
@@ -447,7 +447,7 @@ models:
     notes: QUALITY
   description_ru: Генерация персонажей с уникальными чертами. Для игр, комиксов, иллюстраций.
 - id: ideogram/character-edit
-  title_ru: Ideogram Character Edit
+  title_ru: 🎨 Ideogram Character Edit
   type: i2i
   modes:
   - unit: image
@@ -464,7 +464,7 @@ models:
     notes: QUALITY
   description_ru: 'Редактирование готовых персонажей: меняй одежду, позы, детали внешности.'
 - id: ideogram/character-remix
-  title_ru: Ideogram Character Remix
+  title_ru: 🎨 Ideogram Character Remix
   type: i2i
   modes:
   - unit: image
@@ -481,7 +481,7 @@ models:
     notes: QUALITY
   description_ru: 'Вариации персонажей: создавай альтернативные версии одного героя.'
 - id: kling/v2-1-master-image-to-video
-  title_ru: Kling 2.1 Image to Video
+  title_ru: 🎬 Kling 2.1 Image to Video
   type: i2v
   modes:
   - unit: video
@@ -495,7 +495,7 @@ models:
   description_ru: 'Мастер-режим Kling 2.1: фото в видео с максимальной детализацией.
     Дорого, но эффектно.'
 - id: kling/v2-1-standard
-  title_ru: Kling 2.1 Video Generation
+  title_ru: 🎬 Kling 2.1 Video Generation
   type: t2v
   modes:
   - unit: video
@@ -508,7 +508,7 @@ models:
     notes: Standard-10.0s
   description_ru: Стандартная генерация видео Kling 2.1. Баланс цены и качества.
 - id: kling/v2-1-pro
-  title_ru: Kling 2.1 Video Generation
+  title_ru: 🎬 Kling 2.1 Video Generation
   type: t2v
   modes:
   - unit: video
@@ -522,7 +522,7 @@ models:
   description_ru: 'Pro-режим Kling 2.1: улучшенная физика движений и освещение. Для
     профи.'
 - id: kling/v2-1-master-text-to-video
-  title_ru: Kling 2.1 Text to Video
+  title_ru: 🎬 Kling 2.1 Text to Video
   type: t2v
   modes:
   - unit: video
@@ -535,7 +535,7 @@ models:
     notes: Master-10.0s
   description_ru: Текст в видео, мастер-режим. Максимальное качество рендера от Kling.
 - id: kling/v2-5-turbo
-  title_ru: Kling 2.5 Turbo
+  title_ru: 🎬 Kling 2.5 Turbo
   type: t2i
   modes:
   - unit: image
@@ -543,7 +543,7 @@ models:
     official_usd: 0.15
   description_ru: 'Турбо-режим Kling 2.5: быстрая генерация видео. Скорость в приоритете.'
 - id: kling/v2-5-turbo-image-to-video-pro
-  title_ru: Kling 2.5 Turbo Image to Video
+  title_ru: 🎬 Kling 2.5 Turbo Image to Video
   type: i2v
   modes:
   - unit: video
@@ -556,7 +556,7 @@ models:
     notes: Turbo Pro-10.0s
   description_ru: Фото в видео, турбо + про. Скорость и качество одновременно.
 - id: kling/v2-5-turbo-text-to-video-pro
-  title_ru: Kling 2.5 Turbo Text to Video
+  title_ru: 🎬 Kling 2.5 Turbo Text to Video
   type: t2v
   modes:
   - unit: video
@@ -569,7 +569,7 @@ models:
     notes: Turbo Pro-10.0s
   description_ru: Текст в видео, турбо-про. Быстрый просчёт с высоким качеством.
 - id: kling-2.6/image-to-video
-  title_ru: Kling 2.6 Image to Video
+  title_ru: 🎬 Kling 2.6 Image to Video
   type: i2v
   modes:
   - unit: video
@@ -591,7 +591,7 @@ models:
   description_ru: 'Kling 2.6: оживление фото с улучшенной плавностью. Свежая версия
     модели.'
 - id: kling-2.6/text-to-video
-  title_ru: Kling 2.6 Text to Video
+  title_ru: 🎬 Kling 2.6 Text to Video
   type: t2v
   modes:
   - unit: video
@@ -613,7 +613,7 @@ models:
   description_ru: Создание видео из текста через Kling 2.6. Стабильный результат,
     точный промпт.
 - id: kling-2.6/motion-control
-  title_ru: Kling 2.6 Motion Control
+  title_ru: 🎬 Kling 2.6 Motion Control
   type: i2v
   modes:
   - unit: second
@@ -627,7 +627,7 @@ models:
   description_ru: Перенос движений с видео на изображение. Создайте анимацию персонажа
     по референсному видео.
 - id: kling/v1-avatar-standard
-  title_ru: Kling AI Avatar Lip Sync
+  title_ru: 🎬 Kling AI Avatar Lip Sync
   type: lip_sync
   modes:
   - unit: image
@@ -636,7 +636,7 @@ models:
     notes: Standard-up to 15 secondss-720p
   description_ru: Создание говорящих аватаров, стандарт. Синхронизация губ с аудио.
 - id: kling/ai-avatar-v1-pro
-  title_ru: Kling AI Avatar Lip Sync
+  title_ru: 🎬 Kling AI Avatar Lip Sync
   type: lip_sync
   modes:
   - unit: image
@@ -646,7 +646,7 @@ models:
   description_ru: 'Профессиональные AI-аватары: точная мимика, естественные движения.
     Для презентаций.'
 - id: infinitalk/from-audio
-  title_ru: MeiGen-AI InfiniteTalk Lip Sync
+  title_ru: 👄 MeiGen-AI InfiniteTalk Lip Sync
   type: lip_sync
   modes:
   - unit: image
@@ -660,7 +660,7 @@ models:
   description_ru: Генерация говорящего видео из аудиозаписи. Синхронизация губ и мимика
     автоматом.
 - id: sora-2-text-to-video
-  title_ru: OpenAI Sora 2 Text to Video
+  title_ru: 🎞️ OpenAI Sora 2 Text to Video
   type: t2v
   modes:
   - unit: video
@@ -674,7 +674,7 @@ models:
   description_ru: 'Sora 2: создание видео из текста с киношным качеством. Длительность
     влияет на цену.'
 - id: sora-2-pro-text-to-video
-  title_ru: OpenAI Sora 2 Pro Text to Video
+  title_ru: 🎞️ OpenAI Sora 2 Pro Text to Video
   type: t2v
   modes:
   - unit: video
@@ -696,7 +696,7 @@ models:
   description_ru: 'Sora 2 Pro: создание видео из текста с максимальным качеством.
     High режим для профессионального использования.'
 - id: sora-2-image-to-video
-  title_ru: OpenAI Sora 2 Image to Video
+  title_ru: 🎞️ OpenAI Sora 2 Image to Video
   type: i2v
   modes:
   - unit: video
@@ -710,7 +710,7 @@ models:
   description_ru: 'Sora 2: оживление изображений в видео. Базовая версия для быстрого
     результата.'
 - id: sora-2-pro-image-to-video
-  title_ru: OpenAI Sora 2 Image to Video
+  title_ru: 🎞️ OpenAI Sora 2 Image to Video
   type: i2v
   modes:
   - unit: video
@@ -740,7 +740,7 @@ models:
   description_ru: 'Pro-режим Sora 2: фото в видео с высокой детализацией. Для серьёзных
     проектов.'
 - id: sora-watermark-remover
-  title_ru: OpenAI Sora 2 Watermark Remover
+  title_ru: 🎞️ OpenAI Sora 2 Watermark Remover
   type: watermark_remove
   modes:
   - unit: removal
@@ -759,7 +759,7 @@ models:
   description_ru: ⭐ ТОП МОДЕЛЬ! GPT-4o Image — генерация и редактирование изображений.
     Text-to-image, image editing, variants. Понимает визуальный контекст.
 - id: qwen/image-to-image
-  title_ru: Qwen Image Image to Image
+  title_ru: 🖼️ Qwen Image Image to Image
   type: i2i
   modes:
   - unit: image
@@ -767,7 +767,7 @@ models:
     official_usd: 0.02
   description_ru: Трансформация изображений через Qwen. Меняй стиль, сохраняя композицию.
 - id: qwen/text-to-image
-  title_ru: Qwen Image Text to Image
+  title_ru: 🖼️ Qwen Image Text to Image
   type: t2i
   modes:
   - unit: image
@@ -775,7 +775,7 @@ models:
     official_usd: 0.02
   description_ru: Создание картинок из текста. Qwen понимает контекст и детали.
 - id: qwen/image-edit
-  title_ru: Qwen Image Edit
+  title_ru: 🖼️ Qwen Image Edit
   type: i2i
   modes:
   - unit: image
@@ -783,7 +783,7 @@ models:
     official_usd: 0.03
   description_ru: 'Редактирование фото: убери, добавь, измени элементы. Точечная правка.'
 - id: z-image
-  title_ru: Qwen Z-Image Text to Image
+  title_ru: ⚡ Qwen Z-Image Text to Image
   type: t2i
   free: true
   modes:
@@ -794,7 +794,7 @@ models:
   description_ru: 'Z-Image: экспериментальная модель генерации. Нестандартные стили
     и подходы.'
 - id: recraft/crisp-upscale
-  title_ru: Recraft Crisp Upscale
+  title_ru: 🛠️ Recraft Crisp Upscale
   type: upscale
   modes:
   - unit: upscale
@@ -803,7 +803,7 @@ models:
   description_ru: Увеличение разрешения изображений без потери чёткости. Для печати
     и больших экранов.
 - id: recraft/remove-background
-  title_ru: Recraft Remove Background
+  title_ru: 🛠️ Recraft Remove Background
   type: bg_remove
   modes:
   - unit: image
@@ -838,8 +838,8 @@ models:
     credits: 30.0
     official_usd: 0.15
     notes: image-to-video 5s 1080p
-  description_ru: ⭐ ТОП МОДЕЛЬ! Runway Gen-4 — профессиональная видеогенерация.
-    Text-to-video и image-to-video, 5-10 сек, 720p/1080p.
+  description_ru: ⭐ ТОП МОДЕЛЬ! Runway Gen-4 — профессиональная видеогенерация. Text-to-video
+    и image-to-video, 5-10 сек, 720p/1080p.
 - id: runway/aleph
   title_ru: 🔥 Runway Aleph
   type: t2v
@@ -851,7 +851,7 @@ models:
   description_ru: ⭐ ТОП МОДЕЛЬ! Runway Aleph — новейшая флагманская модель генерации
     видео. Высочайшее качество и реалистичность.
 - id: topaz/image-upscale
-  title_ru: Topaz Image Upscaler
+  title_ru: 💎 Topaz Image Upscaler
   type: upscale
   modes:
   - unit: upscale
@@ -869,7 +869,7 @@ models:
   description_ru: Увеличение фото с AI-апскейлом от Topaz. Детали восстанавливаются,
     шумы убираются.
 - id: topaz/video-upscale
-  title_ru: Topaz Video Upscaler
+  title_ru: 💎 Topaz Video Upscaler
   type: upscale
   modes:
   - unit: upscale
@@ -879,7 +879,7 @@ models:
   description_ru: Апскейл видео до 4K и выше. Topaz восстанавливает детали и убирает
     артефакты.
 - id: wan/2-2-a14b-speech-to-video-turbo
-  title_ru: Wan 2.2 A14B Turbo API Speech to Video
+  title_ru: 🌊 Wan 2.2 A14B Turbo API Speech to Video
   type: t2v
   modes:
   - unit: video
@@ -897,7 +897,7 @@ models:
   description_ru: Голос в видео с говорящим персонажем. Автоматическая синхронизация
     губ.
 - id: wan/2-2-animate-move
-  title_ru: Wan 2.2 Animate Speech to Video
+  title_ru: 🌊 Wan 2.2 Animate Speech to Video
   type: t2v
   modes:
   - unit: video
@@ -914,7 +914,7 @@ models:
     notes: Turbo-1.0s-480p
   description_ru: Анимация движений объектов на фото. Заставь статику двигаться.
 - id: wan/2-2-animate-replace
-  title_ru: Wan 2.2 Animate Replace
+  title_ru: 🌊 Wan 2.2 Animate Replace
   type: t2v
   modes:
   - unit: video
@@ -932,7 +932,7 @@ models:
   description_ru: Замена элементов с анимацией. Меняй объекты, сохраняя движение и
     логику.
 - id: wan/2-5-image-to-video
-  title_ru: Wan 2.5 Image to Video
+  title_ru: 🌊 Wan 2.5 Image to Video
   type: i2v
   modes:
   - unit: video
@@ -954,7 +954,7 @@ models:
   description_ru: 'Wan 2.5: улучшенная физика движений. Фото в видео с реалистичной
     анимацией.'
 - id: wan/2-5-text-to-video
-  title_ru: Wan 2.5 Text to Video
+  title_ru: 🌊 Wan 2.5 Text to Video
   type: t2v
   modes:
   - unit: video
@@ -976,7 +976,7 @@ models:
   description_ru: Текст в видео через Wan 2.5. Стабильный результат, понятная логика
     генерации.
 - id: wan/2-6-text-to-video
-  title_ru: Wan 2.6 Text to Video
+  title_ru: 🌊 Wan 2.6 Text to Video
   type: t2v
   modes:
   - unit: video
@@ -1005,7 +1005,7 @@ models:
     notes: default-15.0s-1080p
   description_ru: Wan 2.6 - новейшая модель текст в видео. До 15 секунд, режим multi-shots.
 - id: elevenlabs/text-to-dialogue-v3
-  title_ru: ElevenLabs Text to Dialogue V3
+  title_ru: 🗣️ ElevenLabs Text to Dialogue V3
   type: text_to_speech
   modes:
   - unit: 1000_characters
@@ -1020,7 +1020,7 @@ models:
   modes:
   - unit: video
     credits: 60.0
-    official_usd: 0.30
+    official_usd: 0.3
     notes: text-to-video Fast
   - unit: video
     credits: 250.0
@@ -1028,7 +1028,7 @@ models:
     notes: text-to-video Quality
   - unit: video
     credits: 60.0
-    official_usd: 0.30
+    official_usd: 0.3
     notes: image-to-video Fast
   - unit: video
     credits: 250.0
@@ -1036,7 +1036,7 @@ models:
     notes: image-to-video Quality
   - unit: video
     credits: 60.0
-    official_usd: 0.30
+    official_usd: 0.3
     notes: reference-to-video Fast
   - unit: video
     credits: 250.0
@@ -1044,7 +1044,7 @@ models:
     notes: Extend Quality
   - unit: video
     credits: 60.0
-    official_usd: 0.30
+    official_usd: 0.3
     notes: Extend Fast
   - unit: video
     credits: 5.0
@@ -1052,7 +1052,7 @@ models:
     notes: Get 1080P Video
   - unit: video
     credits: 120.0
-    official_usd: 0.60
+    official_usd: 0.6
     notes: Get 4K Video
   description_ru: ⭐ ТОП МОДЕЛЬ! Google Veo 3.1 — новейшая модель генерации видео.
     Text-to-video, image-to-video, reference-to-video. Native 9:16, Fast/Quality режимы.
@@ -1115,17 +1115,17 @@ models:
   description_ru: ⭐ ТОП МОДЕЛЬ! Suno V5 — генерация музыки из текста. Создание треков,
     расширение, добавление вокала/инструментов, отделение голоса, конвертация.
 - id: elevenlabs/tts-turbo-2-5
-  title_ru: ElevenLabs TTS Turbo 2.5
+  title_ru: 🗣️ ElevenLabs TTS Turbo 2.5
   type: text_to_speech
   modes:
   - unit: 1000_characters
     credits: 6.0
     official_usd: 0.03
     notes: per 1000 characters
-  description_ru: ElevenLabs Text-to-Speech Turbo 2.5 — быстрая генерация речи.
-    Низкая задержка, отлично для real-time.
+  description_ru: ElevenLabs Text-to-Speech Turbo 2.5 — быстрая генерация речи. Низкая
+    задержка, отлично для real-time.
 - id: elevenlabs/tts-multilingual-v2
-  title_ru: ElevenLabs TTS Multilingual V2
+  title_ru: 🗣️ ElevenLabs TTS Multilingual V2
   type: text_to_speech
   modes:
   - unit: 1000_characters
@@ -1135,37 +1135,37 @@ models:
   description_ru: ElevenLabs Text-to-Speech Multilingual V2 — качественная многоязычная
     генерация речи. 29+ языков.
 - id: elevenlabs/speech-to-text
-  title_ru: ElevenLabs Speech to Text
+  title_ru: 🗣️ ElevenLabs Speech to Text
   type: speech_to_text
   modes:
   - unit: minute
     credits: 3.5
     official_usd: 0.0175
     notes: per minute
-  description_ru: ElevenLabs Speech-to-Text — транскрибация аудио в текст.
-    Высокая точность распознавания.
+  description_ru: ElevenLabs Speech-to-Text — транскрибация аудио в текст. Высокая
+    точность распознавания.
 - id: elevenlabs/sound-effect-v2
-  title_ru: ElevenLabs Sound Effect V2
+  title_ru: 🗣️ ElevenLabs Sound Effect V2
   type: text_to_audio
   modes:
   - unit: second
     credits: 0.24
     official_usd: 0.0012
     notes: per second
-  description_ru: ElevenLabs Sound Effect V2 — генерация звуковых эффектов из
-    текстового описания.
+  description_ru: ElevenLabs Sound Effect V2 — генерация звуковых эффектов из текстового
+    описания.
 - id: elevenlabs/audio-isolation
-  title_ru: ElevenLabs Audio Isolation
+  title_ru: 🗣️ ElevenLabs Audio Isolation
   type: audio_to_audio
   modes:
   - unit: second
     credits: 0.2
     official_usd: 0.001
     notes: per second
-  description_ru: ElevenLabs Audio Isolation — изоляция голоса от фонового шума.
-    Очистка аудио для подкастов и озвучки.
+  description_ru: ElevenLabs Audio Isolation — изоляция голоса от фонового шума. Очистка
+    аудио для подкастов и озвучки.
 - id: gemini/3-flash
-  title_ru: Gemini 3 Flash
+  title_ru: 💬 Gemini 3 Flash
   type: text_to_chat
   modes:
   - unit: 1m_tokens
@@ -1174,26 +1174,26 @@ models:
     notes: Input
   - unit: 1m_tokens
     credits: 180.0
-    official_usd: 0.90
+    official_usd: 0.9
     notes: Output
   description_ru: Google Gemini 3 Flash — быстрая chat модель. Оптимальный баланс
     скорости и качества для диалогов и анализа.
 - id: gemini/3-pro
-  title_ru: Gemini 3 Pro
+  title_ru: 💬 Gemini 3 Pro
   type: text_to_chat
   modes:
   - unit: 1m_tokens
     credits: 100.0
-    official_usd: 0.50
+    official_usd: 0.5
     notes: Input
   - unit: 1m_tokens
     credits: 700.0
-    official_usd: 3.50
+    official_usd: 3.5
     notes: Output
   description_ru: Google Gemini 3 Pro — профессиональная chat модель. Максимальное
     качество для сложных задач и глубокого анализа.
 - id: gemini/2-5-flash
-  title_ru: Gemini 2.5 Flash
+  title_ru: 💬 Gemini 2.5 Flash
   type: text_to_chat
   modes:
   - unit: 1m_tokens
@@ -1207,7 +1207,7 @@ models:
   description_ru: Google Gemini 2.5 Flash — экономичная chat модель. Быстрые ответы
     для простых задач.
 - id: gemini/2-5-pro
-  title_ru: Gemini 2.5 Pro
+  title_ru: 💬 Gemini 2.5 Pro
   type: text_to_chat
   modes:
   - unit: 1m_tokens
@@ -1216,12 +1216,12 @@ models:
     notes: Input
   - unit: 1m_tokens
     credits: 600.0
-    official_usd: 3.00
+    official_usd: 3.0
     notes: Output
-  description_ru: Google Gemini 2.5 Pro — продвинутая chat модель. Качественные
-    ответы для профессиональных задач.
+  description_ru: Google Gemini 2.5 Pro — продвинутая chat модель. Качественные ответы
+    для профессиональных задач.
 - id: gpt-image/1.5-text-to-image
-  title_ru: GPT Image 1.5 Text to Image
+  title_ru: 🤖 GPT Image 1.5 Text to Image
   type: t2i
   modes:
   - unit: image
@@ -1230,12 +1230,12 @@ models:
     notes: medium quality
   - unit: image
     credits: 20.0
-    official_usd: 0.10
+    official_usd: 0.1
     notes: high quality
   description_ru: OpenAI GPT Image 1.5 — генерация изображений из текста. Фотореалистичные
     результаты с выбором качества.
 - id: gpt-image/1.5-image-to-image
-  title_ru: GPT Image 1.5 Image to Image
+  title_ru: 🤖 GPT Image 1.5 Image to Image
   type: i2i
   modes:
   - unit: image
@@ -1244,12 +1244,12 @@ models:
     notes: medium quality
   - unit: image
     credits: 20.0
-    official_usd: 0.10
+    official_usd: 0.1
     notes: high quality
   description_ru: OpenAI GPT Image 1.5 — редактирование изображений. Меняй одежду,
     фон, стиль с сохранением лица и позы.
 - id: midjourney/text-to-image
-  title_ru: Midjourney Text to Image
+  title_ru: 🎨 Midjourney Text to Image
   type: t2i
   modes:
   - unit: image
@@ -1267,7 +1267,7 @@ models:
   description_ru: Midjourney — культовая модель для создания арта. Relaxed/Fast/Turbo
     режимы на любой бюджет.
 - id: midjourney/image-to-image
-  title_ru: Midjourney Image to Image
+  title_ru: 🎨 Midjourney Image to Image
   type: i2i
   modes:
   - unit: image
@@ -1285,12 +1285,12 @@ models:
   description_ru: Midjourney Image to Image — стилизация и переработка фото в арт.
     Версии 6, 6.1, 7, niji6, niji7.
 - id: midjourney/image-to-video
-  title_ru: Midjourney Image to Video
+  title_ru: 🎨 Midjourney Image to Video
   type: i2v
   modes:
   - unit: video
     credits: 60.0
-    official_usd: 0.30
+    official_usd: 0.3
     notes: per video
   description_ru: Midjourney Video — оживление изображений в короткие видео. Новая
     функция для создания анимаций.
