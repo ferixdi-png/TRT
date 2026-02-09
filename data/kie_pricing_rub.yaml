@@ -444,18 +444,28 @@ models:
     skus:
       - unit: second
         price_rub: 4.62
-        params: {}
-        notes: motion-control default (720p) per second
+        params:
+          character_orientation: "video"
+          mode: "720p"
+        notes: motion-control video 720p per second
       - unit: second
         price_rub: 4.62
         params:
+          character_orientation: "image"
           mode: "720p"
-        notes: motion-control 720p per second
+        notes: motion-control image 720p per second
       - unit: second
         price_rub: 6.93
         params:
+          character_orientation: "video"
           mode: "1080p"
-        notes: motion-control 1080p per second
+        notes: motion-control video 1080p per second
+      - unit: second
+        price_rub: 6.93
+        params:
+          character_orientation: "image"
+          mode: "1080p"
+        notes: motion-control image 1080p per second
   - id: flux-2/flex-text-to-image
     skus:
       - unit: image
