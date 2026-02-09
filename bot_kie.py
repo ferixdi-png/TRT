@@ -26714,20 +26714,21 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 error_code="KIE_MODEL_NOT_SUPPORTED",
                 fix_hint="Model name rejected by KIE.",
             )
-            if user_lang == "ru":
+            # Use UX-friendly provider error message
+            message_text = t('error_provider_model_not_supported', lang=user_lang)
+            if not message_text:
                 message_text = (
                     "⚠️ <b>Модель временно недоступна</b>\n\n"
-                    "KIE не поддерживает указанную модель. Пожалуйста, выберите другую.\n"
+                    "❗️ <i>Это не ошибка бота — AI-провайдер отключил модель.</i>\n\n"
                     f"ID: <code>{correlation_suffix}</code>"
-                )
-                back_label = "🔁 Выбрать другую модель"
-            else:
-                message_text = (
+                    if user_lang == "ru" else
                     "⚠️ <b>Model temporarily unavailable</b>\n\n"
-                    "KIE rejected the selected model. Please choose another one.\n"
+                    "❗️ <i>This is not a bot error — AI provider disabled the model.</i>\n\n"
                     f"ID: <code>{correlation_suffix}</code>"
                 )
-                back_label = "🔁 Choose another model"
+            else:
+                message_text += f"\n\nID: <code>{correlation_suffix}</code>"
+            back_label = "🔁 Выбрать другую модель" if user_lang == "ru" else "🔁 Choose another model"
             retry_keyboard = InlineKeyboardMarkup(
                 [
                     [InlineKeyboardButton(back_label, callback_data="show_all_models_list")],
@@ -26983,7 +26984,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         from app.generations.failure_ui import build_kie_fail_ui
 
-        fail_text, retry_keyboard = build_kie_fail_ui(correlation_id or "corr-na-na", model_id)
+        fail_text, retry_keyboard = build_kie_fail_ui(correlation_id or "corr-na-na", model_id, user_lang)
         await send_or_edit_message(
             _append_free_counter_text(fail_text, free_counter_line),
             parse_mode='HTML',

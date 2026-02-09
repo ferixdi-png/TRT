@@ -248,6 +248,38 @@ TRANSLATIONS = {
             '💬 Если результат не появился, обратитесь в поддержку'
         ),
         'msg_spinning_wheel': '🎰 Крутим колесо фортуны...',
+        # Provider error messages - UX friendly
+        'error_provider_unavailable': (
+            '⚠️ <b>Модель временно недоступна</b>\n\n'
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            '🔧 <b>Причина:</b> Технические работы на стороне провайдера AI\n\n'
+            '❗️ <i>Это не ошибка бота — проблема у поставщика нейросети.</i>\n\n'
+            '🔄 <b>Что делать:</b>\n'
+            '• Попробуйте другую модель из каталога\n'
+            '• Повторите попытку через 5-10 минут\n'
+            '• Модель скоро снова заработает\n\n'
+            '💡 Ваш баланс <b>не списан</b> за неудачную попытку'
+        ),
+        'error_provider_model_not_supported': (
+            '⚠️ <b>Модель недоступна у провайдера</b>\n\n'
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            '🔧 <b>Причина:</b> AI-провайдер временно отключил эту модель\n\n'
+            '❗️ <i>Это не ошибка бота — решение принято поставщиком.</i>\n\n'
+            '🔄 <b>Что делать:</b>\n'
+            '• Выберите похожую модель из каталога\n'
+            '• Мы работаем над восстановлением доступа\n\n'
+            '💡 Ваш баланс <b>не списан</b>'
+        ),
+        'error_provider_overloaded': (
+            '⏳ <b>Высокая нагрузка на сервис</b>\n\n'
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            '🔧 <b>Причина:</b> Сервера AI-провайдера перегружены\n\n'
+            '❗️ <i>Это не ошибка бота — слишком много запросов у провайдера.</i>\n\n'
+            '🔄 <b>Что делать:</b>\n'
+            '• Подождите 1-2 минуты и попробуйте снова\n'
+            '• Или выберите другую модель\n\n'
+            '💡 Ваш баланс <b>не списан</b>'
+        ),
         'msg_admin_only': 'Эта функция доступна только администратору.',
         'msg_user_mode_enabled': 'Режим пользователя включен',
         'msg_returning_to_admin': 'Возврат в админ-панель',
@@ -525,6 +557,38 @@ TRANSLATIONS = {
             '💬 If result doesn\'t appear, contact support'
         ),
         'msg_spinning_wheel': '🎰 Spinning the wheel of fortune...',
+        # Provider error messages - UX friendly
+        'error_provider_unavailable': (
+            '⚠️ <b>Model Temporarily Unavailable</b>\n\n'
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            '🔧 <b>Reason:</b> AI provider maintenance\n\n'
+            '❗️ <i>This is not a bot error — the issue is with the AI provider.</i>\n\n'
+            '🔄 <b>What to do:</b>\n'
+            '• Try a different model from the catalog\n'
+            '• Retry in 5-10 minutes\n'
+            '• The model will be back soon\n\n'
+            '💡 Your balance was <b>not charged</b> for this attempt'
+        ),
+        'error_provider_model_not_supported': (
+            '⚠️ <b>Model Unavailable at Provider</b>\n\n'
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            '🔧 <b>Reason:</b> AI provider temporarily disabled this model\n\n'
+            '❗️ <i>This is not a bot error — decision made by the provider.</i>\n\n'
+            '🔄 <b>What to do:</b>\n'
+            '• Choose a similar model from the catalog\n'
+            '• We are working to restore access\n\n'
+            '💡 Your balance was <b>not charged</b>'
+        ),
+        'error_provider_overloaded': (
+            '⏳ <b>High Service Load</b>\n\n'
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'
+            '🔧 <b>Reason:</b> AI provider servers are overloaded\n\n'
+            '❗️ <i>This is not a bot error — too many requests at the provider.</i>\n\n'
+            '🔄 <b>What to do:</b>\n'
+            '• Wait 1-2 minutes and try again\n'
+            '• Or choose a different model\n\n'
+            '💡 Your balance was <b>not charged</b>'
+        ),
         'msg_admin_only': 'This function is available only to administrator.',
         'msg_user_mode_enabled': 'User mode enabled',
         'msg_returning_to_admin': 'Returning to admin panel',
