@@ -2209,7 +2209,7 @@
                 </div>
             `;
             
-            const modelInfo = await apiCall(`/models/${modelId}`);
+            const modelInfo = await apiCall(`/models/${encodeURIComponent(modelId)}`);
             
             if (modelInfo.error) {
                 app.innerHTML = `

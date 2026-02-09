@@ -131,9 +131,10 @@ async def webapp_top_models(request: web.Request) -> web.Response:
         # Enrich models with prices
         for model in models:
             for sku in model.get("skus", []):
-                sku_id = sku.get("sku_id", "")
-                if sku_id:
-                    sku["price_rub"] = get_sku_price_rub(sku_id) or 0
+                price_ref = sku.get("price_ref", "")
+                mode_key = sku.get("mode_key", "")
+                if price_ref:
+                    sku["price_rub"] = get_sku_price_rub(price_ref, mode_key) or 0
         
         return web.json_response({
             "models": models,
@@ -147,7 +148,8 @@ async def webapp_top_models(request: web.Request) -> web.Response:
 
 async def webapp_model_info(request: web.Request) -> web.Response:
     """Get specific model info with parameters schema."""
-    model_id = request.match_info.get("model_id", "")
+    from urllib.parse import unquote
+    model_id = unquote(request.match_info.get("model_id", ""))
     if not model_id:
         return web.json_response({"error": "model_id required"}, status=400)
     
@@ -503,7 +505,7 @@ def register_webapp_routes(app: web.Application) -> None:
     app.router.add_get("/webapp/api/user/{user_id}/history", webapp_user_history)
     app.router.add_get("/webapp/api/models", webapp_models)
     app.router.add_get("/webapp/api/top-models", webapp_top_models)
-    app.router.add_get("/webapp/api/models/{model_id}", webapp_model_info)
+    app.router.add_get("/webapp/api/models/{model_id:.+}", webapp_model_info)  # .+ allows slashes in model_id
     app.router.add_post("/webapp/api/upload", webapp_upload_image)
     app.router.add_post("/webapp/api/generate", webapp_generate)
     app.router.add_get("/webapp/api/jobs/{job_id}", webapp_job_status)
