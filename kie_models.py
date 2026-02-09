@@ -30,11 +30,12 @@ KIE_MODELS = [
     },
     {
         "id": "sora-2-pro-image-to-video",
-        "name": "Sora 2 Pro Image-to-Video",
-        "description": "OpenAI Sora 2 Pro - последняя AI модель генерации видео, поддерживающая text-to-video и image-to-video. Реалистичное движение, физическая согласованность, улучшенный контроль над стилем, сценой и соотношением сторон. Идеально для креативных приложений и контента для соцсетей. Генерация видео из изображений.",
+        "name": "🔥 Sora 2 Pro Image-to-Video",
+        "description": "⭐ ТОП МОДЕЛЬ! OpenAI Sora 2 Pro - премиальная генерация видео из изображений. Реалистичное движение, Standard/High качество.",
         "category": "Видео",
         "emoji": "🎬",
-        "pricing": "150 кредитов (Standard 10s) или 270 кредитов (Standard 15s) или 330 кредитов (High 10s) или 630 кредитов (High 15s)",
+        "is_featured": True,
+        "pricing": "150-630 кредитов (Standard/High, 10-15 сек)",
         "input_params": {
             "image_urls": {
                 "type": "array",
@@ -81,10 +82,11 @@ KIE_MODELS = [
     },
     {
         "id": "sora-watermark-remover",
-        "name": "Sora 2 Watermark Remover",
-        "description": "Удаление динамических водяных знаков с видео Sora 2 с помощью AI-детекции и отслеживания движения. Сохраняет плавность и естественность кадров.",
+        "name": "🔥 Sora Watermark Remover",
+        "description": "⭐ ТОП МОДЕЛЬ! Удаление водяных знаков с видео Sora 2. AI-детекция и отслеживание движения.",
         "category": "Видео",
         "emoji": "🎬",
+        "is_featured": True,
         "pricing": "10 кредитов за использование",
         "input_params": {
             "video_url": {
@@ -97,11 +99,12 @@ KIE_MODELS = [
     },
     {
         "id": "sora-2-text-to-video",
-        "name": "Sora 2 Text-to-Video",
-        "description": "OpenAI Sora 2 - последняя модель генерации видео из текста. Реалистичное движение, физическая согласованность, улучшенный контроль над стилем, сценой и соотношением сторон. Идеально для креативных приложений и контента для соцсетей.",
+        "name": "🔥 Sora 2 Text-to-Video",
+        "description": "⭐ ТОП МОДЕЛЬ! OpenAI Sora 2 - лучшая модель генерации видео из текста. Реалистичное движение, физическая согласованность, улучшенный контроль над стилем.",
         "category": "Видео",
         "emoji": "🎥",
-        "pricing": "30 кредитов за 10-секундное видео с аудио",
+        "is_featured": True,
+        "pricing": "30-40 кредитов за видео (10-15 сек)",
         "input_params": {
             "prompt": {
                 "type": "string",
@@ -128,6 +131,81 @@ KIE_MODELS = [
                 "description": "Удалить водяной знак с сгенерированного видео",
                 "required": False,
                 "default": True
+            }
+        }
+    },
+    {
+        "id": "sora-2-image-to-video",
+        "name": "🔥 Sora 2 Image-to-Video",
+        "description": "⭐ ТОП МОДЕЛЬ! OpenAI Sora 2 - генерация видео из изображений. Реалистичное движение, 10-15 сек видео.",
+        "category": "Видео",
+        "emoji": "🎥",
+        "is_featured": True,
+        "pricing": "35-40 кредитов за видео (10-15 сек)",
+        "input_params": {
+            "image_urls": {
+                "type": "array",
+                "description": "URL изображения для первого кадра (JPEG/PNG/WebP, макс. 10MB)",
+                "required": True,
+                "item_type": "string"
+            },
+            "prompt": {
+                "type": "string",
+                "description": "Описание желаемого движения (до 10000 символов)",
+                "required": True,
+                "max_length": 10000
+            },
+            "aspect_ratio": {
+                "type": "string",
+                "description": "Соотношение сторон",
+                "required": False,
+                "default": "landscape",
+                "enum": ["portrait", "landscape"]
+            },
+            "n_frames": {
+                "type": "string",
+                "description": "Длительность видео",
+                "required": False,
+                "default": "10",
+                "enum": ["10", "15"]
+            }
+        }
+    },
+    {
+        "id": "sora-2-pro-text-to-video",
+        "name": "🔥 Sora 2 Pro Text-to-Video",
+        "description": "⭐ ТОП МОДЕЛЬ! OpenAI Sora 2 Pro - премиальная генерация видео из текста. Standard/High качество, 10-15 сек.",
+        "category": "Видео",
+        "emoji": "🎥",
+        "is_featured": True,
+        "pricing": "150-630 кредитов (Standard/High, 10-15 сек)",
+        "input_params": {
+            "prompt": {
+                "type": "string",
+                "description": "Описание желаемого видео (до 10000 символов)",
+                "required": True,
+                "max_length": 10000
+            },
+            "aspect_ratio": {
+                "type": "string",
+                "description": "Соотношение сторон",
+                "required": False,
+                "default": "landscape",
+                "enum": ["portrait", "landscape"]
+            },
+            "n_frames": {
+                "type": "string",
+                "description": "Длительность видео",
+                "required": False,
+                "default": "10",
+                "enum": ["10", "15"]
+            },
+            "size": {
+                "type": "string",
+                "description": "Качество видео",
+                "required": False,
+                "default": "standard",
+                "enum": ["standard", "high"]
             }
         }
     },
