@@ -1958,6 +1958,14 @@ models:
         - 720p
         - 1080p
     model_mode: text_to_video
+  runway/aleph:
+    model_type: text_to_video
+    input:
+      prompt:
+        type: string
+        required: true
+        max: 5000
+    model_mode: text_to_video
   suno/v5:
     model_type: text_to_music
     input:

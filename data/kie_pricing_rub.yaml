@@ -1638,6 +1638,16 @@ models:
           duration: "5"
           resolution: 1080p
         notes: text-to-video 5s 1080p
+      - unit: video
+        price_rub: 9.25
+        params: {}
+        notes: default 5s 720p
+  - id: runway/aleph
+    skus:
+      - unit: video
+        price_rub: 84.76
+        params: {}
+        notes: per video
   - id: elevenlabs/text-to-dialogue-v3
     skus:
       - unit: 1000_characters

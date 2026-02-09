@@ -811,35 +811,45 @@ models:
     official_usd: 0.005
   description_ru: Удаление фона с фото. Чистый результат, прозрачный PNG за секунды.
 - id: runway/gen-4
-  title_ru: Runway Image to Video
+  title_ru: 🔥 Runway Gen-4
   type: i2v
   modes:
   - unit: video
     credits: 12.0
     official_usd: 0.06
-    notes: 5.0s-720p
+    notes: text-to-video 5s 720p
   - unit: video
     credits: 30.0
     official_usd: 0.15
-    notes: 10.0s-720p
+    notes: text-to-video 10s 720p
   - unit: video
     credits: 30.0
     official_usd: 0.15
-    notes: 5.0s-1080p
+    notes: text-to-video 5s 1080p
   - unit: video
     credits: 12.0
     official_usd: 0.06
-    notes: 5.0s-720p
+    notes: image-to-video 5s 720p
   - unit: video
     credits: 30.0
     official_usd: 0.15
-    notes: 10.0s-720p
+    notes: image-to-video 10s 720p
   - unit: video
     credits: 30.0
     official_usd: 0.15
-    notes: 5.0s-1080p
-  description_ru: 'Runway Gen-4: профессиональная видеогенерация. Для креативных проектов
-    и рекламы.'
+    notes: image-to-video 5s 1080p
+  description_ru: ⭐ ТОП МОДЕЛЬ! Runway Gen-4 — профессиональная видеогенерация.
+    Text-to-video и image-to-video, 5-10 сек, 720p/1080p.
+- id: runway/aleph
+  title_ru: 🔥 Runway Aleph
+  type: t2v
+  modes:
+  - unit: video
+    credits: 110.0
+    official_usd: 0.55
+    notes: per video
+  description_ru: ⭐ ТОП МОДЕЛЬ! Runway Aleph — новейшая флагманская модель генерации
+    видео. Высочайшее качество и реалистичность.
 - id: topaz/image-upscale
   title_ru: Topaz Image Upscaler
   type: upscale

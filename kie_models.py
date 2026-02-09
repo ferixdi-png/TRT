@@ -2837,19 +2837,51 @@ KIE_MODELS = [
     },
     {
         "id": "runway/gen-4",
-        "name": "Runway Video Generation",
-        "description": "Runway API на базе архитектуры Gen-4 от Runway AI. Преобразует идеи в потрясающие видео с помощью Runway Gen 4 Turbo API и Runway Aleph API.",
+        "name": "🔥 Runway Gen-4",
+        "description": "⭐ ТОП МОДЕЛЬ! Runway Gen-4 — профессиональная видеогенерация. Text-to-video и image-to-video, 5-10 сек, 720p/1080p.",
         "category": "Видео",
         "emoji": "🎬",
-        "pricing": "Скоро появится",
+        "is_featured": True,
+        "pricing": "12-30 кредитов (5s 720p: $0.06, 10s/1080p: $0.15)",
         "input_params": {
             "prompt": {
                 "type": "string",
-                "description": "Текстовое описание видео (скоро появится)",
-                "required": True
+                "description": "Описание желаемого видео",
+                "required": True,
+                "max_length": 5000
+            },
+            "duration": {
+                "type": "string",
+                "description": "Длительность видео",
+                "required": False,
+                "default": "5",
+                "enum": ["5", "10"]
+            },
+            "resolution": {
+                "type": "string",
+                "description": "Разрешение видео",
+                "required": False,
+                "default": "720p",
+                "enum": ["720p", "1080p"]
             }
-        },
-        "coming_soon": True
+        }
+    },
+    {
+        "id": "runway/aleph",
+        "name": "🔥 Runway Aleph",
+        "description": "⭐ ТОП МОДЕЛЬ! Runway Aleph — новейшая флагманская модель генерации видео. Высочайшее качество и реалистичность.",
+        "category": "Видео",
+        "emoji": "🚀",
+        "is_featured": True,
+        "pricing": "110 кредитов ($0.55) за видео",
+        "input_params": {
+            "prompt": {
+                "type": "string",
+                "description": "Описание желаемого видео",
+                "required": True,
+                "max_length": 5000
+            }
+        }
     },
     {
         "id": "elevenlabs/text-to-dialogue-v3",
