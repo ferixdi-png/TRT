@@ -431,7 +431,7 @@ async def webapp_generate(request: web.Request) -> web.Response:
 
 
 async def webapp_job_status(request: web.Request) -> web.Response:
-    """Get job status."""
+    """Get job status from unified storage."""
     job_id = request.match_info.get("job_id", "")
     if not job_id:
         return web.json_response({"error": "job_id required"}, status=400)
@@ -440,18 +440,117 @@ async def webapp_job_status(request: web.Request) -> web.Response:
         from app.storage import get_storage
         storage = get_storage()
         
-        job_data = await storage.read_json_file(f"webapp_jobs/{job_id}.json", default=None)
-        if not job_data:
+        # Use unified storage.get_job instead of separate webapp_jobs
+        job = await storage.get_job(job_id)
+        if not job:
             return web.json_response({"error": "Job not found"}, status=404)
         
-        return web.json_response(job_data)
+        return web.json_response({
+            "job_id": job.get("job_id"),
+            "user_id": job.get("user_id"),
+            "model_id": job.get("model_id"),
+            "status": job.get("status"),
+            "result_url": job.get("result_url"),
+            "result_urls": job.get("result_urls", []),
+            "error": job.get("error_message"),
+            "created_at": job.get("created_at"),
+            "updated_at": job.get("updated_at"),
+        })
     except Exception as e:
         logger.error("Failed to get job status: %s", e)
         return web.json_response({"error": str(e)}, status=500)
 
 
+async def webapp_job_cancel(request: web.Request) -> web.Response:
+    """Cancel a job."""
+    init_data = request.headers.get("X-Telegram-Init-Data", "")
+    user_id = get_user_id_from_init_data(init_data)
+    if not user_id:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+    
+    job_id = request.match_info.get("job_id", "")
+    if not job_id:
+        return web.json_response({"error": "job_id required"}, status=400)
+    
+    try:
+        from app.storage import get_storage
+        storage = get_storage()
+        
+        job = await storage.get_job(job_id)
+        if not job:
+            return web.json_response({"error": "Job not found"}, status=404)
+        
+        if job.get("user_id") != user_id:
+            return web.json_response({"error": "Forbidden"}, status=403)
+        
+        await storage.update_job_status(job_id, "canceled", error_message="Cancelled by user")
+        return web.json_response({"ok": True, "status": "canceled"})
+    except Exception as e:
+        logger.error("Failed to cancel job: %s", e)
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def webapp_job_retry(request: web.Request) -> web.Response:
+    """Retry a failed job with same parameters."""
+    init_data = request.headers.get("X-Telegram-Init-Data", "")
+    user_id = get_user_id_from_init_data(init_data)
+    if not user_id:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+    
+    job_id = request.match_info.get("job_id", "")
+    if not job_id:
+        return web.json_response({"error": "job_id required"}, status=400)
+    
+    try:
+        from app.storage import get_storage
+        storage = get_storage()
+        
+        job = await storage.get_job(job_id)
+        if not job:
+            return web.json_response({"error": "Job not found"}, status=404)
+        
+        if job.get("user_id") != user_id:
+            return web.json_response({"error": "Forbidden"}, status=403)
+        
+        # Create new job with same params
+        new_job_id = f"webapp-retry-{uuid.uuid4().hex[:12]}"
+        correlation_id = f"corr-webapp-{user_id}-{uuid.uuid4().hex[:8]}"
+        
+        model_id = job.get("model_id")
+        params = job.get("params", {})
+        price = job.get("price", 0)
+        
+        import asyncio
+        from app.generations.universal_engine import run_generation
+        
+        async def run_gen():
+            try:
+                await run_generation(
+                    user_id=user_id,
+                    model_id=model_id,
+                    session_params=params,
+                    correlation_id=correlation_id,
+                    job_id=new_job_id,
+                    price=price,
+                )
+            except Exception as e:
+                logger.error("Webapp retry generation failed: %s", e)
+        
+        asyncio.create_task(run_gen())
+        
+        return web.json_response({
+            "ok": True,
+            "job_id": new_job_id,
+            "correlation_id": correlation_id,
+            "status": "pending",
+        })
+    except Exception as e:
+        logger.error("Failed to retry job: %s", e)
+        return web.json_response({"error": str(e)}, status=500)
+
+
 async def webapp_user_history(request: web.Request) -> web.Response:
-    """Get user generation history."""
+    """Get user generation history from unified storage."""
     user_id = int(request.match_info.get("user_id", 0))
     if not user_id:
         return web.json_response({"error": "user_id required"}, status=400)
@@ -460,24 +559,20 @@ async def webapp_user_history(request: web.Request) -> web.Response:
         from app.storage import get_storage
         storage = get_storage()
         
-        # Get all jobs for this user
-        jobs = []
-        try:
-            jobs_data = await storage.read_json_file("generation_jobs.json", default={})
-            for job_id, job in jobs_data.items():
-                if job.get("user_id") == user_id:
-                    jobs.append({
-                        "job_id": job_id,
-                        "model_id": job.get("model_id"),
-                        "status": job.get("status"),
-                        "result_url": job.get("result_url"),
-                        "created_at": job.get("created_at"),
-                    })
-        except Exception:
-            pass
+        # Use unified storage.list_jobs instead of reading json file
+        jobs_raw = await storage.list_jobs(user_id=user_id, limit=50)
         
-        # Sort by date, newest first
-        jobs.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        jobs = []
+        for job in jobs_raw:
+            jobs.append({
+                "job_id": job.get("job_id"),
+                "model_id": job.get("model_id"),
+                "model_name": job.get("model_name"),
+                "status": job.get("status"),
+                "result_url": job.get("result_url"),
+                "result_urls": job.get("result_urls", []),
+                "created_at": job.get("created_at"),
+            })
         
         return web.json_response({"history": jobs[:20], "total": len(jobs)})
     except Exception as e:
@@ -523,5 +618,7 @@ def register_webapp_routes(app: web.Application) -> None:
     app.router.add_post("/webapp/api/upload", webapp_upload_image)
     app.router.add_post("/webapp/api/generate", webapp_generate)
     app.router.add_get("/webapp/api/jobs/{job_id}", webapp_job_status)
+    app.router.add_post("/webapp/api/jobs/{job_id}/cancel", webapp_job_cancel)
+    app.router.add_post("/webapp/api/jobs/{job_id}/retry", webapp_job_retry)
     app.router.add_get("/webapp/uploads/{filename}", webapp_serve_upload)
     app.router.add_get("/webapp/static/{filename}", webapp_static)

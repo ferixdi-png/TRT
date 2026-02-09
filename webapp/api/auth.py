@@ -8,7 +8,11 @@ import urllib.parse
 from typing import Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
-BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+
+# Use BOT_TOKEN or TELEGRAM_BOT_TOKEN as fallback
+BOT_TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or ""
+if not BOT_TOKEN:
+    logger.warning("WEBAPP_AUTH_NO_TOKEN: Neither BOT_TOKEN nor TELEGRAM_BOT_TOKEN is set")
 
 
 def validate_webapp_data(init_data: str) -> Optional[Dict[str, Any]]:
