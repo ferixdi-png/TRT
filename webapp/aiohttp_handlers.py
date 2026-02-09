@@ -220,9 +220,10 @@ async def webapp_model_info(request: web.Request) -> web.Response:
         except Exception:
             pass
         
-        # Determine if model requires image input
+        # Determine required input types
         model_mode = getattr(spec, "model_mode", "")
         model_type = getattr(spec, "type", "")
+        
         requires_image = (
             model_mode in ["image-to-image", "image-to-video", "i2i", "i2v"] or
             model_type in ["i2i", "i2v"] or
@@ -230,6 +231,15 @@ async def webapp_model_info(request: web.Request) -> web.Response:
             "edit" in model_id.lower() or
             "remix" in model_id.lower()
         )
+        requires_video = model_mode in ["video-to-video", "v2v"] or model_type in ["v2v"]
+        requires_audio = model_mode in ["audio", "speech", "a2a"] or model_type in ["a2a", "audio"]
+        
+        # Determine output type
+        output_type = "image"
+        if model_mode in ["text-to-video", "image-to-video", "t2v", "i2v"] or model_type in ["t2v", "i2v"]:
+            output_type = "video"
+        elif model_mode in ["audio", "speech", "t2a", "a2a"] or model_type in ["t2a", "a2a", "audio"]:
+            output_type = "audio"
         
         return web.json_response({
             "id": model_id,
@@ -241,6 +251,9 @@ async def webapp_model_info(request: web.Request) -> web.Response:
             "schema": legacy_schema,
             "price": price,
             "requires_image": requires_image,
+            "requires_video": requires_video,
+            "requires_audio": requires_audio,
+            "output_type": output_type,
         })
     except Exception as e:
         logger.error("Failed to get model %s: %s", model_id, e)
@@ -425,12 +438,49 @@ async def webapp_generate(request: web.Request) -> web.Response:
         if not spec:
             return web.json_response({"error": f"Model {model_id} not found"}, status=404)
         
-        # Check if image is required
+        # Check if media input is required based on model mode
         model_mode = getattr(spec, "model_mode", "")
-        requires_image = model_mode in ["image-to-image", "image-to-video"]
+        model_type = getattr(spec, "type", "")
         
-        if requires_image and not image_url:
-            return web.json_response({"error": "Image required for this model"}, status=400)
+        # Determine required input type
+        requires_image = model_mode in ["image-to-image", "image-to-video", "i2i", "i2v"] or model_type in ["i2i", "i2v"]
+        requires_video = model_mode in ["video-to-video", "v2v"] or model_type in ["v2v"]
+        requires_audio = model_mode in ["audio", "speech", "a2a"] or model_type in ["a2a", "audio"]
+        
+        # Check required inputs
+        if requires_image and not (image_url or media_url):
+            return web.json_response({
+                "error": "Изображение обязательно для этой модели",
+                "error_en": "Image required for this model",
+                "required_input": "image",
+            }, status=400)
+        
+        if requires_video and not (video_url or media_url):
+            return web.json_response({
+                "error": "Видео обязательно для этой модели",
+                "error_en": "Video required for this model",
+                "required_input": "video",
+            }, status=400)
+        
+        if requires_audio and not (audio_url or media_url):
+            return web.json_response({
+                "error": "Аудио обязательно для этой модели",
+                "error_en": "Audio required for this model",
+                "required_input": "audio",
+            }, status=400)
+        
+        # Validate parameters using schema
+        try:
+            from app.models.input_schema import validate_input
+            validation_errors = validate_input(model_id, {**params, "prompt": prompt})
+            if validation_errors:
+                return web.json_response({
+                    "error": "Ошибки валидации параметров",
+                    "error_en": "Parameter validation errors",
+                    "validation_errors": validation_errors,
+                }, status=400)
+        except Exception:
+            pass  # Schema may not exist for all models
         
         # Check balance and free generations
         storage = get_storage()
