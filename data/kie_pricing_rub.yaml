@@ -1503,13 +1503,23 @@ models:
       - unit: image
         price_rub: 3.85
         params:
-          quality: Pro
+          quality: "Pro"
         notes: Pro
       - unit: image
         price_rub: 7.71
         params:
-          quality: Max
+          quality: "Max"
         notes: Max
+      - unit: image
+        price_rub: 3.85
+        params:
+          quality: "pro"
+        notes: Pro lowercase
+      - unit: image
+        price_rub: 7.71
+        params:
+          quality: "max"
+        notes: Max lowercase
       - unit: image
         price_rub: 3.85
         params: {}
@@ -1624,20 +1634,26 @@ models:
         price_rub: 9.43
         params:
           duration: "5"
-          resolution: 720p
+          resolution: "720p"
         notes: text-to-video 5s 720p
       - unit: video
         price_rub: 23.57
         params:
           duration: "10"
-          resolution: 720p
+          resolution: "720p"
         notes: text-to-video 10s 720p
       - unit: video
         price_rub: 23.57
         params:
           duration: "5"
-          resolution: 1080p
+          resolution: "1080p"
         notes: text-to-video 5s 1080p
+      - unit: video
+        price_rub: 47.14
+        params:
+          duration: "10"
+          resolution: "1080p"
+        notes: text-to-video 10s 1080p
       - unit: video
         price_rub: 9.25
         params: {}
@@ -1742,7 +1758,22 @@ models:
         price_rub: 9.25
         params:
           instrumental: true
-        notes: Generate Instrumental
+        notes: Generate Instrumental true
+      - unit: generation
+        price_rub: 9.25
+        params:
+          instrumental: false
+        notes: Generate Music false
+      - unit: generation
+        price_rub: 9.25
+        params:
+          instrumental: "true"
+        notes: Generate Instrumental string
+      - unit: generation
+        price_rub: 9.25
+        params:
+          instrumental: "True"
+        notes: Generate Instrumental Python
       - unit: request
         price_rub: 0.31
         params: {}
