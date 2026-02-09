@@ -45,6 +45,9 @@ def _expected_primary_input(model_mode: str, model_id: str = "") -> str:
     # Special cases where model_mode doesn't match primary input
     special_cases = {
         "kling-2.6/motion-control": "video",  # Uses video_urls as primary
+        "gpt-image/1.5-image-to-image": "prompt",  # Prompt-first despite being i2i
+        "midjourney/image-to-image": "prompt",  # Prompt-first despite being i2i
+        "midjourney/image-to-video": "prompt",  # Prompt-first despite being i2v
     }
     if model_id in special_cases:
         return special_cases[model_id]

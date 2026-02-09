@@ -29,10 +29,14 @@ def generate_minimal_params(schema: Dict[str, Any]) -> Dict[str, Any]:
                 # Генерируем тестовую строку
                 if 'prompt' in param_name.lower():
                     params[param_name] = "Test prompt"
-                elif 'url' in param_name.lower():
+                elif 'url' in param_name.lower() or 'input' in param_name.lower():
                     params[param_name] = "https://example.com/test.jpg"
                 else:
                     params[param_name] = "test_value"
+            
+            elif param_type == 'file_url':
+                # Файловый URL - для изображений/видео
+                params[param_name] = ["https://example.com/test.jpg"]
             
             elif param_type == 'enum':
                 # Берем первое значение из enum
@@ -46,7 +50,7 @@ def generate_minimal_params(schema: Dict[str, Any]) -> Dict[str, Any]:
                 item_type = param_schema.get('item_type', 'string')
                 if item_type == 'string':
                     # Минимальный массив с одним элементом
-                    if 'url' in param_name.lower() or 'image' in param_name.lower() or 'video' in param_name.lower():
+                    if 'url' in param_name.lower() or 'image' in param_name.lower() or 'video' in param_name.lower() or 'file' in param_name.lower() or 'input' in param_name.lower():
                         params[param_name] = ["https://example.com/test.jpg"]
                     else:
                         params[param_name] = ["test_item"]
