@@ -542,12 +542,10 @@ async def start_health_server(
             app.router.add_get('/diag/ready', ready_diag_handler)
             app.router.add_post('/webhook/health', webhook_health_echo)
             
-            # Mini App routes
+            # Mini App routes (native aiohttp handlers)
             try:
-                from webapp.api.routes import webapp_api
-                from aiohttp_asgi import ASGIResource
-                webapp_resource = ASGIResource(webapp_api)
-                app.router.add_route("*", "/webapp{path_info:.*}", webapp_resource)
+                from webapp.aiohttp_handlers import register_webapp_routes
+                register_webapp_routes(app)
                 logger.info("[WEBAPP] Mini App routes registered at /webapp")
             except ImportError as webapp_err:
                 logger.debug("[WEBAPP] Mini App not available: %s", webapp_err)
