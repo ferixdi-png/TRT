@@ -1939,6 +1939,39 @@ models:
         - 720p
         - 1080p
     model_mode: text_to_video
+  google/veo-3.1:
+    model_type: text_to_video
+    input:
+      prompt:
+        type: string
+        required: true
+        max: 10000
+      imageUrls:
+        type: array
+        item_type: string
+        required: false
+        max_items: 2
+      model:
+        type: enum
+        required: true
+        values:
+        - veo3_fast
+        - veo3
+      generationType:
+        type: enum
+        required: false
+        values:
+        - TEXT_2_VIDEO
+        - FIRST_AND_LAST_FRAMES_2_VIDEO
+        - REFERENCE_2_VIDEO
+      aspect_ratio:
+        type: enum
+        required: false
+        values:
+        - '16:9'
+        - '9:16'
+        - Auto
+    model_mode: text_to_video
   elevenlabs/text-to-dialogue-v3:
     model_type: text_to_speech
     input:

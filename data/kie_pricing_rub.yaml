@@ -1624,3 +1624,44 @@ models:
         price_rub: 10.79
         params: {}
         notes: text-to-dialogue per 1000 characters
+  - id: google/veo-3.1
+    skus:
+      - unit: video
+        price_rub: 46.23
+        params:
+          model: veo3_fast
+          generationType: TEXT_2_VIDEO
+        notes: text-to-video Fast
+      - unit: video
+        price_rub: 192.63
+        params:
+          model: veo3
+          generationType: TEXT_2_VIDEO
+        notes: text-to-video Quality
+      - unit: video
+        price_rub: 46.23
+        params:
+          model: veo3_fast
+          generationType: FIRST_AND_LAST_FRAMES_2_VIDEO
+        notes: image-to-video Fast
+      - unit: video
+        price_rub: 192.63
+        params:
+          model: veo3
+          generationType: FIRST_AND_LAST_FRAMES_2_VIDEO
+        notes: image-to-video Quality
+      - unit: video
+        price_rub: 46.23
+        params:
+          model: veo3_fast
+          generationType: REFERENCE_2_VIDEO
+        notes: reference-to-video Fast
+      - unit: video
+        price_rub: 192.63
+        params:
+          model: veo3
+        notes: Extend Quality (default)
+      - unit: video
+        price_rub: 46.23
+        params: {}
+        notes: Fast default

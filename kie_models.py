@@ -2611,19 +2611,47 @@ KIE_MODELS = [
     },
     {
         "id": "google/veo-3.1",
-        "name": "Google Veo 3.1",
-        "description": "Google Veo 3.1 - обновленная AI модель генерации видео с реалистичным движением, расширенной длительностью клипов и синхронизированным аудио в нативном 1080p.",
+        "name": "🔥 Google Veo 3.1",
+        "description": "⭐ ТОП МОДЕЛЬ! Google Veo 3.1 — новейшая модель генерации видео. Text-to-video, image-to-video, reference-to-video. Native 9:16, Fast/Quality режимы, 4K output.",
         "category": "Видео",
         "emoji": "🎥",
-        "pricing": "Скоро появится",
+        "is_featured": True,
+        "pricing": "60-250 кредитов (Fast: $0.30, Quality: $1.25)",
         "input_params": {
             "prompt": {
                 "type": "string",
-                "description": "Текстовое описание видео (скоро появится)",
-                "required": True
+                "description": "Описание желаемого видео (до 10000 символов)",
+                "required": True,
+                "max_length": 10000
+            },
+            "imageUrls": {
+                "type": "array",
+                "description": "URL изображений (1-2 шт) для image-to-video режима",
+                "required": False,
+                "item_type": "string"
+            },
+            "model": {
+                "type": "string",
+                "description": "Режим генерации: veo3_fast (быстрый) или veo3 (качество)",
+                "required": True,
+                "default": "veo3_fast",
+                "enum": ["veo3_fast", "veo3"]
+            },
+            "generationType": {
+                "type": "string",
+                "description": "Тип генерации",
+                "required": False,
+                "default": "TEXT_2_VIDEO",
+                "enum": ["TEXT_2_VIDEO", "FIRST_AND_LAST_FRAMES_2_VIDEO", "REFERENCE_2_VIDEO"]
+            },
+            "aspect_ratio": {
+                "type": "string",
+                "description": "Соотношение сторон (16:9 landscape, 9:16 portrait)",
+                "required": False,
+                "default": "16:9",
+                "enum": ["16:9", "9:16", "Auto"]
             }
-        },
-        "coming_soon": True
+        }
     },
     {
         "id": "sora-2-pro-storyboard",

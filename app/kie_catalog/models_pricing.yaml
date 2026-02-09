@@ -236,32 +236,6 @@ models:
     notes: 4K
   description_ru: 'Профессиональная версия Nano Banana: больше деталей, выше точность.
     Для серьёзных задач.'
-- id: google/veo-3.1
-  title_ru: Google Veo 3.1 Text to Video
-  type: t2v
-  modes:
-  - unit: video
-    credits: 60.0
-    official_usd: 0.3
-    notes: Fast
-  - unit: video
-    credits: 250.0
-    official_usd: 1.25
-    notes: Quality
-  - unit: video
-    credits: 60.0
-    official_usd: 0.3
-    notes: Fast
-  - unit: video
-    credits: 250.0
-    official_usd: 1.25
-    notes: Quality
-  - unit: video
-    credits: 60.0
-    official_usd: 0.3
-    notes: Fast
-  description_ru: 'Обновлённая Veo 3.1: лучше физика движений, реалистичнее анимация.
-    Дороже, но круче.'
 - id: grok/imagine
   title_ru: Grok Imagine Image to Video
   type: i2v
@@ -1036,3 +1010,45 @@ models:
     notes: per 1000 characters
   description_ru: Генерация диалогов и речи из текста. Поддержка 70+ языков, настройка
     стабильности голоса.
+- id: google/veo-3.1
+  title_ru: 🔥 Google Veo 3.1
+  type: t2v
+  modes:
+  - unit: video
+    credits: 60.0
+    official_usd: 0.30
+    notes: text-to-video Fast
+  - unit: video
+    credits: 250.0
+    official_usd: 1.25
+    notes: text-to-video Quality
+  - unit: video
+    credits: 60.0
+    official_usd: 0.30
+    notes: image-to-video Fast
+  - unit: video
+    credits: 250.0
+    official_usd: 1.25
+    notes: image-to-video Quality
+  - unit: video
+    credits: 60.0
+    official_usd: 0.30
+    notes: reference-to-video Fast
+  - unit: video
+    credits: 250.0
+    official_usd: 1.25
+    notes: Extend Quality
+  - unit: video
+    credits: 60.0
+    official_usd: 0.30
+    notes: Extend Fast
+  - unit: video
+    credits: 5.0
+    official_usd: 0.025
+    notes: Get 1080P Video
+  - unit: video
+    credits: 120.0
+    official_usd: 0.60
+    notes: Get 4K Video
+  description_ru: ⭐ ТОП МОДЕЛЬ! Google Veo 3.1 — новейшая модель генерации видео.
+    Text-to-video, image-to-video, reference-to-video. Native 9:16, Fast/Quality режимы.

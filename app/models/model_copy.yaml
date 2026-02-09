@@ -503,6 +503,12 @@ elevenlabs/text-to-dialogue-v3:
   sku_templates:
     default: 'Язык: {language_code} • Стабильность: {stability}'
     by_sku_key: {}
+google/veo-3.1:
+  model_short: '🔥 Google Veo 3.1 — новейшая модель генерации видео. Text-to-video,
+    image-to-video, reference-to-video. Native 9:16, 4K output.'
+  sku_templates:
+    default: 'Режим: {model} • Тип: {generationType} • Формат: {aspect_ratio}'
+    by_sku_key: {}
 z-image:
   model_short: 'Z-Image: экспериментальная модель генерации. Нестандартные стили и
     подходы.'
