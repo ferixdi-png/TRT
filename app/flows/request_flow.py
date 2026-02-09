@@ -224,7 +224,13 @@ class RequestFlow:
         elif param_type in ['integer', 'float']:
             try:
                 num_value = float(value) if param_type == 'float' else int(value)
-                # TODO: добавить проверку min/max если нужно
+                # Validate min/max bounds
+                min_val = param.get('min')
+                max_val = param.get('max')
+                if min_val is not None and num_value < min_val:
+                    return False, f"Значение должно быть не меньше {min_val}"
+                if max_val is not None and num_value > max_val:
+                    return False, f"Значение должно быть не больше {max_val}"
             except (ValueError, TypeError):
                 return False, "Значение должно быть числом"
         
