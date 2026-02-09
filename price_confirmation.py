@@ -64,13 +64,14 @@ async def show_price_confirmation(
         # Применяем бонусы, если доступны
         if bonus_available > 0 and not is_free:
             if bonus_available >= final_price:
-                final_price = 0.0
+                # FIX: bonus_used = сумма списанных бонусов (до обнуления)
                 price_info['bonus_used'] = final_price
                 price_info['bonus_remaining'] = bonus_available - final_price
+                final_price = 0.0
             else:
-                final_price = final_price - bonus_available
                 price_info['bonus_used'] = bonus_available
                 price_info['bonus_remaining'] = 0.0
+                final_price = final_price - bonus_available
             price_info['total_price'] = final_price
         
         if is_free:
@@ -409,13 +410,14 @@ def build_confirmation_text(
         # Применяем бонусы, если доступны
         if bonus_available > 0 and not is_free:
             if bonus_available >= final_price:
-                final_price = 0.0
+                # FIX: bonus_used = сумма списанных бонусов (до обнуления)
                 price_info['bonus_used'] = final_price
                 price_info['bonus_remaining'] = bonus_available - final_price
+                final_price = 0.0
             else:
-                final_price = final_price - bonus_available
                 price_info['bonus_used'] = bonus_available
                 price_info['bonus_remaining'] = 0.0
+                final_price = final_price - bonus_available
             price_info['total_price'] = final_price
         
         if is_free:

@@ -13,6 +13,28 @@ from webapp.api.auth import validate_webapp_data, get_user_id_from_init_data
 logger = logging.getLogger(__name__)
 
 WEBAPP_STATIC_DIR = Path(__file__).parent / "static"
+
+
+def _get_job_status_info(status: str) -> dict:
+    """Map job status to UX-friendly state, progress, and action hint."""
+    status_lower = (status or "pending").lower()
+    
+    STATUS_MAP = {
+        "pending": {"state": "pending", "progress": 0, "action_hint": "Ожидание в очереди..."},
+        "queued": {"state": "queued", "progress": 10, "action_hint": "В очереди на обработку"},
+        "waiting": {"state": "processing", "progress": 30, "action_hint": "Генерация в процессе..."},
+        "success": {"state": "ready", "progress": 90, "action_hint": "Результат готов"},
+        "result_validated": {"state": "ready", "progress": 95, "action_hint": "Результат проверен"},
+        "tg_deliver": {"state": "delivering", "progress": 98, "action_hint": "Доставка результата..."},
+        "delivered": {"state": "done", "progress": 100, "action_hint": "Готово! Откройте результат"},
+        "completed": {"state": "done", "progress": 100, "action_hint": "Готово!"},
+        "failed": {"state": "error", "progress": 0, "action_hint": "Ошибка. Попробуйте повторить"},
+        "canceled": {"state": "canceled", "progress": 0, "action_hint": "Отменено"},
+    }
+    
+    return STATUS_MAP.get(status_lower, {"state": status_lower, "progress": 50, "action_hint": "Обработка..."})
+
+
 WEBAPP_UPLOADS_DIR = Path(__file__).parent / "uploads"
 WEBAPP_UPLOADS_DIR.mkdir(exist_ok=True)
 
@@ -51,10 +73,20 @@ async def webapp_user_me(request: web.Request) -> web.Response:
 
 
 async def webapp_user_balance(request: web.Request) -> web.Response:
-    """Get user balance with free generations info."""
+    """Get user balance. Requires auth and user_id match."""
+    # Auth check - require valid init_data
+    init_data = request.headers.get("X-Telegram-Init-Data", "")
+    auth_user_id = get_user_id_from_init_data(init_data)
+    if not auth_user_id:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+    
     user_id = int(request.match_info.get("user_id", 0))
     if not user_id:
         return web.json_response({"error": "user_id required"}, status=400)
+    
+    # Verify user can only access their own balance
+    if auth_user_id != user_id:
+        return web.json_response({"error": "Forbidden"}, status=403)
     
     try:
         from app.storage import get_storage
@@ -445,11 +477,18 @@ async def webapp_job_status(request: web.Request) -> web.Response:
         if not job:
             return web.json_response({"error": "Job not found"}, status=404)
         
+        # UX-friendly status mapping
+        status = job.get("status", "pending")
+        status_info = _get_job_status_info(status)
+        
         return web.json_response({
             "job_id": job.get("job_id"),
             "user_id": job.get("user_id"),
             "model_id": job.get("model_id"),
-            "status": job.get("status"),
+            "status": status,
+            "state": status_info["state"],
+            "progress": status_info["progress"],
+            "action_hint": status_info["action_hint"],
             "result_url": job.get("result_url"),
             "result_urls": job.get("result_urls", []),
             "error": job.get("error_message"),
@@ -550,10 +589,20 @@ async def webapp_job_retry(request: web.Request) -> web.Response:
 
 
 async def webapp_user_history(request: web.Request) -> web.Response:
-    """Get user generation history from unified storage."""
+    """Get user generation history from unified storage. Requires auth."""
+    # Auth check - require valid init_data
+    init_data = request.headers.get("X-Telegram-Init-Data", "")
+    auth_user_id = get_user_id_from_init_data(init_data)
+    if not auth_user_id:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+    
     user_id = int(request.match_info.get("user_id", 0))
     if not user_id:
         return web.json_response({"error": "user_id required"}, status=400)
+    
+    # Verify user can only access their own history
+    if auth_user_id != user_id:
+        return web.json_response({"error": "Forbidden"}, status=403)
     
     try:
         from app.storage import get_storage
