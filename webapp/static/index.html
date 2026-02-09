@@ -2740,15 +2740,24 @@
         
         async function pollJobStatus(jobId) {
             const result = await apiCall(`/jobs/${jobId}`);
+            console.log('pollJobStatus:', jobId, result);
             
             // Update status UI based on response
             const titleEl = document.getElementById('genStatusTitle');
             const textEl = document.getElementById('genStatusText');
             const infoEl = document.getElementById('genStatusInfo');
             
+            // Handle network/parsing errors
             if (result.error && result.error !== 'Job not found') {
-                // Still processing or error
-                if (titleEl) titleEl.textContent = '⚠️ Проверяем статус...';
+                console.warn('Poll error:', result.error);
+                // Don't show error UI yet - might be temporary, keep polling
+                return;
+            }
+            
+            // Job not found yet - still creating, keep polling
+            if (result.error === 'Job not found') {
+                if (titleEl) titleEl.textContent = '📤 Создаём задачу...';
+                if (textEl) textEl.textContent = 'Подождите, задача создаётся';
                 return;
             }
             
