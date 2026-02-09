@@ -102,8 +102,8 @@ async def webapp_user_balance(request: web.Request) -> web.Response:
         try:
             from helpers import get_user_free_generations_remaining_async
             free_remaining = await get_user_free_generations_remaining_async(user_id)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to get free generations for user %s: %s", user_id, e)
         
         # Get support contact from ENV
         support_telegram = os.getenv("SUPPORT_TELEGRAM", "").strip().replace("@", "")
@@ -139,8 +139,8 @@ async def webapp_models(request: web.Request) -> web.Response:
                     # Also check from resolve_price
                     if price_info.get('free_sku', False):
                         is_free = True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Failed to resolve price for model %s: %s", model_id, e)
             
             models.append({
                 "id": model_id,
@@ -225,8 +225,8 @@ async def webapp_model_info(request: web.Request) -> web.Response:
             from app.pricing.price_resolver import resolve_price
             price_info = await resolve_price(model_id, {})
             price = price_info.get('price_rub', 0) if price_info else 0
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to resolve price for model %s: %s", model_id, e)
         
         # Determine required input types
         model_mode = getattr(spec, "model_mode", "")
@@ -530,8 +530,8 @@ async def webapp_generate(request: web.Request) -> web.Response:
                     "error_en": "Parameter validation errors",
                     "validation_errors": validation_errors,
                 }, status=400)
-        except Exception:
-            pass  # Schema may not exist for all models
+        except Exception as e:
+            logger.debug("Schema validation skipped for model %s: %s", model_id, e)
         
         # Check balance and free generations
         storage = get_storage()
@@ -546,8 +546,8 @@ async def webapp_generate(request: web.Request) -> web.Response:
             price_info = await resolve_price(model_id, params)
             price = price_info.get('price_rub', 0) if price_info else 0
             is_free_model = model_has_free_sku(model_id) or price_info.get('free_sku', False) if price_info else False
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to resolve price for generation model=%s: %s", model_id, e)
         
         # Check if user has free generations available
         is_free_generation = False
@@ -558,8 +558,8 @@ async def webapp_generate(request: web.Request) -> web.Response:
                 if free_remaining > 0:
                     is_free_generation = True
                     price = 0  # Free generation costs nothing
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Failed to check free generations for user %s: %s", user_id, e)
         
         # Check balance only if not a free generation
         if not is_free_generation and balance < price:
