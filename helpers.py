@@ -352,8 +352,18 @@ async def format_balance_message(balance_info: Dict[str, Any], user_lang: str = 
             
             balance_message += (
                 f"✅ Invite a friend and get bonuses\n\n"
-                f"🎁 <b>Tip:</b> Start with free generations!"
+                f"🎁 <b>Tip:</b> Start with free generations!\n\n"
             )
+            
+            # Add promo for ordering custom bot
+            support_telegram = os.getenv("SUPPORT_TELEGRAM", "").strip().replace("@", "")
+            if support_telegram:
+                balance_message += (
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"🤖 <b>Want this bot for your business?</b>\n"
+                    f"Order a turnkey bot to monetize your audience!\n"
+                    f"👉 Contact: @{support_telegram}"
+                )
             
             return balance_message
         else:
@@ -396,8 +406,18 @@ async def format_balance_message(balance_info: Dict[str, Any], user_lang: str = 
             balance_message += (
                 f"✅ Пригласить друга и получить бонусы\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"🎁 <b>💡 Совет:</b> Начните с бесплатных генераций!"
+                f"🎁 <b>💡 Совет:</b> Начните с бесплатных генераций!\n\n"
             )
+            
+            # Add promo for ordering custom bot
+            support_telegram = os.getenv("SUPPORT_TELEGRAM", "").strip().replace("@", "")
+            if support_telegram:
+                balance_message += (
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"🤖 <b>Хотите такого бота для своего бизнеса?</b>\n"
+                    f"Закажите бота под ключ для монетизации аудитории!\n"
+                    f"👉 Написать: @{support_telegram}"
+                )
             
             return balance_message
 
