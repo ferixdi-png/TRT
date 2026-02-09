@@ -3,313 +3,964 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AI Генератор</title>
+    <title>Kie AI</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
+        /* ═══════════════════════════════════════════════════════════════
+           PREMIUM DESIGN SYSTEM - Kie AI Mini App
+           8px Grid • Premium Typography • Smooth Transitions
+        ═══════════════════════════════════════════════════════════════ */
+        
         :root {
-            --tg-theme-bg-color: #ffffff;
-            --tg-theme-text-color: #000000;
-            --tg-theme-hint-color: #999999;
-            --tg-theme-link-color: #2481cc;
-            --tg-theme-button-color: #2481cc;
-            --tg-theme-button-text-color: #ffffff;
-            --tg-theme-secondary-bg-color: #f0f0f0;
-            --tg-theme-destructive-text-color: #ff3b30;
-            --accent-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            --success-color: #34c759;
-            --warning-color: #ff9500;
+            /* Telegram Theme Integration */
+            --tg-bg: var(--tg-theme-bg-color, #ffffff);
+            --tg-text: var(--tg-theme-text-color, #1a1a1a);
+            --tg-hint: var(--tg-theme-hint-color, #8e8e93);
+            --tg-link: var(--tg-theme-link-color, #007aff);
+            --tg-btn: var(--tg-theme-button-color, #007aff);
+            --tg-btn-text: var(--tg-theme-button-text-color, #ffffff);
+            --tg-secondary: var(--tg-theme-secondary-bg-color, #f2f2f7);
+            
+            /* Premium Palette */
+            --accent-primary: #6366f1;
+            --accent-secondary: #8b5cf6;
+            --accent-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+            --accent-gradient-hover: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #9333ea 100%);
+            --success: #10b981;
+            --success-bg: rgba(16, 185, 129, 0.12);
+            --warning: #f59e0b;
+            --warning-bg: rgba(245, 158, 11, 0.12);
+            --error: #ef4444;
+            --error-bg: rgba(239, 68, 68, 0.12);
+            
+            /* Surfaces */
+            --surface-elevated: rgba(255, 255, 255, 0.8);
+            --surface-overlay: rgba(0, 0, 0, 0.04);
+            --glass: rgba(255, 255, 255, 0.72);
+            --glass-border: rgba(255, 255, 255, 0.18);
+            
+            /* Spacing (8px grid) */
+            --space-1: 4px;
+            --space-2: 8px;
+            --space-3: 12px;
+            --space-4: 16px;
+            --space-5: 20px;
+            --space-6: 24px;
+            --space-8: 32px;
+            --space-10: 40px;
+            
+            /* Typography */
+            --font-display: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            --font-body: 'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            
+            /* Radii */
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            --radius-xl: 20px;
+            --radius-2xl: 24px;
+            --radius-full: 9999px;
+            
+            /* Shadows */
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+            --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+            --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.3);
+            
+            /* Transitions */
+            --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+            --duration-fast: 150ms;
+            --duration-normal: 250ms;
+            --duration-slow: 400ms;
         }
         
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        /* Dark mode adjustments */
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --surface-elevated: rgba(30, 30, 35, 0.9);
+                --surface-overlay: rgba(255, 255, 255, 0.06);
+                --glass: rgba(30, 30, 35, 0.85);
+                --glass-border: rgba(255, 255, 255, 0.1);
+            }
+        }
+        
+        /* ═══════════════════════════════════════════════════════════════
+           BASE STYLES
+        ═══════════════════════════════════════════════════════════════ */
+        
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        html { 
+            font-size: 16px; 
+            -webkit-tap-highlight-color: transparent;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
         
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: var(--tg-theme-bg-color);
-            color: var(--tg-theme-text-color);
+            font-family: var(--font-body);
+            background: var(--tg-bg);
+            color: var(--tg-text);
             min-height: 100vh;
-            padding-bottom: 100px;
+            padding-bottom: calc(80px + env(safe-area-inset-bottom));
+            line-height: 1.5;
         }
         
-        .container { max-width: 100%; padding: 0 16px; }
+        .container { 
+            max-width: 100%; 
+            padding: 0 var(--space-4);
+        }
         
-        /* Page Header */
+        /* ═══════════════════════════════════════════════════════════════
+           TYPOGRAPHY
+        ═══════════════════════════════════════════════════════════════ */
+        
+        .text-display { font-family: var(--font-display); font-size: 28px; font-weight: 700; letter-spacing: -0.5px; line-height: 1.2; }
+        .text-title { font-family: var(--font-display); font-size: 22px; font-weight: 600; letter-spacing: -0.3px; line-height: 1.3; }
+        .text-headline { font-size: 17px; font-weight: 600; letter-spacing: -0.2px; }
+        .text-body { font-size: 15px; font-weight: 400; }
+        .text-caption { font-size: 13px; font-weight: 500; color: var(--tg-hint); }
+        .text-micro { font-size: 11px; font-weight: 500; letter-spacing: 0.2px; text-transform: uppercase; color: var(--tg-hint); }
+        
+        /* ═══════════════════════════════════════════════════════════════
+           PAGE HEADER
+        ═══════════════════════════════════════════════════════════════ */
+        
         .page-header {
-            display: flex; align-items: center; gap: 12px;
-            padding: 16px 0; margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: var(--space-3);
+            padding: var(--space-4) 0;
+            position: sticky;
+            top: 0;
+            background: var(--tg-bg);
+            z-index: 100;
+            margin-bottom: var(--space-2);
         }
-        .back-btn {
-            width: 36px; height: 36px;
-            background: var(--tg-theme-secondary-bg-color);
-            border: none; border-radius: 50%;
-            font-size: 18px; cursor: pointer;
-            display: flex; align-items: center; justify-content: center;
-        }
-        .page-title { font-size: 20px; font-weight: 600; flex: 1; }
         
-        /* Header */
+        .back-btn {
+            width: 40px;
+            height: 40px;
+            background: var(--tg-secondary);
+            border: none;
+            border-radius: var(--radius-full);
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all var(--duration-fast) var(--ease-out);
+            color: var(--tg-text);
+        }
+        
+        .back-btn:active { transform: scale(0.92); background: var(--surface-overlay); }
+        
+        .page-title { 
+            font-family: var(--font-display);
+            font-size: 20px; 
+            font-weight: 600; 
+            flex: 1;
+            letter-spacing: -0.3px;
+        }
+        
+        /* ═══════════════════════════════════════════════════════════════
+           HERO HEADER
+        ═══════════════════════════════════════════════════════════════ */
+        
         .header {
             background: var(--accent-gradient);
-            padding: 24px 16px 32px;
-            margin: 0 -16px 16px;
-            border-radius: 0 0 24px 24px;
+            padding: var(--space-6) var(--space-4) var(--space-8);
+            margin: 0 calc(var(--space-4) * -1) var(--space-5);
+            border-radius: 0 0 var(--radius-2xl) var(--radius-2xl);
             color: white;
+            position: relative;
+            overflow: hidden;
         }
-        .header-top { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+        
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -30%;
+            width: 200px;
+            height: 200px;
+            background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 70%);
+            pointer-events: none;
+        }
+        
+        .header-top { 
+            display: flex; 
+            align-items: center; 
+            gap: var(--space-4); 
+            margin-bottom: var(--space-5);
+            position: relative;
+        }
+        
         .user-avatar {
-            width: 52px; height: 52px; border-radius: 50%;
-            background: rgba(255,255,255,0.25);
-            display: flex; align-items: center; justify-content: center;
-            font-size: 22px; font-weight: 700; color: white;
-            border: 2px solid rgba(255,255,255,0.4);
+            width: 56px;
+            height: 56px;
+            border-radius: var(--radius-full);
+            background: rgba(255,255,255,0.2);
+            backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: 700;
+            color: white;
+            border: 2px solid rgba(255,255,255,0.3);
+            flex-shrink: 0;
         }
-        .user-info { flex: 1; }
-        .user-name { font-size: 18px; font-weight: 600; }
-        .user-username { font-size: 13px; opacity: 0.85; }
+        
+        .user-info { flex: 1; min-width: 0; }
+        .user-name { font-size: 18px; font-weight: 600; margin-bottom: 2px; }
+        .user-username { font-size: 14px; opacity: 0.8; }
         
         /* Balance Card */
         .balance-card {
+            background: rgba(255,255,255,0.12);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: var(--radius-xl);
+            padding: var(--space-4) var(--space-5);
+            display: flex;
+            align-items: center;
+            gap: var(--space-4);
+        }
+        
+        .balance-icon { 
+            font-size: 32px; 
+            width: 48px;
+            height: 48px;
             background: rgba(255,255,255,0.15);
-            backdrop-filter: blur(10px);
-            border-radius: 16px;
-            padding: 16px;
-            display: flex; align-items: center; gap: 12px;
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-        .balance-icon { font-size: 28px; }
+        
         .balance-info { flex: 1; }
-        .balance-label { font-size: 12px; opacity: 0.8; text-transform: uppercase; letter-spacing: 0.5px; }
-        .balance-value { font-size: 28px; font-weight: 700; }
-        .balance-value .currency { font-size: 16px; opacity: 0.7; }
+        .balance-label { font-size: 12px; opacity: 0.75; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+        .balance-value { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+        .balance-value .currency { font-size: 16px; opacity: 0.7; margin-left: 2px; }
+        
         .balance-btn {
-            background: rgba(255,255,255,0.25);
-            border: none; border-radius: 12px;
-            padding: 10px 16px; color: white;
-            font-weight: 600; font-size: 14px;
-            cursor: pointer;
-        }
-        
-        /* Section */
-        .section { margin-bottom: 20px; }
-        .section-header {
-            display: flex; align-items: center; justify-content: space-between;
-            margin-bottom: 12px; padding: 0 4px;
-        }
-        .section-title { font-size: 17px; font-weight: 600; }
-        .section-link { font-size: 14px; color: var(--tg-theme-link-color); cursor: pointer; }
-        
-        /* Category Cards */
-        .category-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-        .category-card {
-            background: var(--tg-theme-secondary-bg-color);
-            border-radius: 16px;
-            padding: 20px 16px;
-            cursor: pointer;
-            transition: transform 0.15s;
-            text-align: center;
-        }
-        .category-card:active { transform: scale(0.97); }
-        .category-icon { font-size: 40px; margin-bottom: 10px; }
-        .category-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
-        .category-count { font-size: 12px; color: var(--tg-theme-hint-color); }
-        
-        /* Model List */
-        .model-list { display: flex; flex-direction: column; gap: 8px; }
-        .model-item {
-            display: flex; align-items: center; gap: 12px;
-            background: var(--tg-theme-secondary-bg-color);
-            border-radius: 14px;
-            padding: 14px;
-            cursor: pointer;
-            transition: transform 0.15s;
-        }
-        .model-item:active { transform: scale(0.98); }
-        .model-icon { font-size: 32px; }
-        .model-info { flex: 1; }
-        .model-name { font-size: 15px; font-weight: 600; margin-bottom: 2px; }
-        .model-desc { font-size: 12px; color: var(--tg-theme-hint-color); }
-        .model-price { font-size: 14px; font-weight: 600; color: var(--tg-theme-button-color); }
-        
-        /* Form */
-        .form-group { margin-bottom: 16px; }
-        .form-label { font-size: 14px; font-weight: 500; margin-bottom: 8px; display: block; }
-        .form-input {
-            width: 100%;
-            padding: 14px 16px;
-            border: 2px solid var(--tg-theme-secondary-bg-color);
-            border-radius: 12px;
-            font-size: 16px;
-            background: var(--tg-theme-bg-color);
-            color: var(--tg-theme-text-color);
-            resize: none;
-        }
-        .form-input:focus {
-            outline: none;
-            border-color: var(--tg-theme-button-color);
-        }
-        .form-textarea { min-height: 120px; }
-        
-        /* Image Upload */
-        .image-upload-area {
-            background: var(--tg-theme-secondary-bg-color);
-            border: 2px dashed var(--tg-theme-hint-color);
-            border-radius: 16px;
-            padding: 32px 16px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.2s;
-            color: var(--tg-theme-hint-color);
-        }
-        .image-upload-area:active {
-            border-color: var(--tg-theme-button-color);
-            background: rgba(36, 129, 204, 0.1);
-        }
-        
-        /* Button */
-        .btn {
-            display: block;
-            width: 100%;
-            padding: 16px;
-            background: var(--accent-gradient);
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: var(--radius-md);
+            padding: var(--space-3) var(--space-4);
             color: white;
-            border: none;
-            border-radius: 14px;
-            font-size: 16px;
             font-weight: 600;
+            font-size: 14px;
             cursor: pointer;
-            margin-top: 16px;
-        }
-        .btn:active { opacity: 0.9; }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .btn-secondary {
-            background: var(--tg-theme-secondary-bg-color);
-            color: var(--tg-theme-text-color);
+            transition: all var(--duration-fast) var(--ease-out);
         }
         
-        /* Price Card */
+        .balance-btn:active { transform: scale(0.95); background: rgba(255,255,255,0.3); }
+        
+        /* Free Badge */
+        .free-badge {
+            margin-top: var(--space-4);
+            background: rgba(16, 185, 129, 0.2);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            padding: var(--space-3) var(--space-4);
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            gap: var(--space-3);
+        }
+        
+        .free-badge-icon { font-size: 20px; }
+        .free-badge-text { font-size: 14px; font-weight: 500; }
+        
+        /* ═══════════════════════════════════════════════════════════════
+           SECTIONS
+        ═══════════════════════════════════════════════════════════════ */
+        
+        .section { margin-bottom: var(--space-6); }
+        
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: var(--space-4);
+            padding: 0 var(--space-1);
+        }
+        
+        .section-title { 
+            font-family: var(--font-display);
+            font-size: 18px; 
+            font-weight: 600;
+            letter-spacing: -0.2px;
+        }
+        
+        .section-link { 
+            font-size: 14px; 
+            font-weight: 500;
+            color: var(--accent-primary); 
+            cursor: pointer;
+            transition: opacity var(--duration-fast);
+        }
+        
+        .section-link:active { opacity: 0.7; }
+        
+        /* ═══════════════════════════════════════════════════════════════
+           TOP MODELS SHOWCASE
+        ═══════════════════════════════════════════════════════════════ */
+        
+        .top-models-banner {
+            background: var(--accent-gradient);
+            border-radius: var(--radius-xl);
+            padding: var(--space-5);
+            margin-bottom: var(--space-6);
+            position: relative;
+            overflow: hidden;
+            cursor: pointer;
+            transition: transform var(--duration-fast) var(--ease-out);
+        }
+        
+        .top-models-banner:active { transform: scale(0.98); }
+        
+        .top-models-banner::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            width: 40%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1));
+        }
+        
+        .top-banner-content { position: relative; z-index: 1; color: white; }
+        .top-banner-badge { font-size: 12px; font-weight: 600; background: rgba(255,255,255,0.2); padding: 4px 10px; border-radius: var(--radius-full); display: inline-block; margin-bottom: var(--space-2); }
+        .top-banner-title { font-size: 20px; font-weight: 700; margin-bottom: var(--space-1); }
+        .top-banner-desc { font-size: 14px; opacity: 0.85; }
+        .top-banner-arrow { position: absolute; right: var(--space-4); top: 50%; transform: translateY(-50%); font-size: 24px; opacity: 0.8; }
+        
+        /* ═══════════════════════════════════════════════════════════════
+           CATEGORY CARDS
+        ═══════════════════════════════════════════════════════════════ */
+        
+        .category-grid { 
+            display: grid; 
+            grid-template-columns: repeat(2, 1fr); 
+            gap: var(--space-3);
+        }
+        
+        .category-card {
+            background: var(--tg-secondary);
+            border-radius: var(--radius-lg);
+            padding: var(--space-5) var(--space-4);
+            cursor: pointer;
+            transition: all var(--duration-fast) var(--ease-out);
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .category-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: var(--accent-gradient);
+            opacity: 0;
+            transition: opacity var(--duration-normal);
+        }
+        
+        .category-card:active { transform: scale(0.96); }
+        .category-card:active::before { opacity: 0.08; }
+        
+        .category-icon { 
+            font-size: 44px; 
+            margin-bottom: var(--space-3);
+            position: relative;
+        }
+        
+        .category-name { 
+            font-size: 15px; 
+            font-weight: 600; 
+            margin-bottom: var(--space-1);
+            position: relative;
+        }
+        
+        .category-count { 
+            font-size: 13px; 
+            color: var(--tg-hint);
+            position: relative;
+        }
+        
+        /* ═══════════════════════════════════════════════════════════════
+           MODEL LIST & CARDS
+        ═══════════════════════════════════════════════════════════════ */
+        
+        .model-list { 
+            display: flex; 
+            flex-direction: column; 
+            gap: var(--space-3);
+        }
+        
+        .model-item {
+            display: flex;
+            align-items: center;
+            gap: var(--space-4);
+            background: var(--tg-secondary);
+            border-radius: var(--radius-lg);
+            padding: var(--space-4);
+            cursor: pointer;
+            transition: all var(--duration-fast) var(--ease-out);
+            border: 2px solid transparent;
+        }
+        
+        .model-item:active { transform: scale(0.98); }
+        .model-item.featured { border-color: var(--success); background: var(--success-bg); }
+        .model-item.top { border-color: var(--accent-primary); }
+        
+        .model-icon { 
+            font-size: 36px;
+            width: 52px;
+            height: 52px;
+            background: var(--surface-overlay);
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        
+        .model-info { flex: 1; min-width: 0; }
+        
+        .model-name { 
+            font-size: 16px; 
+            font-weight: 600; 
+            margin-bottom: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .model-desc { 
+            font-size: 13px; 
+            color: var(--tg-hint);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .model-price { 
+            font-size: 15px; 
+            font-weight: 600; 
+            color: var(--accent-primary);
+            white-space: nowrap;
+        }
+        
+        .model-price.free { color: var(--success); }
+        
+        .model-arrow {
+            color: var(--tg-hint);
+            font-size: 18px;
+        }
+        
+        /* ═══════════════════════════════════════════════════════════════
+           MODEL INTRO CARD
+        ═══════════════════════════════════════════════════════════════ */
+        
+        .intro-card {
+            background: linear-gradient(135deg, var(--tg-secondary) 0%, var(--surface-overlay) 100%);
+            border-radius: var(--radius-xl);
+            padding: var(--space-5);
+            margin-bottom: var(--space-5);
+            border: 1px solid var(--surface-overlay);
+        }
+        
+        .intro-header {
+            display: flex;
+            align-items: flex-start;
+            gap: var(--space-4);
+            margin-bottom: var(--space-4);
+        }
+        
+        .intro-icon {
+            font-size: 40px;
+            width: 64px;
+            height: 64px;
+            background: var(--accent-gradient);
+            border-radius: var(--radius-lg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        
+        .intro-title { font-size: 20px; font-weight: 700; margin-bottom: var(--space-1); }
+        .intro-subtitle { font-size: 14px; color: var(--tg-hint); line-height: 1.4; }
+        
+        .intro-features {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-2);
+        }
+        
+        .intro-feature {
+            display: flex;
+            align-items: center;
+            gap: var(--space-3);
+            font-size: 14px;
+            color: var(--tg-text);
+        }
+        
+        .intro-feature-icon { color: var(--success); }
+        
+        /* ═══════════════════════════════════════════════════════════════
+           SKU SELECTOR
+        ═══════════════════════════════════════════════════════════════ */
+        
+        .sku-selector {
+            margin-bottom: var(--space-5);
+        }
+        
+        .sku-label {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: var(--space-3);
+            color: var(--tg-text);
+        }
+        
+        .sku-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--space-2);
+        }
+        
+        .sku-btn {
+            padding: var(--space-3) var(--space-4);
+            border: 2px solid var(--tg-secondary);
+            background: var(--tg-bg);
+            border-radius: var(--radius-md);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all var(--duration-fast) var(--ease-out);
+            color: var(--tg-text);
+        }
+        
+        .sku-btn:active { transform: scale(0.95); }
+        .sku-btn.active {
+            border-color: var(--accent-primary);
+            background: rgba(99, 102, 241, 0.1);
+            color: var(--accent-primary);
+        }
+        
+        .sku-price {
+            display: block;
+            font-size: 12px;
+            color: var(--tg-hint);
+            margin-top: 2px;
+        }
+        
+        .sku-btn.active .sku-price { color: var(--accent-primary); }
+        
+        /* ═══════════════════════════════════════════════════════════════
+           PRICE CARD
+        ═══════════════════════════════════════════════════════════════ */
+        
         .price-card {
-            background: var(--tg-theme-secondary-bg-color);
-            border-radius: 14px;
-            padding: 16px;
+            background: var(--tg-secondary);
+            border-radius: var(--radius-lg);
+            padding: var(--space-4) var(--space-5);
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 16px;
+            margin-bottom: var(--space-5);
         }
-        .price-label { font-size: 14px; color: var(--tg-theme-hint-color); }
-        .price-value { font-size: 24px; font-weight: 700; color: var(--tg-theme-button-color); }
         
-        /* Result */
-        .result-card {
-            background: var(--tg-theme-secondary-bg-color);
-            border-radius: 16px;
-            overflow: hidden;
-            margin-bottom: 16px;
+        .price-info { flex: 1; }
+        .price-label { font-size: 13px; color: var(--tg-hint); margin-bottom: 2px; }
+        .price-balance { font-size: 12px; color: var(--tg-hint); }
+        .price-value { font-size: 28px; font-weight: 700; color: var(--accent-primary); letter-spacing: -0.5px; }
+        .price-value.free { color: var(--success); }
+        
+        /* ═══════════════════════════════════════════════════════════════
+           FORM ELEMENTS
+        ═══════════════════════════════════════════════════════════════ */
+        
+        .form-group { margin-bottom: var(--space-5); }
+        
+        .form-label { 
+            font-size: 14px; 
+            font-weight: 600; 
+            margin-bottom: var(--space-3); 
+            display: block;
+            color: var(--tg-text);
         }
+        
+        .form-input {
+            width: 100%;
+            padding: var(--space-4);
+            border: 2px solid var(--tg-secondary);
+            border-radius: var(--radius-md);
+            font-size: 16px;
+            font-family: inherit;
+            background: var(--tg-bg);
+            color: var(--tg-text);
+            resize: none;
+            transition: border-color var(--duration-fast);
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+        }
+        
+        .form-input::placeholder { color: var(--tg-hint); }
+        .form-textarea { min-height: 140px; line-height: 1.5; }
+        
+        /* Image Upload */
+        .image-upload-area {
+            background: var(--tg-secondary);
+            border: 2px dashed var(--tg-hint);
+            border-radius: var(--radius-lg);
+            padding: var(--space-8) var(--space-4);
+            text-align: center;
+            cursor: pointer;
+            transition: all var(--duration-fast) var(--ease-out);
+            color: var(--tg-hint);
+        }
+        
+        .image-upload-area:active {
+            border-color: var(--accent-primary);
+            background: rgba(99, 102, 241, 0.08);
+        }
+        
+        .upload-icon { font-size: 48px; margin-bottom: var(--space-3); }
+        .upload-text { font-size: 15px; font-weight: 500; margin-bottom: var(--space-1); }
+        .upload-hint { font-size: 13px; }
+        
+        /* ═══════════════════════════════════════════════════════════════
+           BUTTONS
+        ═══════════════════════════════════════════════════════════════ */
+        
+        .btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--space-2);
+            width: 100%;
+            padding: var(--space-4) var(--space-5);
+            background: var(--accent-gradient);
+            color: white;
+            border: none;
+            border-radius: var(--radius-lg);
+            font-size: 16px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            margin-top: var(--space-4);
+            transition: all var(--duration-fast) var(--ease-out);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: rgba(255,255,255,0.1);
+            opacity: 0;
+            transition: opacity var(--duration-fast);
+        }
+        
+        .btn:active { transform: scale(0.98); }
+        .btn:active::before { opacity: 1; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        
+        .btn-secondary {
+            background: var(--tg-secondary);
+            color: var(--tg-text);
+        }
+        
+        .btn-success {
+            background: var(--success);
+        }
+        
+        .btn-outline {
+            background: transparent;
+            border: 2px solid var(--tg-secondary);
+            color: var(--tg-text);
+        }
+        
+        /* ═══════════════════════════════════════════════════════════════
+           RESULT SCREEN
+        ═══════════════════════════════════════════════════════════════ */
+        
+        .result-card {
+            background: var(--tg-secondary);
+            border-radius: var(--radius-xl);
+            overflow: hidden;
+            margin-bottom: var(--space-5);
+            box-shadow: var(--shadow-lg);
+        }
+        
         .result-image {
             width: 100%;
             aspect-ratio: 1;
             object-fit: cover;
-        }
-        .result-video {
-            width: 100%;
-            border-radius: 16px;
-        }
-        .result-actions {
-            padding: 16px;
-            display: flex;
-            gap: 12px;
-        }
-        .result-btn {
-            flex: 1;
-            padding: 12px;
-            border: none;
-            border-radius: 12px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
+            display: block;
         }
         
-        /* Status */
+        .result-video {
+            width: 100%;
+            border-radius: var(--radius-xl);
+            display: block;
+        }
+        
+        .result-actions {
+            display: flex;
+            gap: var(--space-3);
+            margin-top: var(--space-4);
+        }
+        
+        .result-btn {
+            flex: 1;
+            padding: var(--space-4);
+            border: none;
+            border-radius: var(--radius-md);
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--space-2);
+            transition: all var(--duration-fast) var(--ease-out);
+            background: var(--accent-gradient);
+            color: white;
+        }
+        
+        .result-btn:active { transform: scale(0.96); }
+        .result-btn.secondary { background: var(--tg-secondary); color: var(--tg-text); }
+        
+        /* ═══════════════════════════════════════════════════════════════
+           STATUS & LOADING
+        ═══════════════════════════════════════════════════════════════ */
+        
         .status-card {
             text-align: center;
-            padding: 40px 20px;
+            padding: var(--space-10) var(--space-5);
         }
+        
         .status-spinner {
-            width: 60px; height: 60px;
-            border: 4px solid var(--tg-theme-secondary-bg-color);
-            border-top-color: var(--tg-theme-button-color);
-            border-radius: 50%;
+            width: 64px;
+            height: 64px;
+            border: 4px solid var(--tg-secondary);
+            border-top-color: var(--accent-primary);
+            border-radius: var(--radius-full);
             animation: spin 0.8s linear infinite;
-            margin: 0 auto 20px;
+            margin: 0 auto var(--space-6);
         }
-        .status-icon { font-size: 60px; margin-bottom: 16px; }
-        .status-title { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
-        .status-text { font-size: 14px; color: var(--tg-theme-hint-color); }
+        
+        .status-icon { font-size: 64px; margin-bottom: var(--space-5); }
+        .status-title { font-size: 20px; font-weight: 600; margin-bottom: var(--space-2); }
+        .status-text { font-size: 15px; color: var(--tg-hint); line-height: 1.5; }
+        .status-id { margin-top: var(--space-5); font-size: 12px; color: var(--tg-hint); font-family: monospace; }
         
         @keyframes spin { to { transform: rotate(360deg); } }
         
-        /* Bottom Nav */
-        .bottom-nav {
-            position: fixed; bottom: 0; left: 0; right: 0;
-            background: var(--tg-theme-bg-color);
-            border-top: 1px solid var(--tg-theme-secondary-bg-color);
-            display: flex;
-            padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
-        }
-        .nav-item {
-            flex: 1; display: flex; flex-direction: column;
-            align-items: center; gap: 4px;
-            padding: 8px; cursor: pointer;
-            color: var(--tg-theme-hint-color);
-            transition: color 0.2s;
-        }
-        .nav-item.active { color: var(--tg-theme-button-color); }
-        .nav-icon { font-size: 22px; }
-        .nav-label { font-size: 11px; font-weight: 500; }
-        
-        /* Loading */
         .loading {
-            display: flex; flex-direction: column;
-            align-items: center; justify-content: center;
-            min-height: 60vh; gap: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 60vh;
+            gap: var(--space-4);
         }
+        
         .loading-spinner {
-            width: 40px; height: 40px;
-            border: 3px solid var(--tg-theme-secondary-bg-color);
-            border-top-color: var(--tg-theme-button-color);
-            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            border: 3px solid var(--tg-secondary);
+            border-top-color: var(--accent-primary);
+            border-radius: var(--radius-full);
             animation: spin 0.8s linear infinite;
         }
-        .loading-text { color: var(--tg-theme-hint-color); font-size: 14px; }
         
-        /* Error */
+        .loading-text { color: var(--tg-hint); font-size: 15px; }
+        
+        /* Skeleton */
+        .skeleton {
+            background: linear-gradient(90deg, var(--tg-secondary) 25%, var(--surface-overlay) 50%, var(--tg-secondary) 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+            border-radius: var(--radius-md);
+        }
+        
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        
+        /* ═══════════════════════════════════════════════════════════════
+           ERROR STATE
+        ═══════════════════════════════════════════════════════════════ */
+        
         .error-card {
-            background: var(--tg-theme-secondary-bg-color);
-            border-radius: 16px;
-            padding: 24px; text-align: center; margin: 20px 0;
+            background: var(--tg-secondary);
+            border-radius: var(--radius-xl);
+            padding: var(--space-8) var(--space-5);
+            text-align: center;
+            margin: var(--space-5) 0;
         }
-        .error-icon { font-size: 48px; margin-bottom: 12px; }
-        .error-title { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
-        .error-text { font-size: 14px; color: var(--tg-theme-hint-color); }
         
-        /* History Item */
+        .error-icon { font-size: 56px; margin-bottom: var(--space-4); }
+        .error-title { font-size: 18px; font-weight: 600; margin-bottom: var(--space-2); }
+        .error-text { font-size: 14px; color: var(--tg-hint); line-height: 1.5; }
+        
+        /* ═══════════════════════════════════════════════════════════════
+           HISTORY
+        ═══════════════════════════════════════════════════════════════ */
+        
         .history-item {
-            display: flex; gap: 12px;
-            background: var(--tg-theme-secondary-bg-color);
-            border-radius: 14px;
-            padding: 12px;
-            margin-bottom: 10px;
+            display: flex;
+            gap: var(--space-4);
+            background: var(--tg-secondary);
+            border-radius: var(--radius-lg);
+            padding: var(--space-4);
+            margin-bottom: var(--space-3);
             cursor: pointer;
+            transition: transform var(--duration-fast) var(--ease-out);
         }
+        
+        .history-item:active { transform: scale(0.98); }
+        
         .history-thumb {
-            width: 60px; height: 60px;
-            border-radius: 10px;
-            background: var(--tg-theme-hint-color);
+            width: 64px;
+            height: 64px;
+            border-radius: var(--radius-md);
+            background: var(--surface-overlay);
             object-fit: cover;
+            flex-shrink: 0;
         }
-        .history-info { flex: 1; }
-        .history-model { font-size: 14px; font-weight: 600; }
-        .history-status { font-size: 12px; color: var(--tg-theme-hint-color); }
-        .history-date { font-size: 11px; color: var(--tg-theme-hint-color); margin-top: 4px; }
+        
+        .history-info { flex: 1; min-width: 0; }
+        .history-model { font-size: 15px; font-weight: 600; margin-bottom: 2px; }
+        .history-status { font-size: 13px; color: var(--tg-hint); }
+        .history-date { font-size: 12px; color: var(--tg-hint); margin-top: var(--space-1); }
+        
+        /* ═══════════════════════════════════════════════════════════════
+           BOTTOM NAVIGATION
+        ═══════════════════════════════════════════════════════════════ */
+        
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: var(--glass);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-top: 1px solid var(--glass-border);
+            display: flex;
+            padding: var(--space-2) 0 calc(var(--space-2) + env(safe-area-inset-bottom));
+            z-index: 1000;
+        }
+        
+        .nav-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+            padding: var(--space-2);
+            cursor: pointer;
+            color: var(--tg-hint);
+            transition: color var(--duration-fast);
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        .nav-item.active { color: var(--accent-primary); }
+        .nav-icon { font-size: 24px; }
+        .nav-label { font-size: 11px; font-weight: 500; }
+        
+        /* ═══════════════════════════════════════════════════════════════
+           EMPTY STATE
+        ═══════════════════════════════════════════════════════════════ */
+        
+        .empty-state {
+            text-align: center;
+            padding: var(--space-10) var(--space-5);
+        }
+        
+        .empty-icon { font-size: 64px; margin-bottom: var(--space-4); opacity: 0.5; }
+        .empty-title { font-size: 18px; font-weight: 600; margin-bottom: var(--space-2); }
+        .empty-text { font-size: 14px; color: var(--tg-hint); margin-bottom: var(--space-5); }
+        
+        /* ═══════════════════════════════════════════════════════════════
+           SEARCH
+        ═══════════════════════════════════════════════════════════════ */
+        
+        .search-bar {
+            position: relative;
+            margin-bottom: var(--space-5);
+        }
+        
+        .search-input {
+            width: 100%;
+            padding: var(--space-4) var(--space-4) var(--space-4) 48px;
+            border: 2px solid var(--tg-secondary);
+            border-radius: var(--radius-lg);
+            font-size: 16px;
+            background: var(--tg-secondary);
+            color: var(--tg-text);
+            transition: all var(--duration-fast);
+        }
+        
+        .search-input:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            background: var(--tg-bg);
+        }
+        
+        .search-icon {
+            position: absolute;
+            left: var(--space-4);
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 20px;
+            color: var(--tg-hint);
+        }
+        
+        /* ═══════════════════════════════════════════════════════════════
+           FILTER CHIPS
+        ═══════════════════════════════════════════════════════════════ */
+        
+        .filter-row {
+            display: flex;
+            gap: var(--space-2);
+            overflow-x: auto;
+            padding-bottom: var(--space-2);
+            margin-bottom: var(--space-4);
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+        }
+        
+        .filter-row::-webkit-scrollbar { display: none; }
+        
+        .filter-chip {
+            padding: var(--space-2) var(--space-4);
+            background: var(--tg-secondary);
+            border: 2px solid transparent;
+            border-radius: var(--radius-full);
+            font-size: 14px;
+            font-weight: 500;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: all var(--duration-fast);
+            color: var(--tg-text);
+        }
+        
+        .filter-chip.active {
+            background: rgba(99, 102, 241, 0.12);
+            border-color: var(--accent-primary);
+            color: var(--accent-primary);
+        }
+        
+        .filter-chip:active { transform: scale(0.95); }
     </style>
 </head>
 <body>
@@ -327,17 +978,17 @@
             <div class="nav-icon">🏠</div>
             <div class="nav-label">Главная</div>
         </div>
+        <div class="nav-item" onclick="showTopModels()">
+            <div class="nav-icon">🔥</div>
+            <div class="nav-label">Топ</div>
+        </div>
         <div class="nav-item" onclick="showCategories()">
             <div class="nav-icon">🎨</div>
-            <div class="nav-label">Генерация</div>
+            <div class="nav-label">Модели</div>
         </div>
         <div class="nav-item" onclick="showHistory()">
             <div class="nav-icon">📋</div>
             <div class="nav-label">История</div>
-        </div>
-        <div class="nav-item" onclick="openBot()">
-            <div class="nav-icon">🤖</div>
-            <div class="nav-label">Бот</div>
         </div>
     </div>
 
@@ -347,10 +998,20 @@
         tg.expand();
         
         const API_BASE = '/webapp/api';
-        let appData = { user: null, balance: 0, freeRemaining: 0, models: [], freeModels: [], categories: {} };
+        let appData = { 
+            user: null, 
+            balance: 0, 
+            freeRemaining: 0, 
+            models: [], 
+            freeModels: [], 
+            categories: {},
+            topModels: null,
+            topCategories: []
+        };
         let navHistory = [];
         let currentJobId = null;
         let pollInterval = null;
+        let currentLang = 'ru';
         
         async function apiCall(endpoint, options = {}) {
             try {
@@ -426,11 +1087,13 @@
             }
             
             appData.user = user;
+            currentLang = user.language_code === 'en' ? 'en' : 'ru';
             
             try {
-                const [balanceData, modelsData] = await Promise.all([
+                const [balanceData, modelsData, topModelsData] = await Promise.all([
                     apiCall(`/user/${user.id}/balance`),
-                    apiCall('/models')
+                    apiCall('/models'),
+                    apiCall(`/top-models?lang=${currentLang}`)
                 ]);
                 
                 appData.balance = balanceData.balance || 0;
@@ -438,6 +1101,8 @@
                 appData.models = modelsData.models || [];
                 appData.freeModels = appData.models.filter(m => m.is_free);
                 appData.categories = groupModelsByType(appData.models);
+                appData.topModels = topModelsData.models || [];
+                appData.topCategories = topModelsData.categories || [];
                 
                 document.getElementById('bottomNav').style.display = 'flex';
                 goHome();
@@ -464,6 +1129,31 @@
             const app = document.getElementById('app');
             const user = appData.user;
             const cats = Object.values(appData.categories).filter(c => c.models.length > 0);
+            const t = currentLang === 'ru' ? {
+                balance: 'Баланс',
+                topUp: 'Пополнить',
+                freeGens: 'бесплатных генераций',
+                topModels: 'Топ модели',
+                topModelsDesc: '24 лучших модели для генерации',
+                topBadge: 'РЕКОМЕНДУЕМ',
+                freeModels: '⚡ Бесплатные модели',
+                free: 'Бесплатно',
+                selectType: 'Выберите категорию',
+                models: 'моделей',
+                viewAll: 'Все'
+            } : {
+                balance: 'Balance',
+                topUp: 'Top up',
+                freeGens: 'free generations',
+                topModels: 'Top Models',
+                topModelsDesc: '24 best models for generation',
+                topBadge: 'RECOMMENDED',
+                freeModels: '⚡ Free Models',
+                free: 'Free',
+                selectType: 'Select category',
+                models: 'models',
+                viewAll: 'All'
+            };
             
             app.innerHTML = `
                 <div class="header">
@@ -477,33 +1167,43 @@
                     <div class="balance-card">
                         <div class="balance-icon">💰</div>
                         <div class="balance-info">
-                            <div class="balance-label">Баланс</div>
+                            <div class="balance-label">${t.balance}</div>
                             <div class="balance-value">${appData.balance.toFixed(2)} <span class="currency">₽</span></div>
                         </div>
-                        <button class="balance-btn" onclick="openBot()">Пополнить</button>
+                        <button class="balance-btn" onclick="openBot()">${t.topUp}</button>
                     </div>
                     ${appData.freeRemaining > 0 ? `
-                        <div class="free-badge" style="margin-top: 12px; background: rgba(52, 199, 89, 0.2); padding: 10px 16px; border-radius: 12px; display: flex; align-items: center; gap: 8px;">
-                            <span style="font-size: 20px;">⚡</span>
-                            <span style="font-size: 14px;"><b>${appData.freeRemaining}</b> бесплатных генераций</span>
+                        <div class="free-badge">
+                            <span class="free-badge-icon">⚡</span>
+                            <span class="free-badge-text"><b>${appData.freeRemaining}</b> ${t.freeGens}</span>
                         </div>
                     ` : ''}
+                </div>
+                
+                <!-- Top Models Banner -->
+                <div class="top-models-banner" onclick="showTopModels()">
+                    <div class="top-banner-content">
+                        <div class="top-banner-badge">${t.topBadge}</div>
+                        <div class="top-banner-title">🔥 ${t.topModels}</div>
+                        <div class="top-banner-desc">${t.topModelsDesc}</div>
+                    </div>
+                    <div class="top-banner-arrow">›</div>
                 </div>
                 
                 ${appData.freeModels.length > 0 ? `
                     <div class="section">
                         <div class="section-header">
-                            <div class="section-title">⚡ Бесплатные модели</div>
+                            <div class="section-title">${t.freeModels}</div>
                         </div>
                         <div class="model-list">
                             ${appData.freeModels.slice(0, 3).map(m => `
-                                <div class="model-item" onclick="showModelForm('${m.id}')" style="border: 2px solid var(--success-color);">
+                                <div class="model-item featured" onclick="showModelForm('${m.id}')">
                                     <div class="model-icon">${m.emoji || '🎨'}</div>
                                     <div class="model-info">
                                         <div class="model-name">${m.name || m.id}</div>
-                                        <div class="model-desc" style="color: var(--success-color);">Бесплатно</div>
+                                        <div class="model-desc" style="color: var(--success);">${t.free}</div>
                                     </div>
-                                    <div class="model-price" style="color: var(--success-color);">FREE</div>
+                                    <div class="model-price free">FREE</div>
                                 </div>
                             `).join('')}
                         </div>
@@ -512,14 +1212,15 @@
                 
                 <div class="section">
                     <div class="section-header">
-                        <div class="section-title">Выберите тип генерации</div>
+                        <div class="section-title">${t.selectType}</div>
+                        <div class="section-link" onclick="showCategories()">${t.viewAll}</div>
                     </div>
                     <div class="category-grid">
                         ${cats.slice(0, 4).map(cat => `
                             <div class="category-card" onclick="showCategoryModels('${cat.key}')">
                                 <div class="category-icon">${cat.icon}</div>
                                 <div class="category-name">${cat.name}</div>
-                                <div class="category-count">${cat.models.length} моделей</div>
+                                <div class="category-count">${cat.models.length} ${t.models}</div>
                             </div>
                         `).join('')}
                     </div>
@@ -532,7 +1233,7 @@
                                 <div class="category-card" onclick="showCategoryModels('${cat.key}')">
                                     <div class="category-icon">${cat.icon}</div>
                                     <div class="category-name">${cat.name}</div>
-                                    <div class="category-count">${cat.models.length} моделей</div>
+                                    <div class="category-count">${cat.models.length} ${t.models}</div>
                                 </div>
                             `).join('')}
                         </div>
@@ -541,8 +1242,204 @@
             `;
         }
         
-        function showCategories() {
+        function showTopModels() {
             updateNav(1);
+            navigate(renderTopModels);
+        }
+        
+        function renderTopModels() {
+            const app = document.getElementById('app');
+            const models = appData.topModels || [];
+            const categories = appData.topCategories || [];
+            const t = currentLang === 'ru' ? {
+                title: '🔥 Топ модели',
+                subtitle: '24 лучших модели',
+                all: 'Все',
+                from: 'от',
+                models: 'моделей'
+            } : {
+                title: '🔥 Top Models',
+                subtitle: '24 best models',
+                all: 'All',
+                from: 'from',
+                models: 'models'
+            };
+            
+            // Group by category
+            const grouped = {};
+            categories.forEach(c => { grouped[c.id] = { ...c, models: [] }; });
+            models.forEach(m => {
+                if (grouped[m.category]) grouped[m.category].models.push(m);
+            });
+            
+            app.innerHTML = `
+                <div class="page-header">
+                    <button class="back-btn" onclick="goHome()">←</button>
+                    <div class="page-title">${t.title}</div>
+                </div>
+                
+                <div class="filter-row">
+                    <div class="filter-chip active" onclick="filterTopModels(null)">${t.all}</div>
+                    ${categories.map(c => `
+                        <div class="filter-chip" onclick="filterTopModels('${c.id}')">${c.label}</div>
+                    `).join('')}
+                </div>
+                
+                <div id="topModelsList" class="model-list">
+                    ${models.map(m => renderTopModelItem(m, t)).join('')}
+                </div>
+            `;
+        }
+        
+        function renderTopModelItem(m, t) {
+            const price = m.skus && m.skus[0] && m.skus[0].price_rub 
+                ? `${t.from} ${m.skus[0].price_rub.toFixed(0)}₽` 
+                : 'TBD';
+            return `
+                <div class="model-item top" onclick="showTopModelDetail('${m.id}')">
+                    <div class="model-icon">🔥</div>
+                    <div class="model-info">
+                        <div class="model-name">${m.title || m.id}</div>
+                        <div class="model-desc">${m.one_liner || ''}</div>
+                    </div>
+                    <div class="model-price">${price}</div>
+                </div>
+            `;
+        }
+        
+        function filterTopModels(category) {
+            const models = category 
+                ? appData.topModels.filter(m => m.category === category)
+                : appData.topModels;
+            const t = currentLang === 'ru' ? { from: 'от' } : { from: 'from' };
+            
+            document.getElementById('topModelsList').innerHTML = 
+                models.map(m => renderTopModelItem(m, t)).join('');
+            
+            document.querySelectorAll('.filter-chip').forEach((el, i) => {
+                const isAll = i === 0;
+                const catId = el.getAttribute('onclick')?.match(/'([^']+)'/)?.[1];
+                el.classList.toggle('active', isAll ? !category : catId === category);
+            });
+        }
+        
+        async function showTopModelDetail(topModelId) {
+            navigate(() => renderTopModelDetail(topModelId));
+        }
+        
+        async function renderTopModelDetail(topModelId) {
+            const app = document.getElementById('app');
+            const model = appData.topModels.find(m => m.id === topModelId);
+            
+            if (!model) {
+                app.innerHTML = `<div class="error-card"><div class="error-icon">❌</div><div class="error-title">Модель не найдена</div></div>`;
+                return;
+            }
+            
+            const t = currentLang === 'ru' ? {
+                bestFor: 'Подходит для:',
+                selectMode: 'Выберите режим:',
+                start: 'Начать генерацию'
+            } : {
+                bestFor: 'Best for:',
+                selectMode: 'Select mode:',
+                start: 'Start generation'
+            };
+            
+            const skus = model.skus || [];
+            const defaultSku = skus[0];
+            
+            app.innerHTML = `
+                <div class="page-header">
+                    <button class="back-btn" onclick="goBack()">←</button>
+                    <div class="page-title">${model.title}</div>
+                </div>
+                
+                <div class="intro-card">
+                    <div class="intro-header">
+                        <div class="intro-icon">🔥</div>
+                        <div>
+                            <div class="intro-title">${model.title}</div>
+                            <div class="intro-subtitle">${model.one_liner || ''}</div>
+                        </div>
+                    </div>
+                    ${model.best_for && model.best_for.length > 0 ? `
+                        <div class="intro-features">
+                            <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--tg-hint);">${t.bestFor}</div>
+                            ${model.best_for.slice(0, 4).map(f => `
+                                <div class="intro-feature">
+                                    <span class="intro-feature-icon">✓</span>
+                                    <span>${f}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                </div>
+                
+                ${skus.length > 1 ? `
+                    <div class="sku-selector">
+                        <div class="sku-label">${t.selectMode}</div>
+                        <div class="sku-grid">
+                            ${skus.map((sku, i) => `
+                                <button class="sku-btn ${i === 0 ? 'active' : ''}" onclick="selectTopSku('${topModelId}', '${sku.sku_id}', this)">
+                                    ${sku.label}
+                                    <span class="sku-price">${sku.price_rub ? sku.price_rub.toFixed(0) + '₽' : 'TBD'}</span>
+                                </button>
+                            `).join('')}
+                        </div>
+                    </div>
+                ` : ''}
+                
+                <div class="price-card" id="skuPriceCard">
+                    <div class="price-info">
+                        <div class="price-label">Стоимость</div>
+                        <div class="price-balance">Баланс: ${appData.balance.toFixed(2)} ₽</div>
+                    </div>
+                    <div class="price-value" id="skuPriceValue">${defaultSku?.price_rub ? defaultSku.price_rub.toFixed(2) + ' ₽' : 'TBD'}</div>
+                </div>
+                
+                <button class="btn" onclick="startTopModelGeneration('${topModelId}', '${defaultSku?.sku_id || ''}')">
+                    ✨ ${t.start}
+                </button>
+            `;
+            
+            appData.selectedTopSku = defaultSku?.sku_id;
+        }
+        
+        function selectTopSku(topModelId, skuId, btn) {
+            const model = appData.topModels.find(m => m.id === topModelId);
+            const sku = model?.skus?.find(s => s.sku_id === skuId);
+            
+            document.querySelectorAll('.sku-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            
+            const priceEl = document.getElementById('skuPriceValue');
+            if (priceEl && sku) {
+                priceEl.textContent = sku.price_rub ? sku.price_rub.toFixed(2) + ' ₽' : 'TBD';
+            }
+            
+            appData.selectedTopSku = skuId;
+        }
+        
+        async function startTopModelGeneration(topModelId, defaultSkuId) {
+            const skuId = appData.selectedTopSku || defaultSkuId;
+            const model = appData.topModels.find(m => m.id === topModelId);
+            const sku = model?.skus?.find(s => s.sku_id === skuId);
+            
+            if (!sku || !sku.maps_to) {
+                tg.showAlert('Ошибка: SKU не найден');
+                return;
+            }
+            
+            // Route to model form with the mapped model_id
+            const modelId = sku.maps_to.model_id || model.model_id;
+            appData.presetParams = sku.maps_to.params || {};
+            
+            showModelForm(modelId);
+        }
+        
+        function showCategories() {
+            updateNav(2);
             navigate(renderCategories);
         }
         
@@ -875,7 +1772,7 @@
         }
         
         function showHistory() {
-            updateNav(2);
+            updateNav(3);
             navigate(renderHistory);
         }
         
@@ -929,7 +1826,7 @@
         }
         
         function openBot() {
-            tg.close();
+            tg.openTelegramLink('https://t.me/kie_ai_bot');
         }
         
         // Cleanup on close
