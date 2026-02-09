@@ -151,6 +151,7 @@ MODEL_TYPE_TO_MEDIA = {
     "text_to_speech": "audio",
     "text_to_audio": "audio",
     "audio_to_audio": "audio",
+    "text_to_music": "audio",
     "speech_to_text": "text",
     "text": "text",
 }

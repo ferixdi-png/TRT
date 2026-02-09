@@ -1634,6 +1634,21 @@ models:
         price_rub: 10.79
         params: {}
         notes: text-to-dialogue per 1000 characters
+  - id: suno/v5
+    skus:
+      - unit: generation
+        price_rub: 9.25
+        params: {}
+        notes: Generate Music (default)
+      - unit: generation
+        price_rub: 9.25
+        params:
+          instrumental: true
+        notes: Generate Instrumental
+      - unit: request
+        price_rub: 0.31
+        params: {}
+        notes: Generate Lyrics
   - id: google/veo-3.1
     skus:
       - unit: video

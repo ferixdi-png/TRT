@@ -1045,3 +1045,61 @@ models:
     notes: Get 4K Video
   description_ru: ⭐ ТОП МОДЕЛЬ! Google Veo 3.1 — новейшая модель генерации видео.
     Text-to-video, image-to-video, reference-to-video. Native 9:16, Fast/Quality режимы.
+- id: suno/v5
+  title_ru: 🔥 Suno V5 Music
+  type: text_to_music
+  modes:
+  - unit: generation
+    credits: 12.0
+    official_usd: 0.06
+    notes: Generate Music
+  - unit: generation
+    credits: 12.0
+    official_usd: 0.06
+    notes: Extend Music
+  - unit: request
+    credits: 0.4
+    official_usd: 0.002
+    notes: Generate Lyrics
+  - unit: request
+    credits: 2.0
+    official_usd: 0.01
+    notes: Create Music Video
+  - unit: request
+    credits: 12.0
+    official_usd: 0.06
+    notes: Upload & Cover
+  - unit: request
+    credits: 12.0
+    official_usd: 0.06
+    notes: Upload & Extend
+  - unit: request
+    credits: 12.0
+    official_usd: 0.06
+    notes: Add Instrumental
+  - unit: request
+    credits: 12.0
+    official_usd: 0.06
+    notes: Add Vocals
+  - unit: request
+    credits: 10.0
+    official_usd: 0.05
+    notes: Vocal Separation
+  - unit: request
+    credits: 50.0
+    official_usd: 0.25
+    notes: Multi-Stem Separation
+  - unit: request
+    credits: 0.4
+    official_usd: 0.002
+    notes: Convert to WAV
+  - unit: request
+    credits: 5.0
+    official_usd: 0.025
+    notes: Replace Section
+  - unit: request
+    credits: 0.4
+    official_usd: 0.002
+    notes: Style Boost
+  description_ru: ⭐ ТОП МОДЕЛЬ! Suno V5 — генерация музыки из текста. Создание треков,
+    расширение, добавление вокала/инструментов, отделение голоса, конвертация.

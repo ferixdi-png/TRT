@@ -2849,19 +2849,45 @@ KIE_MODELS = [
     },
     {
         "id": "suno/v5",
-        "name": "Suno API",
-        "description": "Kie AI Music API - AI модель генерации музыки, преобразующая текстовые промпты в полные вокальные и инструментальные треки с естественной динамикой. Поддерживает последнюю модель V5.",
+        "name": "🔥 Suno V5 Music",
+        "description": "⭐ ТОП МОДЕЛЬ! Suno V5 — генерация музыки из текста. Создание треков, расширение, добавление вокала/инструментов, отделение голоса, конвертация в WAV.",
         "category": "Аудио",
         "emoji": "🎵",
-        "pricing": "Скоро появится",
+        "is_featured": True,
+        "pricing": "0.31-38.53 ₽ (Lyrics: $0.002, Generate: $0.06, Multi-Stem: $0.25)",
         "input_params": {
             "prompt": {
                 "type": "string",
-                "description": "Текстовое описание музыки (скоро появится)",
-                "required": True
+                "description": "Описание желаемой музыки (до 5000 символов)",
+                "required": True,
+                "max_length": 5000
+            },
+            "style": {
+                "type": "string",
+                "description": "Музыкальный стиль (до 1000 символов)",
+                "required": False,
+                "max_length": 1000
+            },
+            "title": {
+                "type": "string",
+                "description": "Название трека (до 200 символов)",
+                "required": False,
+                "max_length": 200
+            },
+            "instrumental": {
+                "type": "boolean",
+                "description": "Только инструментал (без вокала)",
+                "required": False,
+                "default": False
+            },
+            "model": {
+                "type": "string",
+                "description": "Версия модели",
+                "required": False,
+                "default": "V5",
+                "enum": ["V3_5", "V4", "V4_5", "V4_5PLUS", "V5"]
             }
-        },
-        "coming_soon": True
+        }
     },
     {
         "id": "midjourney/api",
