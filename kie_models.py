@@ -2719,12 +2719,12 @@ GENERATION_TYPES = {
     "text-to-video": {
         "name": "🎬 Текст в видео",
         "description": "Создавайте видео из текстового описания",
-        "models": ["sora-2-text-to-video", "kling-2.6/text-to-video", "kling/v2-5-turbo-text-to-video-pro", "wan/2-6-text-to-video", "wan/2-5-text-to-video", "hailuo/02-text-to-video-pro", "hailuo/02-text-to-video-standard", "kling/v2-1-master-text-to-video", "grok/imagine", "google/veo-3", "google/veo-3.1", "sora-2-pro-storyboard", "kling/v2-5-turbo", "hailuo/2.3", "runway/gen-4"]
+        "models": ["sora-2-text-to-video", "kling-2.6/text-to-video", "kling/v2-5-turbo-text-to-video-pro", "wan/2-6-text-to-video", "wan/2-5-text-to-video", "hailuo/02-text-to-video-pro", "hailuo/02-text-to-video-standard", "kling/v2-1-master-text-to-video", "grok/imagine", "google/veo-3.1", "kling/v2-5-turbo", "hailuo/2.3", "runway/gen-4"]
     },
     "image-to-video": {
         "name": "📸 Фото в видео",
         "description": "Превращайте изображения в динамичные видео",
-        "models": ["sora-2-pro-image-to-video", "kling-2.6/image-to-video", "kling-2.6/motion-control", "kling/v2-5-turbo-image-to-video-pro", "wan/2-5-image-to-video", "hailuo/02-image-to-video-pro", "hailuo/02-image-to-video-standard", "bytedance/v1-pro-fast-image-to-video", "kling/v2-1-master-image-to-video", "kling/v2-1-standard", "kling/v2-1-pro", "grok/imagine", "google/veo-3", "google/veo-3.1", "sora-2-pro-storyboard", "kling/v2-5-turbo", "hailuo/2.3", "runway/gen-4"]
+        "models": ["sora-2-pro-image-to-video", "kling-2.6/image-to-video", "kling-2.6/motion-control", "kling/v2-5-turbo-image-to-video-pro", "wan/2-5-image-to-video", "hailuo/02-image-to-video-pro", "hailuo/02-image-to-video-standard", "bytedance/v1-pro-fast-image-to-video", "kling/v2-1-master-image-to-video", "kling/v2-1-standard", "kling/v2-1-pro", "grok/imagine", "google/veo-3.1", "kling/v2-5-turbo", "hailuo/2.3", "runway/gen-4"]
     },
     "video-editing": {
         "name": "✂️ Редактирование видео",
@@ -2745,38 +2745,20 @@ GENERATION_TYPES = {
     "text-to-image": {
         "name": "✨ Текст в фото",
         "description": "Создавайте изображения из текста",
-        "models": ["z-image", "google/nano-banana", "seedream/4.5-text-to-image", "flux-2/pro-text-to-image", "flux-2/flex-text-to-image", "bytedance/seedream-v4-text-to-image", "bytedance/seedream", "qwen/text-to-image", "ideogram/v3-text-to-image", "google/imagen4-ultra", "google/imagen4-fast", "google/imagen4", "grok/imagine", "openai/4o-image", "flux/kontext", "google/nanobanana-gemini-2.5-flash", "midjourney/api"]
+        "models": ["z-image", "google/nano-banana", "seedream/4.5-text-to-image", "flux-2/pro-text-to-image", "flux-2/flex-text-to-image", "bytedance/seedream-v4-text-to-image", "bytedance/seedream", "qwen/text-to-image", "ideogram/v3-text-to-image", "google/imagen4-ultra", "google/imagen4-fast", "google/imagen4", "grok/imagine", "openai/4o-image", "flux/kontext", "google/nanobanana-gemini-2.5-flash"]
     },
     "image-to-image": {
         "name": "🎨 Фото в фото",
         "description": "Трансформация и стилизация изображений",
-        "models": ["seedream/4.5-edit", "flux-2/pro-image-to-image", "flux-2/flex-image-to-image", "nano-banana-pro", "bytedance/seedream-v4-edit", "qwen/image-to-image", "ideogram/v3-remix", "openai/4o-image", "flux/kontext", "google/nanobanana-gemini-2.5-flash", "google/nano-banana-edit", "midjourney/api"]
+        "models": ["seedream/4.5-edit", "flux-2/pro-image-to-image", "flux-2/flex-image-to-image", "nano-banana-pro", "bytedance/seedream-v4-edit", "qwen/image-to-image", "ideogram/v3-remix", "openai/4o-image", "flux/kontext", "google/nanobanana-gemini-2.5-flash", "google/nano-banana-edit"]
     },
     "image-editing": {
         "name": "🖼️ Редактирование фото",
         "description": "Редактирование и улучшение изображений",
         "models": ["topaz/image-upscale", "recraft/crisp-upscale", "recraft/remove-background", "ideogram/v3-reframe", "qwen/image-edit", "ideogram/character-edit", "ideogram/character-remix", "ideogram/character", "ideogram/v3-edit"]
     },
-    "speech-to-text": {
-        "name": "🎙️ Речь в текст",
-        "description": "Преобразование речи в текст с высокой точностью",
-        "models": ["elevenlabs/speech-to-text"]
-    },
-    "text-to-speech": {
-        "name": "🗣️ Текст в речь",
-        "description": "Преобразование текста в естественную речь",
-        "models": ["elevenlabs/text-to-speech"]
-    },
-    "text-to-music": {
-        "name": "🎵 Текст в музыку",
-        "description": "Генерация музыки из текстового описания",
-        "models": ["suno/v5"]
-    },
-    "audio-to-audio": {
-        "name": "🎧 Обработка аудио",
-        "description": "Обработка и улучшение аудио",
-        "models": ["elevenlabs/audio-isolation", "elevenlabs/sound-effect"]
-    }
+    # NOTE: speech-to-text, text-to-speech, text-to-music, audio-to-audio categories
+    # removed - models not yet integrated (no pricing/catalog)
 }
 
 
