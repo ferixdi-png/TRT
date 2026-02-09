@@ -367,20 +367,36 @@ async def webapp_generate(request: web.Request) -> web.Response:
         if requires_image and not image_url:
             return web.json_response({"error": "Image required for this model"}, status=400)
         
-        # Check balance
+        # Check balance and free generations
         storage = get_storage()
         balance = await storage.get_user_balance(user_id)
         
-        # Get price
+        # Get price and check if model is free
         price = 0
+        is_free_model = False
         try:
             from app.pricing.price_resolver import resolve_price
+            from app.pricing.price_ssot import model_has_free_sku
             price_info = await resolve_price(model_id, params)
             price = price_info.get('price_rub', 0) if price_info else 0
+            is_free_model = model_has_free_sku(model_id) or price_info.get('free_sku', False) if price_info else False
         except Exception:
             pass
         
-        if balance < price:
+        # Check if user has free generations available
+        is_free_generation = False
+        if is_free_model:
+            try:
+                from helpers import get_user_free_generations_remaining_async
+                free_remaining = await get_user_free_generations_remaining_async(user_id)
+                if free_remaining > 0:
+                    is_free_generation = True
+                    price = 0  # Free generation costs nothing
+            except Exception:
+                pass
+        
+        # Check balance only if not a free generation
+        if not is_free_generation and balance < price:
             return web.json_response({
                 "error": "Insufficient balance",
                 "balance": float(balance),
@@ -409,12 +425,18 @@ async def webapp_generate(request: web.Request) -> web.Response:
                 session_params["image_url"] = image_url
         
         # CRITICAL: Save job to unified storage IMMEDIATELY so it can be polled
+        model_name = getattr(spec, "name", model_id)
         await storage.add_generation_job(
             job_id=job_id,
             user_id=user_id,
             model_id=model_id,
+            model_name=model_name,
             params=session_params,
+            price=price,
             correlation_id=correlation_id,
+            prompt=prompt,
+            status="pending",
+            is_free=is_free_generation,
         )
         
         # Start generation in background
@@ -558,15 +580,30 @@ async def webapp_job_retry(request: web.Request) -> web.Response:
         correlation_id = f"corr-webapp-{user_id}-{uuid.uuid4().hex[:8]}"
         
         model_id = job.get("model_id")
+        model_name = job.get("model_name", model_id)
         params = job.get("params", {})
         price = job.get("price", 0)
+        prompt = params.get("prompt", "")
+        
+        # CRITICAL: Save retry job immediately so it can be polled
+        await storage.add_generation_job(
+            job_id=new_job_id,
+            user_id=user_id,
+            model_id=model_id,
+            model_name=model_name,
+            params=params,
+            price=price,
+            correlation_id=correlation_id,
+            prompt=prompt,
+            status="pending",
+        )
         
         import asyncio
         from app.generations.universal_engine import run_generation
         
         async def run_gen():
             try:
-                await run_generation(
+                result = await run_generation(
                     user_id=user_id,
                     model_id=model_id,
                     session_params=params,
@@ -574,8 +611,23 @@ async def webapp_job_retry(request: web.Request) -> web.Response:
                     job_id=new_job_id,
                     price=price,
                 )
+                # Update job status
+                if result:
+                    await storage.update_job_status(
+                        job_id=new_job_id,
+                        status=result.state if result.state else "success",
+                        result_url=result.result_url,
+                        result_urls=result.result_urls if hasattr(result, 'result_urls') else [],
+                    )
+                else:
+                    await storage.update_job_status(job_id=new_job_id, status="failed")
             except Exception as e:
                 logger.error("Webapp retry generation failed: %s", e)
+                await storage.update_job_status(
+                    job_id=new_job_id,
+                    status="failed",
+                    error_message=str(e),
+                )
         
         asyncio.create_task(run_gen())
         
