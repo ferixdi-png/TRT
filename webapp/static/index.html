@@ -347,7 +347,7 @@
         tg.expand();
         
         const API_BASE = '/webapp/api';
-        let appData = { user: null, balance: 0, models: [], categories: {} };
+        let appData = { user: null, balance: 0, freeRemaining: 0, models: [], freeModels: [], categories: {} };
         let navHistory = [];
         let currentJobId = null;
         let pollInterval = null;
@@ -434,7 +434,9 @@
                 ]);
                 
                 appData.balance = balanceData.balance || 0;
+                appData.freeRemaining = balanceData.free_remaining || 0;
                 appData.models = modelsData.models || [];
+                appData.freeModels = appData.models.filter(m => m.is_free);
                 appData.categories = groupModelsByType(appData.models);
                 
                 document.getElementById('bottomNav').style.display = 'flex';
@@ -480,7 +482,33 @@
                         </div>
                         <button class="balance-btn" onclick="openBot()">Пополнить</button>
                     </div>
+                    ${appData.freeRemaining > 0 ? `
+                        <div class="free-badge" style="margin-top: 12px; background: rgba(52, 199, 89, 0.2); padding: 10px 16px; border-radius: 12px; display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 20px;">⚡</span>
+                            <span style="font-size: 14px;"><b>${appData.freeRemaining}</b> бесплатных генераций</span>
+                        </div>
+                    ` : ''}
                 </div>
+                
+                ${appData.freeModels.length > 0 ? `
+                    <div class="section">
+                        <div class="section-header">
+                            <div class="section-title">⚡ Бесплатные модели</div>
+                        </div>
+                        <div class="model-list">
+                            ${appData.freeModels.slice(0, 3).map(m => `
+                                <div class="model-item" onclick="showModelForm('${m.id}')" style="border: 2px solid var(--success-color);">
+                                    <div class="model-icon">${m.emoji || '🎨'}</div>
+                                    <div class="model-info">
+                                        <div class="model-name">${m.name || m.id}</div>
+                                        <div class="model-desc" style="color: var(--success-color);">Бесплатно</div>
+                                    </div>
+                                    <div class="model-price" style="color: var(--success-color);">FREE</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                ` : ''}
                 
                 <div class="section">
                     <div class="section-header">
@@ -556,13 +584,13 @@
                 </div>
                 <div class="model-list">
                     ${cat.models.map(m => `
-                        <div class="model-item" onclick="showModelForm('${m.id}')">
+                        <div class="model-item" onclick="showModelForm('${m.id}')" ${m.is_free ? 'style="border: 2px solid var(--success-color);"' : ''}>
                             <div class="model-icon">${m.emoji || '🎨'}</div>
                             <div class="model-info">
                                 <div class="model-name">${m.name || m.id}</div>
-                                <div class="model-desc">${m.id}</div>
+                                <div class="model-desc">${m.is_free ? '⚡ Бесплатно' : `от ${(m.price || 0).toFixed(2)} ₽`}</div>
                             </div>
-                            <div class="model-price">›</div>
+                            <div class="model-price" ${m.is_free ? 'style="color: var(--success-color);"' : ''}>${m.is_free ? 'FREE' : '›'}</div>
                         </div>
                     `).join('')}
                 </div>

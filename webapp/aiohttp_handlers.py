@@ -51,7 +51,7 @@ async def webapp_user_me(request: web.Request) -> web.Response:
 
 
 async def webapp_user_balance(request: web.Request) -> web.Response:
-    """Get user balance."""
+    """Get user balance with free generations info."""
     user_id = int(request.match_info.get("user_id", 0))
     if not user_id:
         return web.json_response({"error": "user_id required"}, status=400)
@@ -60,26 +60,56 @@ async def webapp_user_balance(request: web.Request) -> web.Response:
         from app.storage import get_storage
         storage = get_storage()
         balance = await storage.get_user_balance(user_id)
-        return web.json_response({"user_id": user_id, "balance": float(balance)})
+        
+        # Get free generations remaining
+        free_remaining = 0
+        try:
+            from helpers import get_user_free_generations_remaining_async
+            free_remaining = await get_user_free_generations_remaining_async(user_id)
+        except Exception:
+            pass
+        
+        return web.json_response({
+            "user_id": user_id,
+            "balance": float(balance),
+            "free_remaining": free_remaining,
+        })
     except Exception as e:
         logger.error("Failed to get balance for user %s: %s", user_id, e)
-        return web.json_response({"user_id": user_id, "balance": 0, "error": str(e)})
+        return web.json_response({"user_id": user_id, "balance": 0, "free_remaining": 0, "error": str(e)})
 
 
 async def webapp_models(request: web.Request) -> web.Response:
-    """Get list of available models."""
+    """Get list of available models with pricing info."""
     try:
         from app.kie_catalog import get_model_map
         catalog = get_model_map()
         
         models = []
         for model_id, spec in catalog.items():
+            # Get price info
+            price = 0
+            is_free = False
+            try:
+                from app.pricing.price_resolver import resolve_price
+                price_info = await resolve_price(model_id, {})
+                if price_info:
+                    price = price_info.get('price_rub', 0)
+                    is_free = price_info.get('free_sku', False) or price == 0
+            except Exception:
+                pass
+            
             models.append({
                 "id": model_id,
                 "name": getattr(spec, "name", model_id),
                 "type": getattr(spec, "model_mode", "unknown"),
                 "emoji": getattr(spec, "emoji", "🎨"),
+                "price": price,
+                "is_free": is_free,
             })
+        
+        # Sort: free first, then by name
+        models.sort(key=lambda m: (not m['is_free'], m['name'].lower()))
         
         return web.json_response({"models": models, "count": len(models)})
     except Exception as e:
