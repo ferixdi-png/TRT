@@ -2719,8 +2719,11 @@
             app.innerHTML = `
                 <div class="status-card">
                     <div class="status-spinner"></div>
-                    <div class="status-title">Генерация...</div>
-                    <div class="status-text">Это может занять от 10 секунд до нескольких минут</div>
+                    <div class="status-title" id="genStatusTitle">📤 Отправка на KIE AI...</div>
+                    <div class="status-text" id="genStatusText">Подключаемся к серверу генерации</div>
+                    <div style="margin-top: 12px; padding: 8px 16px; background: rgba(0,200,100,0.1); border-radius: 8px; font-size: 13px;" id="genStatusInfo">
+                        ⏳ Ожидание ответа от KIE AI
+                    </div>
                     <div style="margin-top: 20px; font-size: 12px; color: var(--tg-theme-hint-color);">
                         ID: ${jobId}
                     </div>
@@ -2731,26 +2734,74 @@
             if (pollInterval) clearInterval(pollInterval);
             pollInterval = setInterval(() => pollJobStatus(jobId), 3000);
             
-            // Also poll immediately
+            // Also poll immediately after 1s
             setTimeout(() => pollJobStatus(jobId), 1000);
         }
         
         async function pollJobStatus(jobId) {
             const result = await apiCall(`/jobs/${jobId}`);
             
+            // Update status UI based on response
+            const titleEl = document.getElementById('genStatusTitle');
+            const textEl = document.getElementById('genStatusText');
+            const infoEl = document.getElementById('genStatusInfo');
+            
             if (result.error && result.error !== 'Job not found') {
-                // Still processing
+                // Still processing or error
+                if (titleEl) titleEl.textContent = '⚠️ Проверяем статус...';
                 return;
             }
             
-            if (result.status === 'completed' || result.status === 'success') {
+            // Update UI based on status
+            if (result.status === 'pending' || result.status === 'queued') {
+                if (titleEl) titleEl.textContent = '📥 Запрос в очереди KIE AI';
+                if (textEl) textEl.textContent = 'Ваш запрос получен и ожидает обработки';
+                if (infoEl) {
+                    infoEl.style.background = 'rgba(255,200,0,0.1)';
+                    infoEl.textContent = '🔄 KIE AI получил запрос, ожидаем начала генерации';
+                }
+            } else if (result.status === 'processing' || result.status === 'waiting') {
+                if (titleEl) titleEl.textContent = '🎨 KIE AI генерирует...';
+                if (textEl) textEl.textContent = 'Нейросеть обрабатывает ваш запрос';
+                if (infoEl) {
+                    infoEl.style.background = 'rgba(0,150,255,0.1)';
+                    infoEl.textContent = '✅ KIE AI работает! Это может занять 10 сек - 5 мин';
+                }
+            }
+            
+            if (result.status === 'completed' || result.status === 'success' || result.status === 'delivered') {
                 if (pollInterval) clearInterval(pollInterval);
                 renderResult(result);
             } else if (result.status === 'failed') {
                 if (pollInterval) clearInterval(pollInterval);
-                renderError(result.error || 'Генерация не удалась');
+                // Parse error for user-friendly message
+                const errorMsg = parseErrorMessage(result.error || result.error_message || 'Генерация не удалась');
+                renderError(errorMsg);
             }
             // If pending, continue polling
+        }
+        
+        function parseErrorMessage(error) {
+            const errorLower = (error || '').toLowerCase();
+            if (errorLower.includes('timeout')) {
+                return '⏱️ Время ожидания истекло. KIE AI не успел обработать запрос. Попробуйте ещё раз.';
+            }
+            if (errorLower.includes('insufficient') || errorLower.includes('balance')) {
+                return '💳 Недостаточно средств на балансе. Пополните баланс и попробуйте снова.';
+            }
+            if (errorLower.includes('rate limit') || errorLower.includes('429')) {
+                return '🚫 Слишком много запросов. Подождите минуту и попробуйте снова.';
+            }
+            if (errorLower.includes('model') && errorLower.includes('not found')) {
+                return '🔍 Модель временно недоступна. Попробуйте другую модель.';
+            }
+            if (errorLower.includes('invalid') || errorLower.includes('validation')) {
+                return '⚠️ Неверные параметры запроса. Проверьте введённые данные.';
+            }
+            if (errorLower.includes('circuit') || errorLower.includes('unavailable')) {
+                return '🔧 KIE AI временно недоступен. Попробуйте через несколько минут.';
+            }
+            return error || 'Произошла ошибка при генерации. Попробуйте ещё раз.';
         }
         
         function renderResult(job) {
