@@ -889,6 +889,62 @@
         .form-input::placeholder { color: var(--tg-hint); }
         .form-textarea { min-height: 140px; line-height: 1.5; }
         
+        /* Form Select */
+        .form-select {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238e8e93' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 36px;
+        }
+        
+        /* Form Checkbox */
+        .form-checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: var(--space-3);
+        }
+        .form-checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .form-checkbox-label input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            accent-color: var(--accent-primary);
+        }
+        
+        /* Field Hint */
+        .field-hint {
+            font-size: 12px;
+            color: var(--tg-hint);
+            margin-top: var(--space-1);
+            margin-bottom: var(--space-2);
+        }
+        
+        /* Field Error */
+        .field-error {
+            font-size: 12px;
+            color: var(--error);
+            margin-top: var(--space-1);
+        }
+        
+        /* Advanced Toggle */
+        .advanced-toggle {
+            padding: var(--space-3) 0;
+            color: var(--tg-link);
+            font-size: 13px;
+            cursor: pointer;
+            text-align: center;
+            margin: var(--space-3) 0;
+        }
+        .advanced-toggle:active {
+            opacity: 0.7;
+        }
+        
         /* Image Upload */
         .image-upload-area {
             background: var(--tg-secondary);
@@ -1884,6 +1940,265 @@
             navigate(() => renderModelForm(modelId));
         }
         
+        // ═══════════════════════════════════════════════════════════════
+        // FORM GENERATION FROM UX SCHEMA
+        // ═══════════════════════════════════════════════════════════════
+        
+        function generateFieldHTML(field) {
+            const required = field.required ? 'required' : '';
+            const hint = field.hint ? `<div class="field-hint">${field.hint}</div>` : '';
+            
+            // File upload fields
+            if (field.type === 'file_urls' || field.name.includes('image_input') || field.name.includes('image_urls')) {
+                return `
+                    <div class="form-group" data-field="${field.name}">
+                        <label class="form-label">🖼️ ${field.label} ${field.required ? '<span style="color: var(--error);">*</span>' : ''}</label>
+                        ${hint}
+                        <div id="imageUploadArea_${field.name}" class="image-upload-area" onclick="document.getElementById('imageInput_${field.name}').click()">
+                            <div id="uploadPlaceholder_${field.name}">
+                                <div style="font-size: 48px; margin-bottom: 12px;">📷</div>
+                                <div>Нажмите чтобы выбрать фото</div>
+                                <div style="font-size: 12px; margin-top: 8px; opacity: 0.7;">JPG, PNG до 10MB</div>
+                            </div>
+                            <img id="imagePreview_${field.name}" style="display: none; width: 100%; border-radius: 12px;" />
+                        </div>
+                        <input type="file" id="imageInput_${field.name}" data-field="${field.name}" accept="image/*" style="display: none;" onchange="handleImageSelectField(this, '${field.name}')" />
+                        <div id="fieldError_${field.name}" class="field-error" style="display: none;"></div>
+                    </div>
+                `;
+            }
+            
+            // Audio upload
+            if (field.name.includes('audio')) {
+                return `
+                    <div class="form-group" data-field="${field.name}">
+                        <label class="form-label">🎵 ${field.label} ${field.required ? '<span style="color: var(--error);">*</span>' : ''}</label>
+                        ${hint}
+                        <input type="file" id="field_${field.name}" data-field="${field.name}" accept="audio/*" class="form-input" ${required} />
+                        <div id="fieldError_${field.name}" class="field-error" style="display: none;"></div>
+                    </div>
+                `;
+            }
+            
+            // Video upload
+            if (field.name.includes('video_input') || field.name.includes('video_url')) {
+                return `
+                    <div class="form-group" data-field="${field.name}">
+                        <label class="form-label">📹 ${field.label} ${field.required ? '<span style="color: var(--error);">*</span>' : ''}</label>
+                        ${hint}
+                        <input type="file" id="field_${field.name}" data-field="${field.name}" accept="video/*" class="form-input" ${required} />
+                        <div id="fieldError_${field.name}" class="field-error" style="display: none;"></div>
+                    </div>
+                `;
+            }
+            
+            // Enum / select
+            if (field.type === 'enum' && field.options) {
+                const options = field.options.map(opt => 
+                    `<option value="${opt}" ${opt === field.default ? 'selected' : ''}>${opt}</option>`
+                ).join('');
+                return `
+                    <div class="form-group" data-field="${field.name}">
+                        <label class="form-label">⚙️ ${field.label} ${field.required ? '<span style="color: var(--error);">*</span>' : ''}</label>
+                        ${hint}
+                        <select id="field_${field.name}" data-field="${field.name}" class="form-input form-select" ${required}>
+                            ${options}
+                        </select>
+                        <div id="fieldError_${field.name}" class="field-error" style="display: none;"></div>
+                    </div>
+                `;
+            }
+            
+            // Boolean
+            if (field.type === 'boolean') {
+                const checked = field.default ? 'checked' : '';
+                return `
+                    <div class="form-group form-checkbox-group" data-field="${field.name}">
+                        <label class="form-checkbox-label">
+                            <input type="checkbox" id="field_${field.name}" data-field="${field.name}" ${checked} />
+                            <span>${field.label}</span>
+                        </label>
+                        ${hint}
+                    </div>
+                `;
+            }
+            
+            // Number
+            if (field.type === 'number' || field.type === 'integer') {
+                const min = field.min !== undefined ? `min="${field.min}"` : '';
+                const max = field.max !== undefined ? `max="${field.max}"` : '';
+                const defaultVal = field.default !== undefined ? `value="${field.default}"` : '';
+                return `
+                    <div class="form-group" data-field="${field.name}">
+                        <label class="form-label">🔢 ${field.label} ${field.required ? '<span style="color: var(--error);">*</span>' : ''}</label>
+                        ${hint}
+                        <input type="number" id="field_${field.name}" data-field="${field.name}" class="form-input" ${min} ${max} ${defaultVal} ${required} />
+                        <div id="fieldError_${field.name}" class="field-error" style="display: none;"></div>
+                    </div>
+                `;
+            }
+            
+            // String / text (prompt)
+            const isPrompt = field.name === 'prompt' || field.name === 'text';
+            const maxLength = field.maxLength ? `maxlength="${field.maxLength}"` : '';
+            const placeholder = field.placeholder || field.example || (isPrompt ? 'Опишите что хотите создать...' : '');
+            
+            if (isPrompt) {
+                return `
+                    <div class="form-group" data-field="${field.name}">
+                        <label class="form-label">✍️ ${field.label} ${field.required ? '<span style="color: var(--error);">*</span>' : ''}</label>
+                        ${hint}
+                        <textarea 
+                            id="field_${field.name}" 
+                            data-field="${field.name}"
+                            class="form-input form-textarea" 
+                            placeholder="${placeholder}"
+                            ${maxLength}
+                            ${required}
+                        ></textarea>
+                        <div id="fieldError_${field.name}" class="field-error" style="display: none;"></div>
+                    </div>
+                `;
+            }
+            
+            // Default: text input
+            return `
+                <div class="form-group" data-field="${field.name}">
+                    <label class="form-label">${field.label} ${field.required ? '<span style="color: var(--error);">*</span>' : ''}</label>
+                    ${hint}
+                    <input type="text" id="field_${field.name}" data-field="${field.name}" class="form-input" placeholder="${placeholder}" ${maxLength} ${required} />
+                    <div id="fieldError_${field.name}" class="field-error" style="display: none;"></div>
+                </div>
+            `;
+        }
+        
+        function validateField(field, value) {
+            // Required check
+            if (field.required && (value === null || value === undefined || value === '')) {
+                return { valid: false, error: field.error || `${field.label} обязательно` };
+            }
+            
+            // Skip validation for empty optional fields
+            if (!field.required && (value === null || value === undefined || value === '')) {
+                return { valid: true };
+            }
+            
+            // String length
+            if (field.type === 'string' && field.maxLength && value.length > field.maxLength) {
+                return { valid: false, error: `Максимум ${field.maxLength} символов` };
+            }
+            
+            // Number range
+            if ((field.type === 'number' || field.type === 'integer') && value !== '') {
+                const num = parseFloat(value);
+                if (isNaN(num)) return { valid: false, error: 'Введите число' };
+                if (field.min !== undefined && num < field.min) return { valid: false, error: `Минимум: ${field.min}` };
+                if (field.max !== undefined && num > field.max) return { valid: false, error: `Максимум: ${field.max}` };
+            }
+            
+            // Enum validation
+            if (field.type === 'enum' && field.options && value) {
+                if (!field.options.includes(value)) return { valid: false, error: 'Недопустимое значение' };
+            }
+            
+            return { valid: true };
+        }
+        
+        function validateForm(schema) {
+            let isValid = true;
+            const errors = [];
+            
+            for (const field of schema.fields) {
+                const el = document.getElementById(`field_${field.name}`);
+                const errorEl = document.getElementById(`fieldError_${field.name}`);
+                
+                let value = null;
+                if (el) {
+                    if (field.type === 'boolean') {
+                        value = el.checked;
+                    } else {
+                        value = el.value;
+                    }
+                }
+                
+                // Check uploaded images
+                if ((field.type === 'file_urls' || field.name.includes('image_input')) && field.required) {
+                    if (!appData.uploadedFields || !appData.uploadedFields[field.name]) {
+                        isValid = false;
+                        if (errorEl) {
+                            errorEl.textContent = 'Загрузите изображение';
+                            errorEl.style.display = 'block';
+                        }
+                        continue;
+                    }
+                }
+                
+                const result = validateField(field, value);
+                if (!result.valid) {
+                    isValid = false;
+                    errors.push({ field: field.name, error: result.error });
+                    if (errorEl) {
+                        errorEl.textContent = result.error;
+                        errorEl.style.display = 'block';
+                    }
+                } else if (errorEl) {
+                    errorEl.style.display = 'none';
+                }
+            }
+            
+            return { valid: isValid, errors };
+        }
+        
+        async function handleImageSelectField(input, fieldName) {
+            const file = input.files[0];
+            if (!file) return;
+            
+            if (file.size > 10 * 1024 * 1024) {
+                tg.showAlert('Файл слишком большой. Максимум 10MB.');
+                return;
+            }
+            
+            const preview = document.getElementById(`imagePreview_${fieldName}`);
+            const placeholder = document.getElementById(`uploadPlaceholder_${fieldName}`);
+            const uploadArea = document.getElementById(`imageUploadArea_${fieldName}`);
+            
+            placeholder.innerHTML = '<div class="loading-spinner" style="width: 30px; height: 30px;"></div><div style="margin-top: 12px;">Загрузка...</div>';
+            
+            try {
+                const base64 = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+                
+                const result = await apiCall('/upload', {
+                    method: 'POST',
+                    body: JSON.stringify({ image: base64 })
+                });
+                
+                if (result.error) throw new Error(result.error);
+                
+                // Store URL
+                if (!appData.uploadedFields) appData.uploadedFields = {};
+                appData.uploadedFields[fieldName] = result.url;
+                
+                preview.src = base64;
+                preview.style.display = 'block';
+                placeholder.style.display = 'none';
+                uploadArea.style.padding = '0';
+                uploadArea.style.background = 'transparent';
+                
+                // Clear error
+                const errorEl = document.getElementById(`fieldError_${fieldName}`);
+                if (errorEl) errorEl.style.display = 'none';
+                
+            } catch (e) {
+                tg.showAlert('Ошибка загрузки: ' + e.message);
+                placeholder.innerHTML = '<div style="font-size: 48px; margin-bottom: 12px;">📷</div><div>Нажмите чтобы выбрать фото</div>';
+            }
+        }
+        
         async function renderModelForm(modelId) {
             const app = document.getElementById('app');
             
@@ -1911,9 +2226,66 @@
                 return;
             }
             
-            const requiresImage = modelInfo.requires_image;
             appData.currentModel = modelInfo;
+            appData.currentSchema = modelInfo.ux_schema || null;
+            appData.uploadedFields = {};
             appData.uploadedImageUrl = null;
+            
+            // Generate form fields from schema
+            let fieldsHTML = '';
+            if (modelInfo.ux_schema && modelInfo.ux_schema.fields) {
+                // Sort: required first, prompt first among required
+                const sortedFields = [...modelInfo.ux_schema.fields].sort((a, b) => {
+                    if (a.name === 'prompt' || a.name === 'text') return -1;
+                    if (b.name === 'prompt' || b.name === 'text') return 1;
+                    if (a.required && !b.required) return -1;
+                    if (!a.required && b.required) return 1;
+                    return 0;
+                });
+                
+                // Show only non-advanced fields by default
+                const basicFields = sortedFields.filter(f => !f.advanced);
+                const advancedFields = sortedFields.filter(f => f.advanced);
+                
+                fieldsHTML = basicFields.map(f => generateFieldHTML(f)).join('');
+                
+                if (advancedFields.length > 0) {
+                    fieldsHTML += `
+                        <div class="advanced-toggle" onclick="toggleAdvanced()">
+                            <span id="advancedToggleText">▼ Дополнительные параметры (${advancedFields.length})</span>
+                        </div>
+                        <div id="advancedFields" style="display: none;">
+                            ${advancedFields.map(f => generateFieldHTML(f)).join('')}
+                        </div>
+                    `;
+                }
+            } else {
+                // Fallback: simple form
+                const requiresImage = modelInfo.requires_image;
+                fieldsHTML = requiresImage ? `
+                    <div class="form-group">
+                        <label class="form-label">📷 Загрузите изображение</label>
+                        <div id="imageUploadArea_image_input" class="image-upload-area" onclick="document.getElementById('imageInput_image_input').click()">
+                            <div id="uploadPlaceholder_image_input">
+                                <div style="font-size: 48px; margin-bottom: 12px;">📷</div>
+                                <div>Нажмите чтобы выбрать фото</div>
+                            </div>
+                            <img id="imagePreview_image_input" style="display: none; width: 100%; border-radius: 12px;" />
+                        </div>
+                        <input type="file" id="imageInput_image_input" accept="image/*" style="display: none;" onchange="handleImageSelectField(this, 'image_input')" />
+                    </div>
+                ` : '';
+                fieldsHTML += `
+                    <div class="form-group">
+                        <label class="form-label">✍️ Описание</label>
+                        <textarea class="form-input form-textarea" id="field_prompt" placeholder="Опишите что хотите создать..." required></textarea>
+                    </div>
+                `;
+            }
+            
+            // Output info from schema
+            const outputInfo = modelInfo.ux_schema?.output ? 
+                `<div style="font-size: 12px; margin-top: 4px; color: var(--success);">📦 Результат: ${modelInfo.ux_schema.output}</div>` : '';
             
             app.innerHTML = `
                 <div class="page-header">
@@ -1925,41 +2297,132 @@
                     <div>
                         <div class="price-label">Стоимость генерации</div>
                         <div style="font-size: 12px; color: var(--tg-theme-hint-color);">Баланс: ${appData.balance.toFixed(2)} ₽</div>
+                        ${outputInfo}
                     </div>
                     <div class="price-value">${(modelInfo.price || 0).toFixed(2)} ₽</div>
                 </div>
                 
-                <form id="genForm" onsubmit="submitGeneration(event, '${modelId}', ${requiresImage})">
-                    ${requiresImage ? `
-                        <div class="form-group">
-                            <label class="form-label">📷 Загрузите изображение</label>
-                            <div id="imageUploadArea" class="image-upload-area" onclick="document.getElementById('imageInput').click()">
-                                <div id="uploadPlaceholder">
-                                    <div style="font-size: 48px; margin-bottom: 12px;">📷</div>
-                                    <div>Нажмите чтобы выбрать фото</div>
-                                    <div style="font-size: 12px; margin-top: 8px; opacity: 0.7;">JPG, PNG до 10MB</div>
-                                </div>
-                                <img id="imagePreview" style="display: none; width: 100%; border-radius: 12px;" />
-                            </div>
-                            <input type="file" id="imageInput" accept="image/*" style="display: none;" onchange="handleImageSelect(this)" />
-                        </div>
-                    ` : ''}
-                    
-                    <div class="form-group">
-                        <label class="form-label">✍️ ${requiresImage ? 'Опишите что хотите сделать с изображением' : 'Опишите что хотите создать'}</label>
-                        <textarea 
-                            class="form-input form-textarea" 
-                            id="promptInput"
-                            placeholder="${requiresImage ? 'Например: Сделай изображение в стиле аниме, добавь эффект заката...' : 'Например: Красивый закат над морем, яркие краски, реалистичный стиль...'}"
-                            required
-                        ></textarea>
-                    </div>
-                    
+                <form id="genForm" onsubmit="submitGenerationWithSchema(event, '${modelId}')">
+                    ${fieldsHTML}
                     <button type="submit" class="btn" id="submitBtn">
                         ✨ Сгенерировать за ${(modelInfo.price || 0).toFixed(2)} ₽
                     </button>
                 </form>
             `;
+        }
+        
+        function toggleAdvanced() {
+            const advFields = document.getElementById('advancedFields');
+            const toggleText = document.getElementById('advancedToggleText');
+            if (advFields.style.display === 'none') {
+                advFields.style.display = 'block';
+                toggleText.textContent = toggleText.textContent.replace('▼', '▲');
+            } else {
+                advFields.style.display = 'none';
+                toggleText.textContent = toggleText.textContent.replace('▲', '▼');
+            }
+        }
+        
+        async function submitGenerationWithSchema(event, modelId) {
+            event.preventDefault();
+            
+            const schema = appData.currentSchema;
+            
+            // Validate if schema exists
+            if (schema) {
+                const validation = validateForm(schema);
+                if (!validation.valid) {
+                    tg.showAlert('Заполните все обязательные поля');
+                    return;
+                }
+            }
+            
+            // Collect form data
+            const params = {};
+            let prompt = '';
+            let imageUrl = null;
+            
+            if (schema && schema.fields) {
+                for (const field of schema.fields) {
+                    const el = document.getElementById(`field_${field.name}`);
+                    
+                    // Handle uploaded files
+                    if (field.type === 'file_urls' || field.name.includes('image_input') || field.name.includes('image_urls')) {
+                        if (appData.uploadedFields && appData.uploadedFields[field.name]) {
+                            params[field.name] = [appData.uploadedFields[field.name]];
+                            imageUrl = appData.uploadedFields[field.name];
+                        }
+                        continue;
+                    }
+                    
+                    if (!el) continue;
+                    
+                    let value;
+                    if (field.type === 'boolean') {
+                        value = el.checked;
+                    } else if (field.type === 'number' || field.type === 'integer') {
+                        value = el.value ? parseFloat(el.value) : null;
+                    } else {
+                        value = el.value;
+                    }
+                    
+                    // Store prompt separately
+                    if (field.name === 'prompt' || field.name === 'text') {
+                        prompt = value || '';
+                    }
+                    
+                    // Only add non-empty values
+                    if (value !== null && value !== undefined && value !== '') {
+                        params[field.name] = value;
+                    }
+                }
+            } else {
+                // Fallback
+                const promptEl = document.getElementById('field_prompt');
+                prompt = promptEl ? promptEl.value.trim() : '';
+                if (appData.uploadedFields && appData.uploadedFields['image_input']) {
+                    imageUrl = appData.uploadedFields['image_input'];
+                }
+            }
+            
+            if (!prompt) {
+                tg.showAlert('Введите описание для генерации');
+                return;
+            }
+            
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = '⏳ Отправка...';
+            
+            const payload = {
+                model_id: modelId,
+                prompt: prompt,
+                params: params
+            };
+            
+            if (imageUrl) {
+                payload.image_url = imageUrl;
+            }
+            
+            const result = await apiCall('/generate', {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+            
+            if (result.error) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '✨ Сгенерировать';
+                
+                if (result.error === 'Insufficient balance') {
+                    tg.showAlert(`Недостаточно средств!\n\nНужно: ${result.price} ₽\nБаланс: ${result.balance} ₽`);
+                } else {
+                    tg.showAlert(`Ошибка: ${result.error}`);
+                }
+                return;
+            }
+            
+            currentJobId = result.job_id;
+            navigate(() => renderGenerating(modelId, result.job_id));
         }
         
         async function handleImageSelect(input) {

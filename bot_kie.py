@@ -382,9 +382,14 @@ def _get_callback_wait_text(callback_data: Optional[str], user_lang: str) -> Opt
     if callback_data in LONG_CALLBACK_EXACT or any(
         callback_data.startswith(prefix) for prefix in LONG_CALLBACK_PREFIXES
     ):
+        # P0 #19: Показываем примерное время ожидания
+        if callback_data == "confirm_generate" or callback_data.startswith("select_model:"):
+            if user_lang == "en":
+                return "⏳ Starting generation ~30 sec…"
+            return "⏳ Запускаю генерацию ~30 сек…"
         if user_lang == "en":
-            return "⏳ Processing…"
-        return "⏳ Обработка…"
+            return "⏳ Loading…"
+        return "⏳ Загрузка…"
     return None
 
 
@@ -2950,12 +2955,22 @@ try:
         # On Linux, Tesseract should be in PATH (installed via apt-get in Dockerfile)
         # Try to verify it's available by checking if command exists
         import shutil
-        if shutil.which('tesseract'):
-            logger.info("✅ Tesseract found in PATH (Linux)")
+        tesseract_path = shutil.which('tesseract')
+        if tesseract_path:
+            logger.info(f"✅ Tesseract found in PATH: {tesseract_path}")
             tesseract_found = True
         else:
-            logger.info("ℹ️ Tesseract not found in PATH. OCR will be disabled. Install with: apt-get install tesseract-ocr")
-            tesseract_found = False
+            # Fallback: check common Linux paths directly
+            linux_paths = ['/usr/bin/tesseract', '/usr/local/bin/tesseract']
+            for path in linux_paths:
+                if os.path.exists(path):
+                    pytesseract.pytesseract.tesseract_cmd = path
+                    logger.info(f"✅ Tesseract found at: {path}")
+                    tesseract_found = True
+                    break
+            if not tesseract_found:
+                logger.info("ℹ️ Tesseract not found in PATH or common locations. OCR will be disabled. Install with: apt-get install tesseract-ocr")
+                tesseract_found = False
     
     if not tesseract_found:
         logger.info("[INFO] Tesseract not found. OCR analysis will be disabled. Install tesseract-ocr package if needed.")
@@ -7885,7 +7900,14 @@ async def analyze_payment_screenshot(image_data: bytes, expected_amount: float, 
             'valid': False,  # STRICT: Reject without OCR
             'amount_found': False,
             'phone_found': False,
-            'message': 'ℹ️ <b>OCR недоступен</b>. Проверка платежа требует ручной верификации админист­ратором.\n\n❌ Баланс <b>НЕ начислен</b> автоматически.'
+            'message': (
+                '📸 <b>Скриншот получен!</b>\n\n'
+                '⚠️ Автоматическая проверка временно недоступна.\n'
+                'Ваш платёж будет проверен <b>администратором вручную</b>.\n\n'
+                '⏳ Обычно это занимает до 24 часов.\n'
+                'После проверки баланс будет начислен автоматически.\n\n'
+                '💬 Есть вопросы? Напишите в поддержку: /support'
+            )
         }
     
     try:
@@ -7918,20 +7940,27 @@ async def analyze_payment_screenshot(image_data: bytes, expected_amount: float, 
         logger.info(f"📄 Recognized text (first 300 chars): {extracted_text_lower[:300]}")
         
         # CRITICAL KEYWORDS: Strong indicators of successful payment
+        # Updated 2026-02: Added Sberbank new format keywords
         critical_keywords = [
             'успешно',  # Successfully (STRONGEST indicator)
             'переведено',  # Transferred (STRONGEST)
             'отправлено',  # Sent (STRONGEST)
+            'исполнен',  # Executed (Sberbank new format)
+            'выполнен',  # Completed (Sberbank new format)
+            'списано',  # Debited (Sberbank new format)
             'сбп',  # SBP system name
             'итого',  # Total (receipt header - STRONG indicator)
             'квитанция',  # Receipt (STRONG indicator)
+            'чек',  # Check/Receipt (Sberbank)
         ]
         
         # Additional keywords: Weaker but supporting
         additional_keywords = [
-            'перевод', 'платеж', 'payment', 'transfer', 'amount', 'сумма',
+            'перевод', 'платеж', 'платёж', 'payment', 'transfer', 'amount', 'сумма',
             'итого', 'total', 'получатель', 'recipient', 'статус', 'status',
-            'квитанция', 'receipt', 'комиссия', 'commission', 'пополнение', 'topup'
+            'квитанция', 'receipt', 'комиссия', 'commission', 'пополнение', 'topup',
+            'сбербанк', 'sberbank', 'сбер', 'тинькофф', 'tinkoff', 'т-банк',
+            'к оплате', 'без комиссии', 'операция', 'банковский'
         ]
         
         # STRICT: Require at least ONE critical keyword
@@ -7947,18 +7976,25 @@ async def analyze_payment_screenshot(image_data: bytes, expected_amount: float, 
             logger.warning(f"⚠️ NO payment indicators found")
         
         # Extract amount from text - STRICT MATCHING
+        # Updated 2026-02: Added patterns for new Sberbank receipt format
         amount_patterns = [
             # HIGHEST PRIORITY: "Итого" pattern (receipt total - most reliable for bank receipts)
             (r'итого\s*(\d{1,6})\s*[₽рp]', 'итого'),
             (r'итого\s*(\d{1,6})[.,](\d{0,2})\s*[₽рp]?', 'итого с копейками'),
+            # HIGH PRIORITY: Sberbank new format 2026 - "Сумма перевода", "К оплате", "Списано"
+            (r'(?:сумма\s+перевода|к\s+оплате|списано)\s*[:\-]?\s*(\d{1,6})[.,]?(\d{0,2})\s*[₽рp]?', 'сбербанк новый'),
+            (r'(?:перевод|платёж|платеж)\s+на\s+сумму\s*(\d{1,6})[.,]?(\d{0,2})', 'перевод на сумму'),
             # HIGH PRIORITY: Numbers with currency symbols (most reliable)
             (r'(\d{1,6})[.,]?(\d{0,2})\s*[₽рp]', 'с рублём'),
             (r'[₽рp]\s*(\d{1,6})[.,]?(\d{0,2})', 'рубль перед'),
+            (r'(\d{1,6})[.,](\d{2})\s*(?:руб|rub)', 'руб/rub'),
             # HIGH PRIORITY: "Сумма" pattern
             (r'сумма\s*(\d{1,6})\s*[₽рp]?', 'сумма'),
             (r'сумма\s*(\d{1,6})[.,](\d{0,2})', 'сумма с копейками'),
             # HIGH PRIORITY: Near payment keywords
             (r'(?:сумма|переведено?|перевел|amount)\s*[=:]?\s*(\d{1,6})[.,]?(\d{0,2})\s*[₽рp]?', 'ключевое слово'),
+            # MEDIUM PRIORITY: Sberbank format with spaces (1 000 ₽)
+            (r'(\d{1,3})\s+(\d{3})\s*[₽рp]', 'с пробелом'),
             # MEDIUM PRIORITY: Standalone numbers (2+ digits to avoid noise)
             (r'\b(\d{2,6})[.,]?(\d{0,2})\b', 'число'),
         ]
@@ -19448,6 +19484,36 @@ def _humanize_param_name(param_name: str, user_lang: str) -> str:
     return ru_map.get(param_name, fallback.capitalize() if fallback else param_name)
 
 
+def _get_ssot_param_label(model_id: str, param_name: str, user_lang: str) -> str:
+    """Get parameter label from Source of Truth or fallback to humanize."""
+    try:
+        from app.models.input_schema import get_param_label
+        label = get_param_label(model_id, param_name, user_lang)
+        if label and label != param_name.replace("_", " ").title():
+            return label
+    except Exception:
+        pass
+    return _humanize_param_name(param_name, user_lang)
+
+
+def _get_ssot_param_hint(model_id: str, param_name: str, user_lang: str) -> str:
+    """Get parameter hint from Source of Truth."""
+    try:
+        from app.models.input_schema import get_param_hint
+        return get_param_hint(model_id, param_name, user_lang)
+    except Exception:
+        return ""
+
+
+def _get_ssot_param_error(model_id: str, param_name: str, user_lang: str) -> str:
+    """Get parameter error message from Source of Truth."""
+    try:
+        from app.models.input_schema import get_param_error
+        return get_param_error(model_id, param_name, user_lang)
+    except Exception:
+        return "Неверное значение" if user_lang == "ru" else "Invalid value"
+
+
 def _short_correlation_suffix(correlation_id: Optional[str]) -> str:
     if not correlation_id:
         return "corr-na"
@@ -23909,12 +23975,42 @@ async def unhandled_update_fallback(update: Update, context: ContextTypes.DEFAUL
                 await guard.check_and_ensure_response(update, context)
                 return
         user_lang = get_user_language(user_id) if user_id else "ru"
-        param_label = waiting_for or current_param or "параметр"
-        message_text = (
-            f"Я жду ввод параметра <b>{param_label}</b>."
-            if user_lang == "ru"
-            else f"I'm waiting for parameter <b>{param_label}</b>."
-        )
+        raw_param = waiting_for or current_param or "параметр"
+        # UX: Маппинг технических названий параметров на понятные инструкции
+        param_labels_ru = {
+            "image_input": "📷 Отправьте изображение для обработки",
+            "image": "📷 Отправьте изображение",
+            "image_url": "📷 Отправьте изображение",
+            "source_image": "📷 Отправьте исходное изображение",
+            "target_image": "📷 Отправьте целевое изображение", 
+            "prompt": "✍️ Введите текстовое описание (промпт)",
+            "text": "✍️ Введите текст",
+            "negative_prompt": "🚫 Введите негативный промпт (что исключить)",
+            "audio": "🎵 Отправьте аудиофайл",
+            "video": "🎬 Отправьте видеофайл",
+            "audio_input": "🎵 Отправьте аудиофайл",
+            "video_input": "🎬 Отправьте видеофайл",
+        }
+        param_labels_en = {
+            "image_input": "📷 Send an image to process",
+            "image": "📷 Send an image",
+            "image_url": "📷 Send an image",
+            "source_image": "📷 Send source image",
+            "target_image": "📷 Send target image",
+            "prompt": "✍️ Enter text description (prompt)",
+            "text": "✍️ Enter text",
+            "negative_prompt": "🚫 Enter negative prompt (what to exclude)",
+            "audio": "🎵 Send an audio file",
+            "video": "🎬 Send a video file",
+            "audio_input": "🎵 Send an audio file",
+            "video_input": "🎬 Send a video file",
+        }
+        if user_lang == "ru":
+            param_label = param_labels_ru.get(raw_param, f"параметр «{raw_param}»")
+            message_text = param_label if param_label.startswith(("📷", "✍️", "🚫", "🎵", "🎬")) else f"Жду ввод: <b>{param_label}</b>"
+        else:
+            param_label = param_labels_en.get(raw_param, f"parameter «{raw_param}»")
+            message_text = param_label if param_label.startswith(("📷", "✍️", "🚫", "🎵", "🎬")) else f"Waiting for: <b>{param_label}</b>"
         menu_label = "🏠 Главное меню" if user_lang == "ru" else "🏠 Main Menu"
         keyboard = InlineKeyboardMarkup(
             [[InlineKeyboardButton(menu_label, callback_data="back_to_menu")]]

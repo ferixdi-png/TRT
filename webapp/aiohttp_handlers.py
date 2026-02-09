@@ -151,6 +151,8 @@ async def webapp_model_info(request: web.Request) -> web.Response:
     if not model_id:
         return web.json_response({"error": "model_id required"}, status=400)
     
+    lang = request.query.get("lang", "ru")
+    
     try:
         from app.kie_catalog import get_model_map
         catalog = get_model_map()
@@ -159,10 +161,18 @@ async def webapp_model_info(request: web.Request) -> web.Response:
         if not spec:
             return web.json_response({"error": f"Model {model_id} not found"}, status=404)
         
-        # Get schema for parameters
-        schema = {}
+        # Get schema from Source of Truth (auto-generated from kie_models.yaml)
+        ux_schema = None
+        try:
+            from app.models.input_schema import get_ux_schema_for_webapp
+            ux_schema = get_ux_schema_for_webapp(model_id, lang)
+        except Exception as e:
+            logger.warning("Failed to get UX schema for %s: %s", model_id, e)
+        
+        # Fallback to legacy schema
+        legacy_schema = {}
         if hasattr(spec, 'schema_properties') and spec.schema_properties:
-            schema = spec.schema_properties
+            legacy_schema = spec.schema_properties
         
         # Get price
         price = 0
@@ -179,7 +189,8 @@ async def webapp_model_info(request: web.Request) -> web.Response:
             "type": getattr(spec, "model_mode", "unknown"),
             "emoji": getattr(spec, "emoji", "🎨"),
             "description": getattr(spec, "description", ""),
-            "schema": schema,
+            "ux_schema": ux_schema,
+            "schema": legacy_schema,
             "price": price,
             "requires_image": getattr(spec, "model_mode", "") in ["image-to-image", "image-to-video"],
         })

@@ -324,25 +324,24 @@ def build_step1_prompt_text(
         unit=_resolve_sku_unit(sku),
     )
     
+    # P0 #10: Добавляем пример промпта для новичков
     if user_lang == "en":
         lines = [
             intro_card,
-            "📝 Step 1/3: Enter prompt:",
-            "Max length: 5000 characters",
-            "💡 Format: text",
-            "💡 What to do:",
-            "• Enter text in a message",
-            "• Send text value",
+            "📝 <b>Step 1/3: Describe what you want</b>",
+            "",
+            "💡 <b>Example:</b> <i>A cat in sunglasses on a tropical beach, sunset, photorealistic</i>",
+            "",
+            "The more details — the better result!",
         ]
     else:
         lines = [
             intro_card,
-            "📝 Шаг 1/3: Введите prompt:",
-            "Макс. длина: 5000 символов",
-            "💡 Формат: текст",
-            "💡 Что делать:",
-            "• Введите значение в текстовом сообщении",
-            "• Отправьте значение текстом",
+            "📝 <b>Шаг 1/3: Опиши что хочешь получить</b>",
+            "",
+            "💡 <b>Пример:</b> <i>Кот в солнечных очках на тропическом пляже, закат, фотореализм</i>",
+            "",
+            "Чем больше деталей — тем лучше результат!",
         ]
     lines.extend(price_lines)
 
