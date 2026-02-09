@@ -1614,9 +1614,10 @@
                         <button class="balance-btn" onclick="openBot()">${t.topUp}</button>
                     </div>
                     ${appData.freeRemaining > 0 ? `
-                        <div class="free-badge">
+                        <div class="free-badge" onclick="showFreeModels()" style="cursor: pointer;">
                             <span class="free-badge-icon">⚡</span>
                             <span class="free-badge-text"><b>${appData.freeRemaining}</b> ${t.freeGens}</span>
+                            <span style="margin-left: auto; font-size: 18px;">›</span>
                         </div>
                     ` : ''}
                 </div>
@@ -1686,6 +1687,66 @@
         function showTopModels() {
             updateNav(1);
             navigate(renderTopModels);
+        }
+        
+        function showFreeModels() {
+            updateNav(2);
+            navigate(renderFreeModels);
+        }
+        
+        function renderFreeModels() {
+            const app = document.getElementById('app');
+            const freeModels = appData.freeModels || [];
+            const t = currentLang === 'ru' ? {
+                title: '⚡ Бесплатные генерации',
+                subtitle: `У вас ${appData.freeRemaining} бесплатных генераций`,
+                noModels: 'Нет доступных бесплатных моделей',
+                free: 'БЕСПЛАТНО'
+            } : {
+                title: '⚡ Free Generations',
+                subtitle: `You have ${appData.freeRemaining} free generations`,
+                noModels: 'No free models available',
+                free: 'FREE'
+            };
+            
+            if (freeModels.length === 0) {
+                app.innerHTML = `
+                    <div class="page-header">
+                        <button class="back-btn" onclick="goBack()">←</button>
+                        <div class="page-title">${t.title}</div>
+                    </div>
+                    <div class="empty-state">
+                        <div style="font-size: 48px; margin-bottom: 16px;">🎁</div>
+                        <div>${t.noModels}</div>
+                    </div>
+                `;
+                return;
+            }
+            
+            app.innerHTML = `
+                <div class="page-header">
+                    <button class="back-btn" onclick="goBack()">←</button>
+                    <div class="page-title">${t.title}</div>
+                </div>
+                
+                <div class="free-info-card" style="background: linear-gradient(135deg, #10b981, #059669); border-radius: 16px; padding: 16px; margin-bottom: 16px; color: white;">
+                    <div style="font-size: 24px; font-weight: bold;">⚡ ${appData.freeRemaining}</div>
+                    <div style="font-size: 14px; opacity: 0.9;">${t.subtitle}</div>
+                </div>
+                
+                <div class="model-list">
+                    ${freeModels.map(m => `
+                        <div class="model-item featured" onclick="showModelForm('${m.id}')">
+                            <div class="model-icon">${m.emoji || '🎨'}</div>
+                            <div class="model-info">
+                                <div class="model-name">${m.name || m.id}</div>
+                                <div class="model-desc" style="color: var(--success);">${t.free}</div>
+                            </div>
+                            <div class="model-price free">${t.free}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
         }
         
         function renderTopModels() {
