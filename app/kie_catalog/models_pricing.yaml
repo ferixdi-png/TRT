@@ -60,7 +60,7 @@ models:
     итоговую цену.
 - id: flux/kontext
   title_ru: 🔥 Flux Kontext
-  type: t2i
+  type: i2i
   modes:
   - unit: image
     credits: 5.0
@@ -202,7 +202,7 @@ models:
     без излишеств.
 - id: google/nanobanana-gemini-2.5-flash
   title_ru: 🔍 Google Nano Banana Gemini 2.5 Flash
-  type: t2i
+  type: i2i
   modes:
   - unit: image
     credits: 4.0
@@ -238,7 +238,7 @@ models:
     Для серьёзных задач.'
 - id: grok/imagine
   title_ru: 🔥 Grok Imagine Video
-  type: i2v
+  type: t2v
   modes:
   - unit: video
     credits: 20.0
@@ -329,7 +329,7 @@ models:
   description_ru: Превращает фото в видео с Pro-качеством. Плавная анимация и детали.
 - id: hailuo/2.3
   title_ru: 🎥 Hailuo 2.3 Image to Video
-  type: i2v
+  type: t2v
   modes:
   - unit: video
     credits: 30.0
@@ -431,7 +431,7 @@ models:
     стилями и деталями.
 - id: ideogram/character
   title_ru: 🎨 Ideogram Character
-  type: t2i
+  type: i2i
   modes:
   - unit: image
     credits: 12.0
@@ -496,7 +496,7 @@ models:
     Дорого, но эффектно.'
 - id: kling/v2-1-standard
   title_ru: 🎬 Kling 2.1 Video Generation
-  type: t2v
+  type: i2v
   modes:
   - unit: video
     credits: 25.0
@@ -509,7 +509,7 @@ models:
   description_ru: Стандартная генерация видео Kling 2.1. Баланс цены и качества.
 - id: kling/v2-1-pro
   title_ru: 🎬 Kling 2.1 Video Generation
-  type: t2v
+  type: i2v
   modes:
   - unit: video
     credits: 50.0
@@ -536,7 +536,7 @@ models:
   description_ru: Текст в видео, мастер-режим. Максимальное качество рендера от Kling.
 - id: kling/v2-5-turbo
   title_ru: 🎬 Kling 2.5 Turbo
-  type: t2i
+  type: t2v
   modes:
   - unit: image
     credits: 30.0
@@ -741,7 +741,7 @@ models:
     проектов.'
 - id: sora-watermark-remover
   title_ru: 🎞️ OpenAI Sora 2 Watermark Remover
-  type: watermark_remove
+  type: tools
   modes:
   - unit: removal
     credits: 15.7
@@ -750,7 +750,7 @@ models:
     готовых роликов для публикации.
 - id: openai/4o-image
   title_ru: 🔥 OpenAI 4o Image
-  type: t2i
+  type: i2i
   modes:
   - unit: image
     credits: 6.0
@@ -812,7 +812,7 @@ models:
   description_ru: Удаление фона с фото. Чистый результат, прозрачный PNG за секунды.
 - id: runway/gen-4
   title_ru: 🔥 Runway Gen-4
-  type: i2v
+  type: t2v
   modes:
   - unit: video
     credits: 12.0
@@ -880,7 +880,7 @@ models:
     артефакты.
 - id: wan/2-2-a14b-speech-to-video-turbo
   title_ru: 🌊 Wan 2.2 A14B Turbo API Speech to Video
-  type: t2v
+  type: speech_to_video
   modes:
   - unit: video
     credits: 24.0
@@ -898,7 +898,7 @@ models:
     губ.
 - id: wan/2-2-animate-move
   title_ru: 🌊 Wan 2.2 Animate Speech to Video
-  type: t2v
+  type: lip_sync
   modes:
   - unit: video
     credits: 24.0
@@ -915,7 +915,7 @@ models:
   description_ru: Анимация движений объектов на фото. Заставь статику двигаться.
 - id: wan/2-2-animate-replace
   title_ru: 🌊 Wan 2.2 Animate Replace
-  type: t2v
+  type: lip_sync
   modes:
   - unit: video
     credits: 24.0
@@ -1016,7 +1016,7 @@ models:
     стабильности голоса.
 - id: google/veo-3.1
   title_ru: 🔥 Google Veo 3.1
-  type: t2v
+  type: i2v
   modes:
   - unit: video
     credits: 60.0
