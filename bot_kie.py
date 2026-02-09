@@ -14447,20 +14447,35 @@ async def _button_callback_impl(
             else:
                 image_param_name = waiting_for
             
+            # Check both session and params for image data
+            if 'params' not in session:
+                session['params'] = {}
+            
+            img_value = None
+            # First check session direct storage
             if image_param_name in session and session[image_param_name]:
-                if 'params' not in session:
-                    session['params'] = {}
-                # CRITICAL: Ensure image_input is always a list (API expects array)
                 img_value = session[image_param_name]
+            # Then check if already in params
+            elif image_param_name in session.get('params', {}) and session['params'][image_param_name]:
+                img_value = session['params'][image_param_name]
+            
+            if img_value:
+                # CRITICAL: Ensure image_input is always a list (API expects array)
                 if isinstance(img_value, list):
                     session['params'][image_param_name] = img_value
                 else:
                     session['params'][image_param_name] = [img_value]
                 img_count = len(session['params'][image_param_name])
-                await query.edit_message_text(
-                    f"✅ Добавлено изображений: {img_count}\n\n"
-                    f"Продолжаю..."
-                )
+                try:
+                    await query.edit_message_text(
+                        f"✅ Добавлено изображений: {img_count}\n\n"
+                        f"Продолжаю..."
+                    )
+                except Exception as e:
+                    logger.warning("Could not edit message in image_done: %s", e)
+            else:
+                logger.warning("IMAGE_DONE_NO_IMAGE user_id=%s image_param=%s session_keys=%s params_keys=%s",
+                              user_id, image_param_name, list(session.keys())[:10], list(session.get('params', {}).keys()))
             session['waiting_for'] = None
             
             logger.info("IMAGE_DONE_PARAMS_SET user_id=%s image_param=%s params_keys=%s required=%s", 
@@ -20482,8 +20497,10 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
 
     for param_name in required_order:
         if param_name in params:
+            logger.debug("PARAM_SKIP user_id=%s param=%s reason=already_in_params", user_id, param_name)
             continue
 
+        logger.info("PARAM_NEXT_SELECTED user_id=%s param=%s params_keys=%s", user_id, param_name, list(params.keys())[:10])
         param_info = properties.get(param_name, {})
         param_type = param_info.get('type', 'string')
         enum_values = _normalize_enum_values(param_info)
