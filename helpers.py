@@ -104,6 +104,7 @@ async def build_main_menu_keyboard(
     
     if user_lang == "ru":
         buttons = [
+            [InlineKeyboardButton("🔥 Топ модели", callback_data="top_models")],
             [InlineKeyboardButton("⚡ Бесплатные генерации", callback_data="fast_tools")],
             [InlineKeyboardButton("🖼️ Текст → Фото", callback_data="gen_type:text-to-image")],
             [InlineKeyboardButton("🧩 Редактор фото", callback_data="gen_type:image-to-image")],
@@ -119,6 +120,7 @@ async def build_main_menu_keyboard(
         return buttons
     else:
         buttons = [
+            [InlineKeyboardButton("🔥 Top models", callback_data="top_models")],
             [InlineKeyboardButton("⚡ Free generations", callback_data="fast_tools")],
             [InlineKeyboardButton("🖼️ Text → Photo", callback_data="gen_type:text-to-image")],
             [InlineKeyboardButton("🧩 Photo editor", callback_data="gen_type:image-to-image")],

@@ -162,6 +162,93 @@ async def get_model_intro(
         }
 
 
+@webapp_api.get("/api/top-models")
+async def get_top_models_list(
+    lang: str = "ru",
+    category: Optional[str] = None,
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data")
+):
+    """Get list of top models with SKUs for Mini App."""
+    try:
+        from app.top_models import get_categories, get_top_models, get_sku_price_rub
+        
+        categories = get_categories(lang=lang)
+        models = get_top_models(lang=lang, category=category)
+        
+        # Enrich models with prices
+        for model in models:
+            for sku in model.get("skus", []):
+                price = get_sku_price_rub(sku.get("price_ref", ""), sku.get("mode_key", ""))
+                sku["price_rub"] = price if price else None
+        
+        return {
+            "categories": categories,
+            "models": models,
+            "total": len(models),
+        }
+    except Exception as e:
+        logger.error("Failed to get top models: %s", e)
+        return {
+            "categories": [],
+            "models": [],
+            "total": 0,
+            "error": str(e),
+        }
+
+
+@webapp_api.get("/api/top-models/{top_model_id}")
+async def get_top_model_detail(
+    top_model_id: str,
+    lang: str = "ru",
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data")
+):
+    """Get single top model details with SKUs."""
+    try:
+        from app.top_models import get_top_model_by_id, get_sku_price_rub
+        
+        model = get_top_model_by_id(top_model_id, lang=lang)
+        if not model:
+            raise HTTPException(status_code=404, detail="Model not found")
+        
+        # Enrich SKUs with prices
+        for sku in model.get("skus", []):
+            price = get_sku_price_rub(sku.get("price_ref", ""), sku.get("mode_key", ""))
+            sku["price_rub"] = price if price else None
+        
+        return model
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to get top model %s: %s", top_model_id, e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@webapp_api.get("/api/top-models/{top_model_id}/sku/{sku_id}")
+async def get_top_model_sku(
+    top_model_id: str,
+    sku_id: str,
+    lang: str = "ru",
+    x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data")
+):
+    """Get SKU details for routing to generation."""
+    try:
+        from app.top_models import get_sku_details, get_sku_price_rub
+        
+        sku = get_sku_details(top_model_id, sku_id, lang=lang)
+        if not sku:
+            raise HTTPException(status_code=404, detail="SKU not found")
+        
+        price = get_sku_price_rub(sku.get("price_ref", ""), sku.get("mode_key", "") if "mode_key" in sku else "")
+        sku["price_rub"] = price if price else None
+        
+        return sku
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to get SKU %s/%s: %s", top_model_id, sku_id, e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @webapp_api.get("/api/user/{user_id}/history")
 async def get_user_history(
     user_id: int,

@@ -13799,6 +13799,138 @@ async def _button_callback_impl(
             )
             return ConversationHandler.END
         
+        # Handle top models category selection
+        if data.startswith("top_cat:"):
+            try:
+                await query.answer()
+            except:
+                pass
+            category = data.split(":", 1)[1]
+            user_lang = get_user_language(user_id)
+            
+            try:
+                from app.top_models import get_top_models, get_sku_price_rub
+                
+                models = get_top_models(lang=user_lang, category=category)
+                
+                keyboard = []
+                for model in models:
+                    model_id = model.get("id")
+                    title = model.get("title", model_id)
+                    keyboard.append([
+                        InlineKeyboardButton(f"🔹 {title}", callback_data=f"top_model:{model_id}")
+                    ])
+                keyboard.append([InlineKeyboardButton("⬅️ Назад" if user_lang == "ru" else "⬅️ Back", callback_data="top_models")])
+                keyboard.append([InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")])
+                
+                cat_labels = {"audio": "Аудио", "chat": "Чат/LLM", "image": "Изображения", "video": "Видео", "editing": "Редактирование"}
+                cat_label = cat_labels.get(category, category) if user_lang == "ru" else category.title()
+                
+                menu_text = f"📂 <b>{cat_label}</b>\n\nВыберите модель:" if user_lang == "ru" else f"📂 <b>{cat_label}</b>\n\nSelect a model:"
+                
+                await query.edit_message_text(menu_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='HTML')
+            except Exception as e:
+                logger.error(f"Error in top_cat: {e}", exc_info=True)
+            return ConversationHandler.END
+        
+        # Handle top model selection - show SKUs
+        if data.startswith("top_model:"):
+            try:
+                await query.answer()
+            except:
+                pass
+            top_model_id = data.split(":", 1)[1]
+            user_lang = get_user_language(user_id)
+            
+            try:
+                from app.top_models import get_top_model_by_id, get_sku_price_rub, format_top_model_card
+                
+                model = get_top_model_by_id(top_model_id, lang=user_lang)
+                if not model:
+                    await query.edit_message_text("❌ Модель не найдена" if user_lang == "ru" else "❌ Model not found")
+                    return ConversationHandler.END
+                
+                # Build card text
+                card_text = format_top_model_card(model, lang=user_lang)
+                
+                # Build SKU buttons
+                keyboard = []
+                skus = model.get("skus", [])
+                for sku in skus:
+                    sku_id = sku.get("sku_id")
+                    sku_label = sku.get("label")
+                    price = get_sku_price_rub(sku.get("price_ref", ""), sku.get("mode_key", ""))
+                    if price and price > 0:
+                        price_text = f"{price:.0f}₽"
+                    else:
+                        price_text = "TBD"
+                    keyboard.append([
+                        InlineKeyboardButton(f"▶️ {sku_label} ({price_text})", callback_data=f"top_sku:{top_model_id}:{sku_id}")
+                    ])
+                keyboard.append([InlineKeyboardButton("⬅️ Назад" if user_lang == "ru" else "⬅️ Back", callback_data=f"top_cat:{model.get('category')}")])
+                keyboard.append([InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")])
+                
+                select_text = "\n\n<b>Выберите режим:</b>" if user_lang == "ru" else "\n\n<b>Select mode:</b>"
+                
+                await query.edit_message_text(card_text + select_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='HTML')
+            except Exception as e:
+                logger.error(f"Error in top_model: {e}", exc_info=True)
+            return ConversationHandler.END
+        
+        # Handle top SKU selection - route to parameter screen
+        if data.startswith("top_sku:"):
+            try:
+                await query.answer()
+            except:
+                pass
+            parts = data.split(":")
+            if len(parts) < 3:
+                return ConversationHandler.END
+            top_model_id = parts[1]
+            sku_id = parts[2]
+            user_lang = get_user_language(user_id)
+            
+            try:
+                from app.top_models import get_sku_details
+                
+                sku_details = get_sku_details(top_model_id, sku_id, lang=user_lang)
+                if not sku_details:
+                    await query.edit_message_text("❌ SKU не найден" if user_lang == "ru" else "❌ SKU not found")
+                    return ConversationHandler.END
+                
+                # Route to existing parameter screen with model_id and params
+                model_id = sku_details.get("model_id")
+                preset_params = sku_details.get("params", {})
+                
+                session = ensure_session_cached(context, session_store, user_id, update_id)
+                session["model_id"] = model_id
+                session["top_model_source"] = top_model_id
+                session["top_sku_source"] = sku_id
+                session["preset_params"] = preset_params
+                
+                # Trigger model selection flow
+                logger.info(f"TOP_SKU_SELECTED user_id={user_id} top_model={top_model_id} sku={sku_id} model_id={model_id} params={preset_params}")
+                
+                # Set ui_context for model card
+                if user_id in user_sessions:
+                    user_sessions[user_id]["ui_context"] = "MODEL_CARD"
+                
+                # Use existing handle_model_callback to show model card
+                from app.helpers.models_menu_handlers import handle_model_callback
+                success = await handle_model_callback(query, user_id, user_lang, f"model:{model_id}")
+                
+                if success:
+                    return SELECTING_MODEL
+                else:
+                    return ConversationHandler.END
+            except Exception as e:
+                logger.error(f"Error in top_sku: {e}", exc_info=True)
+                try:
+                    await query.answer("❌ Ошибка" if user_lang == "ru" else "❌ Error", show_alert=True)
+                except:
+                    pass
+            return ConversationHandler.END
+        
         # Handle category selection (can be called from main menu)
         if data.startswith("gen_type:"):
             # Answer callback immediately to show button was pressed
@@ -15086,6 +15218,54 @@ async def _button_callback_impl(
                 logger.error(f"Error in fast_tools: {e}", exc_info=True)
                 try:
                     await query.answer("❌ Ошибка при загрузке бесплатных инструментов", show_alert=True)
+                except:
+                    pass
+            return ConversationHandler.END
+        
+        if data == "top_models":
+            # Answer callback immediately
+            try:
+                await query.answer()
+            except:
+                pass
+            reset_session_on_navigation(user_id, reason="top_models")
+            
+            if user_id in user_sessions:
+                user_sessions[user_id]["ui_context"] = "TOP_MODELS"
+                logger.info("🎯 TOP_MODELS_UI_CONTEXT_SET user_id=%s ui_context=TOP_MODELS", user_id)
+            
+            try:
+                user_lang = get_user_language(user_id)
+                from app.top_models import get_categories, get_top_models
+                
+                categories = get_categories(lang=user_lang)
+                
+                # Build category buttons
+                top_models_keyboard = []
+                for cat in categories:
+                    cat_id = cat.get("id")
+                    cat_label = cat.get("label")
+                    top_models_keyboard.append([
+                        InlineKeyboardButton(f"📂 {cat_label}", callback_data=f"top_cat:{cat_id}")
+                    ])
+                top_models_keyboard.append([
+                    InlineKeyboardButton(t('btn_back_to_menu', lang=user_lang), callback_data="back_to_menu")
+                ])
+                
+                if user_lang == 'ru':
+                    menu_text = "🔥 <b>Топ модели</b>\n\n24 лучших модели для генерации контента.\nВыберите категорию:"
+                else:
+                    menu_text = "🔥 <b>Top Models</b>\n\n24 best models for content generation.\nSelect a category:"
+                
+                await query.edit_message_text(
+                    menu_text,
+                    reply_markup=InlineKeyboardMarkup(top_models_keyboard),
+                    parse_mode='HTML'
+                )
+            except Exception as e:
+                logger.error(f"Error in top_models: {e}", exc_info=True)
+                try:
+                    await query.answer("❌ Ошибка при загрузке топ моделей", show_alert=True)
                 except:
                     pass
             return ConversationHandler.END
@@ -28437,6 +28617,10 @@ async def _register_all_handlers_internal(application: Application):
             CallbackQueryHandler(button_callback, block=True, pattern='^free_tools$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^fast_tools$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^special_tools$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^top_models$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^top_cat:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^top_model:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^top_sku:'),
             CallbackQueryHandler(button_callback, block=True, pattern='^check_balance$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^copy_bot$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^claim_gift$'),

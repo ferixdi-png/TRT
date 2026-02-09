@@ -1,0 +1,939 @@
+# Top Models Catalog - Single Source of Truth for Bot and Mini App
+# Exactly 24 models, no additions without explicit approval
+# Each model has SKUs mapped to existing project pricing/routing
+
+version: "1.0"
+updated: "2026-02-09"
+
+categories:
+  - id: audio
+    label_ru: "Аудио / Голос"
+    label_en: "Audio / Voice"
+    order: 1
+  - id: chat
+    label_ru: "Чат / LLM"
+    label_en: "Chat / LLM"
+    order: 2
+  - id: image
+    label_ru: "Изображения"
+    label_en: "Image"
+    order: 3
+  - id: video
+    label_ru: "Видео"
+    label_en: "Video"
+    order: 4
+  - id: editing
+    label_ru: "Редактирование"
+    label_en: "Editing"
+    order: 5
+
+models:
+  # ============ AUDIO / VOICE ============
+  - id: "top-elevenlabs-v3"
+    model_id: "elevenlabs/text-to-dialogue-v3"
+    category: audio
+    title_ru: "ElevenLabs V3"
+    title_en: "ElevenLabs V3"
+    one_liner_ru: "Генерация реалистичных диалогов из текста"
+    one_liner_en: "Generate realistic dialogues from text"
+    best_for_ru:
+      - "Озвучка персонажей"
+      - "Аудиокниги и подкасты"
+      - "Рекламные ролики"
+    best_for_en:
+      - "Character voiceovers"
+      - "Audiobooks and podcasts"
+      - "Commercials"
+    skus:
+      - sku_id: "elevenlabs-v3-default"
+        label_ru: "Стандарт"
+        label_en: "Standard"
+        mode_key: "per 1000 characters"
+        maps_to:
+          model_id: "elevenlabs/text-to-dialogue-v3"
+          params: {}
+        price_ref: "elevenlabs/text-to-dialogue-v3"
+        unit: "1000 символов"
+        unit_en: "1000 characters"
+
+  # ============ CHAT / LLM ============
+  - id: "top-gemini-2-5-flash"
+    model_id: "gemini/2-5-flash"
+    category: chat
+    title_ru: "Gemini 2.5 Flash"
+    title_en: "Gemini 2.5 Flash"
+    one_liner_ru: "Быстрая языковая модель от Google"
+    one_liner_en: "Fast language model from Google"
+    best_for_ru:
+      - "Быстрые ответы на вопросы"
+      - "Анализ текста"
+      - "Помощь с кодом"
+    best_for_en:
+      - "Quick Q&A"
+      - "Text analysis"
+      - "Coding assistance"
+    skus:
+      - sku_id: "gemini-2-5-flash-default"
+        label_ru: "Стандарт"
+        label_en: "Standard"
+        mode_key: "Input"
+        maps_to:
+          model_id: "gemini/2-5-flash"
+          params: {}
+        price_ref: "gemini/2-5-flash"
+        unit: "запрос"
+        unit_en: "request"
+
+  - id: "top-gemini-2-5-pro"
+    model_id: "gemini/2-5-pro"
+    category: chat
+    title_ru: "Gemini 2.5 Pro"
+    title_en: "Gemini 2.5 Pro"
+    one_liner_ru: "Продвинутая языковая модель от Google"
+    one_liner_en: "Advanced language model from Google"
+    best_for_ru:
+      - "Сложные задачи"
+      - "Глубокий анализ"
+      - "Креативное письмо"
+    best_for_en:
+      - "Complex tasks"
+      - "Deep analysis"
+      - "Creative writing"
+    skus:
+      - sku_id: "gemini-2-5-pro-default"
+        label_ru: "Стандарт"
+        label_en: "Standard"
+        mode_key: "Input"
+        maps_to:
+          model_id: "gemini/2-5-pro"
+          params: {}
+        price_ref: "gemini/2-5-pro"
+        unit: "запрос"
+        unit_en: "request"
+
+  - id: "top-gemini-3-flash"
+    model_id: "gemini/3-flash"
+    category: chat
+    title_ru: "Gemini 3 Flash"
+    title_en: "Gemini 3 Flash"
+    one_liner_ru: "Новейшая быстрая модель Gemini"
+    one_liner_en: "Latest fast Gemini model"
+    best_for_ru:
+      - "Мгновенные ответы"
+      - "Чат-боты"
+      - "Автоматизация"
+    best_for_en:
+      - "Instant responses"
+      - "Chatbots"
+      - "Automation"
+    skus:
+      - sku_id: "gemini-3-flash-default"
+        label_ru: "Стандарт"
+        label_en: "Standard"
+        mode_key: "Input"
+        maps_to:
+          model_id: "gemini/3-flash"
+          params: {}
+        price_ref: "gemini/3-flash"
+        unit: "запрос"
+        unit_en: "request"
+
+  - id: "top-gemini-3-pro"
+    model_id: "gemini/3-pro"
+    category: chat
+    title_ru: "Gemini 3 Pro"
+    title_en: "Gemini 3 Pro"
+    one_liner_ru: "Флагманская модель Gemini 3"
+    one_liner_en: "Flagship Gemini 3 model"
+    best_for_ru:
+      - "Максимальное качество"
+      - "Исследования"
+      - "Профессиональные задачи"
+    best_for_en:
+      - "Maximum quality"
+      - "Research"
+      - "Professional tasks"
+    skus:
+      - sku_id: "gemini-3-pro-default"
+        label_ru: "Стандарт"
+        label_en: "Standard"
+        mode_key: "Input"
+        maps_to:
+          model_id: "gemini/3-pro"
+          params: {}
+        price_ref: "gemini/3-pro"
+        unit: "запрос"
+        unit_en: "request"
+
+  # ============ IMAGE ============
+  - id: "top-openai-gpt-image"
+    model_id: "openai/4o-image"
+    category: image
+    title_ru: "OpenAI GPT Image"
+    title_en: "OpenAI GPT Image"
+    one_liner_ru: "Генерация изображений от OpenAI"
+    one_liner_en: "Image generation from OpenAI"
+    best_for_ru:
+      - "Иллюстрации"
+      - "Концепт-арт"
+      - "Маркетинговые материалы"
+    best_for_en:
+      - "Illustrations"
+      - "Concept art"
+      - "Marketing materials"
+    skus:
+      - sku_id: "openai-4o-image-default"
+        label_ru: "Стандарт"
+        label_en: "Standard"
+        mode_key: "text-to-image"
+        maps_to:
+          model_id: "openai/4o-image"
+          params: {}
+        price_ref: "openai/4o-image"
+        unit: "изображение"
+        unit_en: "image"
+
+  - id: "top-seedream-4-5"
+    model_id: "seedream/4.5-text-to-image"
+    category: image
+    title_ru: "ByteDance Seedream 4.5"
+    title_en: "ByteDance Seedream 4.5"
+    one_liner_ru: "Высококачественная генерация изображений"
+    one_liner_en: "High-quality image generation"
+    best_for_ru:
+      - "Фотореалистичные изображения"
+      - "Арт и дизайн"
+      - "Продуктовые фото"
+    best_for_en:
+      - "Photorealistic images"
+      - "Art and design"
+      - "Product photos"
+    skus:
+      - sku_id: "seedream-4-5-basic"
+        label_ru: "Basic"
+        label_en: "Basic"
+        mode_key: "Basic"
+        maps_to:
+          model_id: "seedream/4.5-text-to-image"
+          params:
+            quality: "basic"
+        price_ref: "seedream/4.5-text-to-image"
+        unit: "изображение"
+        unit_en: "image"
+      - sku_id: "seedream-4-5-high"
+        label_ru: "High"
+        label_en: "High"
+        mode_key: "High"
+        maps_to:
+          model_id: "seedream/4.5-text-to-image"
+          params:
+            quality: "high"
+        price_ref: "seedream/4.5-text-to-image"
+        unit: "изображение"
+        unit_en: "image"
+
+  - id: "top-qwen-z-image"
+    model_id: "qwen/text-to-image"
+    category: image
+    title_ru: "Qwen Z-Image"
+    title_en: "Qwen Z-Image"
+    one_liner_ru: "Генерация изображений от Alibaba"
+    one_liner_en: "Image generation from Alibaba"
+    best_for_ru:
+      - "Быстрая генерация"
+      - "Азиатская эстетика"
+      - "Иллюстрации"
+    best_for_en:
+      - "Fast generation"
+      - "Asian aesthetics"
+      - "Illustrations"
+    skus:
+      - sku_id: "qwen-z-image-default"
+        label_ru: "Стандарт"
+        label_en: "Standard"
+        mode_key: "default"
+        maps_to:
+          model_id: "qwen/text-to-image"
+          params: {}
+        price_ref: "qwen/text-to-image"
+        unit: "изображение"
+        unit_en: "image"
+
+  - id: "top-flux-2"
+    model_id: "flux-2/pro-text-to-image"
+    category: image
+    title_ru: "Black Forest Labs FLUX.2"
+    title_en: "Black Forest Labs FLUX.2"
+    one_liner_ru: "Профессиональная генерация изображений"
+    one_liner_en: "Professional image generation"
+    best_for_ru:
+      - "Высокое разрешение"
+      - "Детализированные изображения"
+      - "Коммерческие проекты"
+    best_for_en:
+      - "High resolution"
+      - "Detailed images"
+      - "Commercial projects"
+    skus:
+      - sku_id: "flux-2-pro-1k"
+        label_ru: "Pro 1K"
+        label_en: "Pro 1K"
+        mode_key: "1.0s-1K"
+        maps_to:
+          model_id: "flux-2/pro-text-to-image"
+          params:
+            resolution: "1K"
+        price_ref: "flux-2/pro-text-to-image"
+        unit: "изображение"
+        unit_en: "image"
+      - sku_id: "flux-2-pro-2k"
+        label_ru: "Pro 2K"
+        label_en: "Pro 2K"
+        mode_key: "1.0s-2K"
+        maps_to:
+          model_id: "flux-2/pro-text-to-image"
+          params:
+            resolution: "2K"
+        price_ref: "flux-2/pro-text-to-image"
+        unit: "изображение"
+        unit_en: "image"
+
+  - id: "top-flux-kontext"
+    model_id: "flux/kontext"
+    category: image
+    title_ru: "Black Forest Labs Flux Kontext"
+    title_en: "Black Forest Labs Flux Kontext"
+    one_liner_ru: "Редактирование изображений с пониманием контекста"
+    one_liner_en: "Context-aware image editing"
+    best_for_ru:
+      - "Редактирование фото"
+      - "E-commerce"
+      - "Маркетинг"
+    best_for_en:
+      - "Photo editing"
+      - "E-commerce"
+      - "Marketing"
+    skus:
+      - sku_id: "flux-kontext-pro"
+        label_ru: "Pro"
+        label_en: "Pro"
+        mode_key: "Pro"
+        maps_to:
+          model_id: "flux/kontext"
+          params:
+            quality: "Pro"
+        price_ref: "flux/kontext"
+        unit: "изображение"
+        unit_en: "image"
+      - sku_id: "flux-kontext-max"
+        label_ru: "Max"
+        label_en: "Max"
+        mode_key: "Max"
+        maps_to:
+          model_id: "flux/kontext"
+          params:
+            quality: "Max"
+        price_ref: "flux/kontext"
+        unit: "изображение"
+        unit_en: "image"
+
+  - id: "top-nano-banana-pro"
+    model_id: "nano-banana-pro"
+    category: image
+    title_ru: "Google Nano Banana Pro"
+    title_en: "Google Nano Banana Pro"
+    one_liner_ru: "Быстрая генерация от Google"
+    one_liner_en: "Fast generation from Google"
+    best_for_ru:
+      - "Быстрые прототипы"
+      - "Социальные сети"
+      - "Контент-маркетинг"
+    best_for_en:
+      - "Quick prototypes"
+      - "Social media"
+      - "Content marketing"
+    skus:
+      - sku_id: "nano-banana-pro-1k"
+        label_ru: "1K/2K"
+        label_en: "1K/2K"
+        mode_key: "1/2K"
+        maps_to:
+          model_id: "nano-banana-pro"
+          params:
+            resolution: "1K"
+        price_ref: "nano-banana-pro"
+        unit: "изображение"
+        unit_en: "image"
+      - sku_id: "nano-banana-pro-4k"
+        label_ru: "4K"
+        label_en: "4K"
+        mode_key: "4K"
+        maps_to:
+          model_id: "nano-banana-pro"
+          params:
+            resolution: "4K"
+        price_ref: "nano-banana-pro"
+        unit: "изображение"
+        unit_en: "image"
+
+  # ============ VIDEO ============
+  - id: "top-kling-2-6-motion"
+    model_id: "kling-2.6/motion-control"
+    category: video
+    title_ru: "Kling 2.6 Motion Control"
+    title_en: "Kling 2.6 Motion Control"
+    one_liner_ru: "Контроль движения в видео"
+    one_liner_en: "Motion control in video"
+    best_for_ru:
+      - "Анимация персонажей"
+      - "Спецэффекты"
+      - "Креативные проекты"
+    best_for_en:
+      - "Character animation"
+      - "Special effects"
+      - "Creative projects"
+    skus:
+      - sku_id: "kling-2-6-motion-720p"
+        label_ru: "720p"
+        label_en: "720p"
+        mode_key: "720p per second"
+        maps_to:
+          model_id: "kling-2.6/motion-control"
+          params:
+            resolution: "720p"
+        price_ref: "kling-2.6/motion-control"
+        unit: "секунда"
+        unit_en: "second"
+      - sku_id: "kling-2-6-motion-1080p"
+        label_ru: "1080p"
+        label_en: "1080p"
+        mode_key: "1080p per second"
+        maps_to:
+          model_id: "kling-2.6/motion-control"
+          params:
+            resolution: "1080p"
+        price_ref: "kling-2.6/motion-control"
+        unit: "секунда"
+        unit_en: "second"
+
+  - id: "top-kling-2-6"
+    model_id: "kling-2.6/text-to-video"
+    category: video
+    title_ru: "Kling 2.6"
+    title_en: "Kling 2.6"
+    one_liner_ru: "Генерация видео из текста"
+    one_liner_en: "Text to video generation"
+    best_for_ru:
+      - "Рекламные ролики"
+      - "Социальные сети"
+      - "Презентации"
+    best_for_en:
+      - "Commercials"
+      - "Social media"
+      - "Presentations"
+    skus:
+      - sku_id: "kling-2-6-5s"
+        label_ru: "5 сек"
+        label_en: "5 sec"
+        mode_key: "without audio-5.0s"
+        maps_to:
+          model_id: "kling-2.6/text-to-video"
+          params:
+            duration: "5"
+            with_audio: false
+        price_ref: "kling-2.6/text-to-video"
+        unit: "видео"
+        unit_en: "video"
+      - sku_id: "kling-2-6-10s"
+        label_ru: "10 сек"
+        label_en: "10 sec"
+        mode_key: "without audio-10.0s"
+        maps_to:
+          model_id: "kling-2.6/text-to-video"
+          params:
+            duration: "10"
+            with_audio: false
+        price_ref: "kling-2.6/text-to-video"
+        unit: "видео"
+        unit_en: "video"
+      - sku_id: "kling-2-6-5s-audio"
+        label_ru: "5 сек + звук"
+        label_en: "5 sec + audio"
+        mode_key: "with audio-5.0s"
+        maps_to:
+          model_id: "kling-2.6/text-to-video"
+          params:
+            duration: "5"
+            with_audio: true
+        price_ref: "kling-2.6/text-to-video"
+        unit: "видео"
+        unit_en: "video"
+      - sku_id: "kling-2-6-10s-audio"
+        label_ru: "10 сек + звук"
+        label_en: "10 sec + audio"
+        mode_key: "with audio-10.0s"
+        maps_to:
+          model_id: "kling-2.6/text-to-video"
+          params:
+            duration: "10"
+            with_audio: true
+        price_ref: "kling-2.6/text-to-video"
+        unit: "видео"
+        unit_en: "video"
+
+  - id: "top-seedance-1-5-pro"
+    model_id: "hailuo/02-text-to-video-pro"
+    category: video
+    title_ru: "ByteDance Seedance 1.5 Pro"
+    title_en: "ByteDance Seedance 1.5 Pro"
+    one_liner_ru: "Профессиональная генерация видео"
+    one_liner_en: "Professional video generation"
+    best_for_ru:
+      - "Высокое качество"
+      - "Коммерческие проекты"
+      - "Музыкальные клипы"
+    best_for_en:
+      - "High quality"
+      - "Commercial projects"
+      - "Music videos"
+    skus:
+      - sku_id: "seedance-1-5-pro-default"
+        label_ru: "Pro 1080p"
+        label_en: "Pro 1080p"
+        mode_key: "Pro-6.0s-1080p"
+        maps_to:
+          model_id: "hailuo/02-text-to-video-pro"
+          params: {}
+        price_ref: "hailuo/02-text-to-video-pro"
+        unit: "видео"
+        unit_en: "video"
+
+  - id: "top-seedance-1-0-fast"
+    model_id: "hailuo/02-text-to-video-standard"
+    category: video
+    title_ru: "ByteDance Seedance 1.0 Pro Fast"
+    title_en: "ByteDance Seedance 1.0 Pro Fast"
+    one_liner_ru: "Быстрая генерация видео"
+    one_liner_en: "Fast video generation"
+    best_for_ru:
+      - "Быстрые превью"
+      - "Тестирование идей"
+      - "Социальные сети"
+    best_for_en:
+      - "Quick previews"
+      - "Testing ideas"
+      - "Social media"
+    skus:
+      - sku_id: "seedance-1-0-fast-6s"
+        label_ru: "6 сек 768p"
+        label_en: "6 sec 768p"
+        mode_key: "Standard-6.0s-768p"
+        maps_to:
+          model_id: "hailuo/02-text-to-video-standard"
+          params:
+            duration: "6"
+        price_ref: "hailuo/02-text-to-video-standard"
+        unit: "видео"
+        unit_en: "video"
+      - sku_id: "seedance-1-0-fast-10s"
+        label_ru: "10 сек 768p"
+        label_en: "10 sec 768p"
+        mode_key: "Standard-10.0s-768p"
+        maps_to:
+          model_id: "hailuo/02-text-to-video-standard"
+          params:
+            duration: "10"
+        price_ref: "hailuo/02-text-to-video-standard"
+        unit: "видео"
+        unit_en: "video"
+
+  - id: "top-wan-2-6"
+    model_id: "wan/2-6-text-to-video"
+    category: video
+    title_ru: "Wan 2.6"
+    title_en: "Wan 2.6"
+    one_liner_ru: "Продвинутая генерация видео"
+    one_liner_en: "Advanced video generation"
+    best_for_ru:
+      - "Длинные видео до 15 сек"
+      - "Высокое разрешение"
+      - "Профессиональный контент"
+    best_for_en:
+      - "Long videos up to 15 sec"
+      - "High resolution"
+      - "Professional content"
+    skus:
+      - sku_id: "wan-2-6-5s-720p"
+        label_ru: "5с 720p"
+        label_en: "5s 720p"
+        mode_key: "default-5.0s-720p"
+        maps_to:
+          model_id: "wan/2-6-text-to-video"
+          params:
+            duration: "5"
+            resolution: "720p"
+        price_ref: "wan/2-6-text-to-video"
+        unit: "видео"
+        unit_en: "video"
+      - sku_id: "wan-2-6-10s-720p"
+        label_ru: "10с 720p"
+        label_en: "10s 720p"
+        mode_key: "default-10.0s-720p"
+        maps_to:
+          model_id: "wan/2-6-text-to-video"
+          params:
+            duration: "10"
+            resolution: "720p"
+        price_ref: "wan/2-6-text-to-video"
+        unit: "видео"
+        unit_en: "video"
+      - sku_id: "wan-2-6-15s-720p"
+        label_ru: "15с 720p"
+        label_en: "15s 720p"
+        mode_key: "default-15.0s-720p"
+        maps_to:
+          model_id: "wan/2-6-text-to-video"
+          params:
+            duration: "15"
+            resolution: "720p"
+        price_ref: "wan/2-6-text-to-video"
+        unit: "видео"
+        unit_en: "video"
+      - sku_id: "wan-2-6-5s-1080p"
+        label_ru: "5с 1080p"
+        label_en: "5s 1080p"
+        mode_key: "default-5.0s-1080p"
+        maps_to:
+          model_id: "wan/2-6-text-to-video"
+          params:
+            duration: "5"
+            resolution: "1080p"
+        price_ref: "wan/2-6-text-to-video"
+        unit: "видео"
+        unit_en: "video"
+      - sku_id: "wan-2-6-10s-1080p"
+        label_ru: "10с 1080p"
+        label_en: "10s 1080p"
+        mode_key: "default-10.0s-1080p"
+        maps_to:
+          model_id: "wan/2-6-text-to-video"
+          params:
+            duration: "10"
+            resolution: "1080p"
+        price_ref: "wan/2-6-text-to-video"
+        unit: "видео"
+        unit_en: "video"
+      - sku_id: "wan-2-6-15s-1080p"
+        label_ru: "15с 1080p"
+        label_en: "15s 1080p"
+        mode_key: "default-15.0s-1080p"
+        maps_to:
+          model_id: "wan/2-6-text-to-video"
+          params:
+            duration: "15"
+            resolution: "1080p"
+        price_ref: "wan/2-6-text-to-video"
+        unit: "видео"
+        unit_en: "video"
+
+  - id: "top-hailuo-2-3"
+    model_id: "hailuo/2.3"
+    category: video
+    title_ru: "Hailuo 2.3"
+    title_en: "Hailuo 2.3"
+    one_liner_ru: "Качественная генерация видео"
+    one_liner_en: "Quality video generation"
+    best_for_ru:
+      - "Разнообразные стили"
+      - "Рекламный контент"
+      - "Творческие проекты"
+    best_for_en:
+      - "Various styles"
+      - "Advertising content"
+      - "Creative projects"
+    skus:
+      - sku_id: "hailuo-2-3-standard-6s"
+        label_ru: "Standard 6с"
+        label_en: "Standard 6s"
+        mode_key: "Standard-6.0s-768p"
+        maps_to:
+          model_id: "hailuo/2.3"
+          params:
+            quality: "standard"
+            duration: "6"
+        price_ref: "hailuo/2.3"
+        unit: "видео"
+        unit_en: "video"
+      - sku_id: "hailuo-2-3-standard-10s"
+        label_ru: "Standard 10с"
+        label_en: "Standard 10s"
+        mode_key: "Standard-10.0s-768p"
+        maps_to:
+          model_id: "hailuo/2.3"
+          params:
+            quality: "standard"
+            duration: "10"
+        price_ref: "hailuo/2.3"
+        unit: "видео"
+        unit_en: "video"
+      - sku_id: "hailuo-2-3-pro-6s"
+        label_ru: "Pro 6с"
+        label_en: "Pro 6s"
+        mode_key: "Pro-6.0s-768p"
+        maps_to:
+          model_id: "hailuo/2.3"
+          params:
+            quality: "pro"
+            duration: "6"
+        price_ref: "hailuo/2.3"
+        unit: "видео"
+        unit_en: "video"
+
+  - id: "top-grok-imagine"
+    model_id: "grok/imagine"
+    category: video
+    title_ru: "Grok Imagine"
+    title_en: "Grok Imagine"
+    one_liner_ru: "Генерация видео от xAI"
+    one_liner_en: "Video generation from xAI"
+    best_for_ru:
+      - "Креативные видео"
+      - "Эксперименты"
+      - "Уникальный стиль"
+    best_for_en:
+      - "Creative videos"
+      - "Experiments"
+      - "Unique style"
+    skus:
+      - sku_id: "grok-imagine-6s"
+        label_ru: "6 сек"
+        label_en: "6 sec"
+        mode_key: "6s video"
+        maps_to:
+          model_id: "grok/imagine"
+          params:
+            duration: "6"
+        price_ref: "grok/imagine"
+        unit: "видео"
+        unit_en: "video"
+      - sku_id: "grok-imagine-10s"
+        label_ru: "10 сек"
+        label_en: "10 sec"
+        mode_key: "10s video"
+        maps_to:
+          model_id: "grok/imagine"
+          params:
+            duration: "10"
+        price_ref: "grok/imagine"
+        unit: "видео"
+        unit_en: "video"
+
+  - id: "top-veo-3"
+    model_id: "google/veo-3.1"
+    category: video
+    title_ru: "Google Veo 3"
+    title_en: "Google Veo 3"
+    one_liner_ru: "Флагманская видеомодель Google"
+    one_liner_en: "Google's flagship video model"
+    best_for_ru:
+      - "Максимальное качество"
+      - "Профессиональное видео"
+      - "Коммерческие проекты"
+    best_for_en:
+      - "Maximum quality"
+      - "Professional video"
+      - "Commercial projects"
+    skus:
+      - sku_id: "veo-3-fast"
+        label_ru: "Fast"
+        label_en: "Fast"
+        mode_key: "text-to-video Fast"
+        maps_to:
+          model_id: "google/veo-3.1"
+          params:
+            quality: "fast"
+        price_ref: "google/veo-3.1"
+        unit: "видео"
+        unit_en: "video"
+      - sku_id: "veo-3-quality"
+        label_ru: "Quality"
+        label_en: "Quality"
+        mode_key: "text-to-video Quality"
+        maps_to:
+          model_id: "google/veo-3.1"
+          params:
+            quality: "quality"
+        price_ref: "google/veo-3.1"
+        unit: "видео"
+        unit_en: "video"
+
+  - id: "top-veo-3-1"
+    model_id: "google/veo-3.1"
+    category: video
+    title_ru: "Google Veo 3.1"
+    title_en: "Google Veo 3.1"
+    one_liner_ru: "Улучшенная версия Veo 3"
+    one_liner_en: "Enhanced Veo 3 version"
+    best_for_ru:
+      - "4K видео"
+      - "Расширение видео"
+      - "Премиум качество"
+    best_for_en:
+      - "4K video"
+      - "Video extension"
+      - "Premium quality"
+    skus:
+      - sku_id: "veo-3-1-1080p"
+        label_ru: "1080p"
+        label_en: "1080p"
+        mode_key: "Get 1080P Video"
+        maps_to:
+          model_id: "google/veo-3.1"
+          params:
+            resolution: "1080p"
+        price_ref: "google/veo-3.1"
+        unit: "видео"
+        unit_en: "video"
+      - sku_id: "veo-3-1-4k"
+        label_ru: "4K"
+        label_en: "4K"
+        mode_key: "Get 4K Video"
+        maps_to:
+          model_id: "google/veo-3.1"
+          params:
+            resolution: "4K"
+        price_ref: "google/veo-3.1"
+        unit: "видео"
+        unit_en: "video"
+
+  - id: "top-sora-2-pro"
+    model_id: "sora-2-pro-text-to-video"
+    category: video
+    title_ru: "OpenAI Sora 2 Pro"
+    title_en: "OpenAI Sora 2 Pro"
+    one_liner_ru: "Профессиональная генерация от OpenAI"
+    one_liner_en: "Professional generation from OpenAI"
+    best_for_ru:
+      - "Кинематографическое качество"
+      - "Рекламные ролики"
+      - "Премиум контент"
+    best_for_en:
+      - "Cinematic quality"
+      - "Commercials"
+      - "Premium content"
+    skus:
+      - sku_id: "sora-2-pro-standard-10s"
+        label_ru: "Standard 10с"
+        label_en: "Standard 10s"
+        mode_key: "Pro Standard-10.0s"
+        maps_to:
+          model_id: "sora-2-pro-text-to-video"
+          params:
+            quality: "standard"
+            duration: "10"
+        price_ref: "sora-2-pro-text-to-video"
+        unit: "видео"
+        unit_en: "video"
+      - sku_id: "sora-2-pro-standard-15s"
+        label_ru: "Standard 15с"
+        label_en: "Standard 15s"
+        mode_key: "Pro Standard-15.0s"
+        maps_to:
+          model_id: "sora-2-pro-text-to-video"
+          params:
+            quality: "standard"
+            duration: "15"
+        price_ref: "sora-2-pro-text-to-video"
+        unit: "видео"
+        unit_en: "video"
+      - sku_id: "sora-2-pro-high-10s"
+        label_ru: "High 10с"
+        label_en: "High 10s"
+        mode_key: "Pro High-10.0s"
+        maps_to:
+          model_id: "sora-2-pro-text-to-video"
+          params:
+            quality: "high"
+            duration: "10"
+        price_ref: "sora-2-pro-text-to-video"
+        unit: "видео"
+        unit_en: "video"
+      - sku_id: "sora-2-pro-high-15s"
+        label_ru: "High 15с"
+        label_en: "High 15s"
+        mode_key: "Pro High-15.0s"
+        maps_to:
+          model_id: "sora-2-pro-text-to-video"
+          params:
+            quality: "high"
+            duration: "15"
+        price_ref: "sora-2-pro-text-to-video"
+        unit: "видео"
+        unit_en: "video"
+
+  - id: "top-sora-2-storyboard"
+    model_id: "sora-2-pro-image-to-video"
+    category: video
+    title_ru: "OpenAI Sora 2 Pro Storyboard"
+    title_en: "OpenAI Sora 2 Pro Storyboard"
+    one_liner_ru: "Анимация изображений в видео"
+    one_liner_en: "Animate images to video"
+    best_for_ru:
+      - "Раскадровки"
+      - "Анимация концептов"
+      - "Креативные проекты"
+    best_for_en:
+      - "Storyboards"
+      - "Concept animation"
+      - "Creative projects"
+    skus:
+      - sku_id: "sora-2-storyboard-10s"
+        label_ru: "10 сек"
+        label_en: "10 sec"
+        mode_key: "Pro Standard-10.0s"
+        maps_to:
+          model_id: "sora-2-pro-image-to-video"
+          params:
+            duration: "10"
+        price_ref: "sora-2-pro-image-to-video"
+        unit: "видео"
+        unit_en: "video"
+      - sku_id: "sora-2-storyboard-15s"
+        label_ru: "15 сек"
+        label_en: "15 sec"
+        mode_key: "Pro Standard-15.0s"
+        maps_to:
+          model_id: "sora-2-pro-image-to-video"
+          params:
+            duration: "15"
+        price_ref: "sora-2-pro-image-to-video"
+        unit: "видео"
+        unit_en: "video"
+
+  # ============ EDITING ============
+  - id: "top-sora-watermark-remove"
+    model_id: "sora-watermark-remover"
+    category: editing
+    title_ru: "OpenAI Sora 2 Watermark Remove API"
+    title_en: "OpenAI Sora 2 Watermark Remove API"
+    one_liner_ru: "Удаление водяных знаков с видео"
+    one_liner_en: "Remove watermarks from video"
+    best_for_ru:
+      - "Очистка видео"
+      - "Пост-продакшн"
+      - "Профессиональная обработка"
+    best_for_en:
+      - "Video cleanup"
+      - "Post-production"
+      - "Professional processing"
+    skus:
+      - sku_id: "sora-watermark-remove-default"
+        label_ru: "Стандарт"
+        label_en: "Standard"
+        mode_key: "default"
+        maps_to:
+          model_id: "sora-watermark-remover"
+          params: {}
+        price_ref: "sora-watermark-remover"
+        unit: "видео"
+        unit_en: "video"
