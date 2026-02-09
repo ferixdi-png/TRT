@@ -117,6 +117,34 @@ async def webapp_models(request: web.Request) -> web.Response:
         return web.json_response({"models": [], "count": 0, "error": str(e)})
 
 
+async def webapp_top_models(request: web.Request) -> web.Response:
+    """Get list of top models with SKUs for Mini App."""
+    lang = request.query.get("lang", "ru")
+    category = request.query.get("category")
+    
+    try:
+        from app.top_models import get_categories, get_top_models, get_sku_price_rub
+        
+        categories = get_categories(lang=lang)
+        models = get_top_models(lang=lang, category=category)
+        
+        # Enrich models with prices
+        for model in models:
+            for sku in model.get("skus", []):
+                sku_id = sku.get("sku_id", "")
+                if sku_id:
+                    sku["price_rub"] = get_sku_price_rub(sku_id) or 0
+        
+        return web.json_response({
+            "models": models,
+            "categories": categories,
+            "count": len(models),
+        })
+    except Exception as e:
+        logger.error("Failed to get top models: %s", e)
+        return web.json_response({"models": [], "categories": [], "count": 0, "error": str(e)})
+
+
 async def webapp_model_info(request: web.Request) -> web.Response:
     """Get specific model info with parameters schema."""
     model_id = request.match_info.get("model_id", "")
@@ -463,6 +491,7 @@ def register_webapp_routes(app: web.Application) -> None:
     app.router.add_get("/webapp/api/user/{user_id}/balance", webapp_user_balance)
     app.router.add_get("/webapp/api/user/{user_id}/history", webapp_user_history)
     app.router.add_get("/webapp/api/models", webapp_models)
+    app.router.add_get("/webapp/api/top-models", webapp_top_models)
     app.router.add_get("/webapp/api/models/{model_id}", webapp_model_info)
     app.router.add_post("/webapp/api/upload", webapp_upload_image)
     app.router.add_post("/webapp/api/generate", webapp_generate)

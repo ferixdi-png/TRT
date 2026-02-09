@@ -1395,6 +1395,29 @@
         function getInitial(name) { return name ? name.charAt(0).toUpperCase() : '?'; }
         
         function groupModelsByType(models) {
+            // Map API types (t2i, i2v, etc.) to category keys
+            const typeMap = {
+                't2i': 'text-to-image',
+                'text_to_image': 'text-to-image',
+                'text-to-image': 'text-to-image',
+                'i2i': 'image-to-image',
+                'image_to_image': 'image-to-image',
+                'image-to-image': 'image-to-image',
+                't2v': 'text-to-video',
+                'text_to_video': 'text-to-video',
+                'text-to-video': 'text-to-video',
+                'i2v': 'image-to-video',
+                'image_to_video': 'image-to-video',
+                'image-to-video': 'image-to-video',
+                'speech_to_video': 'other',
+                'lip_sync': 'other',
+                'video_editing': 'other',
+                'text_to_speech': 'other',
+                'text_to_music': 'other',
+                'audio': 'other',
+                'chat': 'other'
+            };
+            
             const categories = {
                 'text-to-image': { key: 'text-to-image', name: 'Текст → Фото', icon: '🖼️', desc: 'Создайте изображение по описанию', models: [] },
                 'image-to-image': { key: 'image-to-image', name: 'Редактор фото', icon: '🧩', desc: 'Измените или улучшите фото', models: [] },
@@ -1404,8 +1427,9 @@
             };
             
             (models || []).forEach(m => {
-                const type = m.type || 'other';
-                if (categories[type]) categories[type].models.push(m);
+                const rawType = m.type || 'other';
+                const mappedType = typeMap[rawType] || 'other';
+                if (categories[mappedType]) categories[mappedType].models.push(m);
                 else categories['other'].models.push(m);
             });
             
