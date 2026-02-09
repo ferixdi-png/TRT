@@ -2041,7 +2041,20 @@
             // String / text (prompt)
             const isPrompt = field.name === 'prompt' || field.name === 'text';
             const maxLength = field.maxLength ? `maxlength="${field.maxLength}"` : '';
-            const placeholder = field.placeholder || field.example || (isPrompt ? 'Опишите что хотите создать...' : '');
+            
+            // Context-aware placeholder for i2i/i2v models
+            let defaultPlaceholder = 'Опишите что хотите создать...';
+            if (isPrompt && appData.currentModel) {
+                const model = appData.currentModel;
+                const hasImageInput = model.requires_image || 
+                    (model.ux_schema?.fields || []).some(f => 
+                        f.type === 'file_urls' || f.name.includes('image')
+                    );
+                if (hasImageInput) {
+                    defaultPlaceholder = 'Опишите что сделать с фото...';
+                }
+            }
+            const placeholder = field.placeholder || field.example || (isPrompt ? defaultPlaceholder : '');
             
             if (isPrompt) {
                 return `
@@ -2234,10 +2247,33 @@
             // Generate form fields from schema
             let fieldsHTML = '';
             if (modelInfo.ux_schema && modelInfo.ux_schema.fields) {
-                // Sort: required first, prompt first among required
+                // Sort: for i2i/i2v models - image fields FIRST, then prompt
+                // For t2i/t2v models - prompt first
+                const isImageInput = modelInfo.requires_image || 
+                    modelInfo.ux_schema.fields.some(f => 
+                        f.type === 'file_urls' || 
+                        f.name.includes('image_input') || 
+                        f.name.includes('image_urls') ||
+                        f.name.includes('source_image')
+                    );
+                
                 const sortedFields = [...modelInfo.ux_schema.fields].sort((a, b) => {
-                    if (a.name === 'prompt' || a.name === 'text') return -1;
-                    if (b.name === 'prompt' || b.name === 'text') return 1;
+                    const aIsImage = a.type === 'file_urls' || a.name.includes('image');
+                    const bIsImage = b.type === 'file_urls' || b.name.includes('image');
+                    const aIsPrompt = a.name === 'prompt' || a.name === 'text';
+                    const bIsPrompt = b.name === 'prompt' || b.name === 'text';
+                    
+                    // For image-input models: image first, then prompt
+                    if (isImageInput) {
+                        if (aIsImage && !bIsImage) return -1;
+                        if (!aIsImage && bIsImage) return 1;
+                    }
+                    
+                    // Then prompt/text
+                    if (aIsPrompt && !bIsPrompt) return isImageInput ? 1 : -1;
+                    if (!aIsPrompt && bIsPrompt) return isImageInput ? -1 : 1;
+                    
+                    // Required before optional
                     if (a.required && !b.required) return -1;
                     if (!a.required && b.required) return 1;
                     return 0;
@@ -2262,9 +2298,13 @@
             } else {
                 // Fallback: simple form
                 const requiresImage = modelInfo.requires_image;
+                const promptPlaceholder = requiresImage ? 'Опишите что сделать с фото...' : 'Опишите что хотите создать...';
+                const promptLabel = requiresImage ? '✍️ Что сделать с фото' : '✍️ Описание';
+                
+                // For image-input models: image FIRST, then prompt
                 fieldsHTML = requiresImage ? `
                     <div class="form-group">
-                        <label class="form-label">📷 Загрузите изображение</label>
+                        <label class="form-label">📷 Сначала загрузите фото</label>
                         <div id="imageUploadArea_image_input" class="image-upload-area" onclick="document.getElementById('imageInput_image_input').click()">
                             <div id="uploadPlaceholder_image_input">
                                 <div style="font-size: 48px; margin-bottom: 12px;">📷</div>
@@ -2277,8 +2317,8 @@
                 ` : '';
                 fieldsHTML += `
                     <div class="form-group">
-                        <label class="form-label">✍️ Описание</label>
-                        <textarea class="form-input form-textarea" id="field_prompt" placeholder="Опишите что хотите создать..." required></textarea>
+                        <label class="form-label">${promptLabel}</label>
+                        <textarea class="form-input form-textarea" id="field_prompt" placeholder="${promptPlaceholder}" required></textarea>
                     </div>
                 `;
             }
