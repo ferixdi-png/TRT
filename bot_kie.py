@@ -14445,9 +14445,15 @@ async def _button_callback_impl(
             if image_param_name in session and session[image_param_name]:
                 if 'params' not in session:
                     session['params'] = {}
-                session['params'][image_param_name] = session[image_param_name]
+                # CRITICAL: Ensure image_input is always a list (API expects array)
+                img_value = session[image_param_name]
+                if isinstance(img_value, list):
+                    session['params'][image_param_name] = img_value
+                else:
+                    session['params'][image_param_name] = [img_value]
+                img_count = len(session['params'][image_param_name])
                 await query.edit_message_text(
-                    f"✅ Добавлено изображений: {len(session[image_param_name])}\n\n"
+                    f"✅ Добавлено изображений: {img_count}\n\n"
                     f"Продолжаю..."
                 )
             session['waiting_for'] = None
