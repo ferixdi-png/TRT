@@ -324,13 +324,6 @@ kling/v2-5-turbo-text-to-video-pro:
     default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
       • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
     by_sku_key: {}
-midjourney/api:
-  model_short: Доступ к Midjourney через API. Генерация художественных изображений
-    по промпту.
-  sku_templates:
-    default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
-      • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
-    by_sku_key: {}
 nano-banana-pro:
   model_short: 'Профессиональная версия Nano Banana: больше деталей, выше точность.
     Для серьёзных задач.'

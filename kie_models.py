@@ -3098,108 +3098,6 @@ KIE_MODELS = [
             }
         }
     },
-    {
-        "id": "midjourney/text-to-image",
-        "name": "Midjourney",
-        "description": "Культовая модель для создания арта. Relaxed/Fast/Turbo режимы, версии 6-7, niji6/7 для аниме стиля.",
-        "category": "Изображения",
-        "emoji": "🎨",
-        "pricing": "3-16 кредитов (Relaxed: $0.015, Fast: $0.04, Turbo: $0.08)",
-        "input_params": {
-            "prompt": {
-                "type": "string",
-                "description": "Описание изображения (до 2000 символов)",
-                "required": True,
-                "max_length": 2000
-            },
-            "speed": {
-                "type": "string",
-                "description": "Скорость: relaxed (дёшево), fast, turbo (быстро)",
-                "required": False,
-                "default": "relaxed",
-                "enum": ["relaxed", "fast", "turbo"]
-            },
-            "aspectRatio": {
-                "type": "string",
-                "description": "Соотношение сторон",
-                "required": False,
-                "default": "1:1",
-                "enum": ["1:1", "16:9", "9:16", "4:3", "3:4", "2:3", "3:2"]
-            },
-            "version": {
-                "type": "string",
-                "description": "Версия модели",
-                "required": False,
-                "default": "7",
-                "enum": ["7", "6.1", "6", "5.2", "niji6", "niji7"]
-            }
-        }
-    },
-    {
-        "id": "midjourney/image-to-image",
-        "name": "Midjourney Remix",
-        "description": "Midjourney Image to Image — стилизация и переработка фото в арт. Все версии и режимы скорости.",
-        "category": "Изображения",
-        "emoji": "🖌️",
-        "pricing": "3-16 кредитов (Relaxed: $0.015, Fast: $0.04, Turbo: $0.08)",
-        "input_params": {
-            "prompt": {
-                "type": "string",
-                "description": "Описание изменений (до 2000 символов)",
-                "required": True,
-                "max_length": 2000
-            },
-            "fileUrls": {
-                "type": "array",
-                "description": "URL изображения для стилизации",
-                "required": True,
-                "item_type": "string"
-            },
-            "speed": {
-                "type": "string",
-                "description": "Скорость генерации",
-                "required": False,
-                "default": "relaxed",
-                "enum": ["relaxed", "fast", "turbo"]
-            },
-            "version": {
-                "type": "string",
-                "description": "Версия модели",
-                "required": False,
-                "default": "7",
-                "enum": ["7", "6.1", "6", "niji6", "niji7"]
-            }
-        }
-    },
-    {
-        "id": "midjourney/image-to-video",
-        "name": "Midjourney Video",
-        "description": "Midjourney Video — оживление изображений в короткие видео. Новая функция для создания анимаций.",
-        "category": "Видео",
-        "emoji": "🎬",
-        "pricing": "60 кредитов ($0.30) за видео",
-        "input_params": {
-            "prompt": {
-                "type": "string",
-                "description": "Описание движения (до 2000 символов)",
-                "required": True,
-                "max_length": 2000
-            },
-            "fileUrls": {
-                "type": "array",
-                "description": "URL изображения для анимации",
-                "required": True,
-                "item_type": "string"
-            },
-            "aspectRatio": {
-                "type": "string",
-                "description": "Соотношение сторон видео",
-                "required": False,
-                "default": "16:9",
-                "enum": ["16:9", "9:16", "1:1"]
-            }
-        }
-    },
     # Grok Imagine models
     {
         "id": "grok-imagine/text-to-image",
@@ -3290,7 +3188,7 @@ GENERATION_TYPES = {
     "image-to-video": {
         "name": "📸 Фото в видео",
         "description": "Превращайте изображения в динамичные видео",
-        "models": ["sora-2-pro-image-to-video", "sora-2-image-to-video", "kling-2.6/image-to-video", "kling-2.6/motion-control", "kling/v2-5-turbo-image-to-video-pro", "wan/2-5-image-to-video", "hailuo/02-image-to-video-pro", "hailuo/02-image-to-video-standard", "bytedance/v1-pro-fast-image-to-video", "kling/v2-1-master-image-to-video", "kling/v2-1-standard", "kling/v2-1-pro", "google/veo-3.1", "midjourney/image-to-video"]
+        "models": ["sora-2-pro-image-to-video", "sora-2-image-to-video", "kling-2.6/image-to-video", "kling-2.6/motion-control", "kling/v2-5-turbo-image-to-video-pro", "wan/2-5-image-to-video", "hailuo/02-image-to-video-pro", "hailuo/02-image-to-video-standard", "bytedance/v1-pro-fast-image-to-video", "kling/v2-1-master-image-to-video", "kling/v2-1-standard", "kling/v2-1-pro", "google/veo-3.1"]
     },
     "tools": {
         "name": "🛠️ Инструменты",
@@ -3316,12 +3214,12 @@ GENERATION_TYPES = {
     "text-to-image": {
         "name": "✨ Текст в фото",
         "description": "Создавайте изображения из текста",
-        "models": ["z-image", "google/nano-banana", "seedream/4.5-text-to-image", "flux-2/pro-text-to-image", "flux-2/flex-text-to-image", "bytedance/seedream-v4-text-to-image", "bytedance/seedream", "qwen/text-to-image", "ideogram/v3-text-to-image", "google/imagen4-ultra", "google/imagen4-fast", "google/imagen4", "grok-imagine/text-to-image", "gpt-image/1.5-text-to-image", "midjourney/text-to-image"]
+        "models": ["z-image", "google/nano-banana", "seedream/4.5-text-to-image", "flux-2/pro-text-to-image", "flux-2/flex-text-to-image", "bytedance/seedream-v4-text-to-image", "bytedance/seedream", "qwen/text-to-image", "ideogram/v3-text-to-image", "google/imagen4-ultra", "google/imagen4-fast", "google/imagen4", "grok-imagine/text-to-image", "gpt-image/1.5-text-to-image"]
     },
     "image-to-image": {
         "name": "🎨 Фото в фото",
         "description": "Трансформация и стилизация изображений",
-        "models": ["seedream/4.5-edit", "flux-2/pro-image-to-image", "flux-2/flex-image-to-image", "nano-banana-pro", "bytedance/seedream-v4-edit", "qwen/image-to-image", "ideogram/v3-remix", "openai/4o-image", "flux/kontext", "google/nanobanana-gemini-2.5-flash", "google/nano-banana-edit", "gpt-image/1.5-image-to-image", "midjourney/image-to-image", "ideogram/v3-reframe", "qwen/image-edit", "ideogram/character-edit", "ideogram/character-remix", "ideogram/character", "ideogram/v3-edit"]
+        "models": ["seedream/4.5-edit", "flux-2/pro-image-to-image", "flux-2/flex-image-to-image", "nano-banana-pro", "bytedance/seedream-v4-edit", "qwen/image-to-image", "ideogram/v3-remix", "openai/4o-image", "flux/kontext", "google/nanobanana-gemini-2.5-flash", "google/nano-banana-edit", "gpt-image/1.5-image-to-image", "ideogram/v3-reframe", "qwen/image-edit", "ideogram/character-edit", "ideogram/character-remix", "ideogram/character", "ideogram/v3-edit"]
     },
     "text-to-speech": {
         "name": "🗣️ Текст в речь",
