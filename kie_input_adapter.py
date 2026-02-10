@@ -149,7 +149,12 @@ def validate_params(schema: Dict[str, Any], params: Dict[str, Any]) -> Tuple[boo
                 errors.append(f"Параметр '{param_name}' должен быть текстом")
                 continue
             
-            # Проверка длины
+            # Проверка минимальной длины
+            if 'min' in param_schema:
+                if len(param_value) < param_schema['min']:
+                    errors.append(f"Параметр '{param_name}' должен содержать минимум {param_schema['min']} символов")
+            
+            # Проверка максимальной длины
             if 'max' in param_schema:
                 if len(param_value) > param_schema['max']:
                     errors.append(f"Параметр '{param_name}' не должен превышать {param_schema['max']} символов")

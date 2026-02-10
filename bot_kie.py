@@ -22946,9 +22946,18 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
             user_lang = get_user_language(user_id)
             current_param = session.get('current_param', waiting_for)
             param_info = properties.get(current_param, {})
-            max_length = param_info.get('max_length')
+            max_length = param_info.get('max_length') or param_info.get('max')
+            min_length = param_info.get('min_length') or param_info.get('min')
             if current_param == 'prompt' and not max_length:
                 max_length = 1000
+            
+            # Validate min length (for text parameters like prompt)
+            if min_length and len(text) < min_length:
+                await update.message.reply_text(
+                    f"❌ Текст слишком короткий (мин. {min_length} символов). Попробуйте снова."
+                )
+                track_outgoing_action(update_id)
+                return INPUTTING_PARAMS
             
             # Validate max length
             if max_length and len(text) > max_length:

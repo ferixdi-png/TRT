@@ -973,6 +973,27 @@ async def run_generation(
         )
         raise ValueError(str(exc)) from exc
 
+    # Log payload for debugging (sanitize sensitive data)
+    payload_keys = list(payload.get("input", {}).keys()) if isinstance(payload.get("input"), dict) else []
+    payload_summary = {k: (f"[{len(v)} items]" if isinstance(v, list) else f"[{len(str(v))} chars]") 
+                       for k, v in (payload.get("input") or {}).items()}
+    logger.info(
+        "GEN_PAYLOAD_BUILT model_id=%s user_id=%s job_id=%s kie_model=%s payload_keys=%s payload_summary=%s",
+        model_id, user_id, job_id, payload.get("model"), payload_keys, payload_summary
+    )
+    log_structured_event(
+        correlation_id=correlation_id,
+        request_id=request_id,
+        user_id=user_id,
+        action="PAYLOAD_BUILT",
+        action_path="universal_engine.run_generation",
+        model_id=model_id,
+        job_id=job_id,
+        stage="PAYLOAD_BUILD",
+        outcome="success",
+        param={"payload_keys": payload_keys, "payload_summary": payload_summary},
+    )
+
     try:
         from app.integrations.kie_stub import get_kie_client_or_stub
 
