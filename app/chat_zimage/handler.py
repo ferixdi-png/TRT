@@ -195,18 +195,23 @@ async def _run_zimage(user_id: int, prompt: str) -> Optional[GenerationResult]:
     }
 
     storage = get_storage()
-    result = await storage.add_generation_job(
+    await storage.add_generation_job(
         job_id=job_id,
         user_id=user_id,
         model_id=CHAT_ZIMAGE_MODEL,
         model_name="Z-Image",
         params=session_params,
+        price=0.0,
         status="pending",
         is_free=True,
-        wait_for_result=True,
-        timeout=CHAT_ZIMAGE_TIMEOUT,
+        correlation_id=correlation_id,
+        prompt=prompt,
     )
-    logger.info("[CHAT_ZIMAGE] RUN_ZIMAGE_DONE user_id=%s job_id=%s result=%s", user_id, job_id, "OK" if result else "FAIL")
+    logger.info("[CHAT_ZIMAGE] RUN_ZIMAGE_DONE user_id=%s job_id=%s result=OK", user_id, job_id)
+    
+    # Wait for result using reconciler polling
+    from app.delivery.reconciler import wait_for_job_result
+    result = await wait_for_job_result(job_id, timeout=CHAT_ZIMAGE_TIMEOUT)
     return result, job_id
 
 
