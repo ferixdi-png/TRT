@@ -110,7 +110,7 @@ class PostgresStorage(BaseStorage):
     """PostgreSQL-backed storage that mirrors JsonStorage semantics."""
 
     def __init__(self, dsn: str, partner_id: Optional[str] = None):
-        self.dsn = dsn
+        self.dsn = self._prepare_dsn(dsn)
         self.partner_id = (partner_id or os.getenv("PARTNER_ID") or os.getenv("BOT_INSTANCE_ID") or "").strip()
         if not self.partner_id:
             raise ValueError("BOT_INSTANCE_ID is required for multi-tenant storage")
@@ -130,7 +130,9 @@ class PostgresStorage(BaseStorage):
         self._circuit_open_seconds = float(os.getenv("DB_CIRCUIT_OPEN_SECONDS", "5"))
         self._circuit_open_reason: Optional[str] = None
         self._consecutive_failures = 0
-        self._max_consecutive_failures = 3
+        self._max_consecutive_failures = int(os.getenv("DB_CIRCUIT_FAILURE_THRESHOLD", "3"))
+        self._pool_create_retries = int(os.getenv("DB_POOL_CREATE_RETRIES", "3"))
+        self._pool_retry_delay = float(os.getenv("DB_POOL_RETRY_DELAY", "1.0"))
 
         # logical filenames (same as JsonStorage/GitHubStorage)
         self.balances_file = "user_balances.json"
@@ -161,6 +163,26 @@ class PostgresStorage(BaseStorage):
         logger.warning("STORAGE_JSON_TYPE_INVALID filename=%s payload_type=%s", filename, type(payload).__name__)
         return {}
 
+    @staticmethod
+    def _prepare_dsn(dsn: str) -> str:
+        """Prepare DSN for Render: add sslmode if missing."""
+        if not dsn:
+            return dsn
+        # Render internal URLs don't need SSL, but external do
+        # Add sslmode=prefer if not specified — works for both internal and external
+        if "sslmode" not in dsn:
+            separator = "&" if "?" in dsn else "?"
+            dsn = f"{dsn}{separator}sslmode=prefer"
+            logger.info("[STORAGE] dsn_prepared=true added_sslmode=prefer")
+        # Log DSN info (mask password)
+        try:
+            import re
+            masked = re.sub(r'://([^:]+):([^@]+)@', r'://\1:***@', dsn)
+            logger.info("[STORAGE] dsn_info=%s", masked)
+        except Exception:
+            pass
+        return dsn
+
     async def _get_pool(self) -> asyncpg.Pool:
         if self._is_circuit_open():
             raise RuntimeError(f"PostgresStorage circuit open: {self._circuit_open_reason or 'unknown'}")
@@ -168,21 +190,30 @@ class PostgresStorage(BaseStorage):
         loop_id = id(loop)
         pool = self._pools.get(loop_id)
         if pool is None:
-            try:
-                pool = await asyncpg.create_pool(
-                    self.dsn, 
-                    min_size=1, 
-                    max_size=self.max_pool_size,
-                    command_timeout=60,
-                    timeout=30,
-                )
-                self._pools[loop_id] = pool
-                # Reset circuit on successful pool creation
-                self._reset_circuit()
-                logger.info("[STORAGE] pool_created=true loop_id=%s max_size=%s", loop_id, self.max_pool_size)
-            except Exception as exc:
-                self._maybe_open_circuit(exc, context="create_pool")
-                raise
+            last_exc = None
+            for attempt in range(1, self._pool_create_retries + 1):
+                try:
+                    pool = await asyncpg.create_pool(
+                        self.dsn, 
+                        min_size=1, 
+                        max_size=self.max_pool_size,
+                        command_timeout=60,
+                        timeout=30,
+                    )
+                    self._pools[loop_id] = pool
+                    # Reset circuit on successful pool creation
+                    self._reset_circuit()
+                    logger.info("[STORAGE] pool_created=true loop_id=%s max_size=%s attempt=%d", loop_id, self.max_pool_size, attempt)
+                    break
+                except Exception as exc:
+                    last_exc = exc
+                    logger.warning("[STORAGE] pool_create_failed attempt=%d/%d error=%s(%s)", 
+                                  attempt, self._pool_create_retries, type(exc).__name__, str(exc)[:100])
+                    if attempt < self._pool_create_retries:
+                        await asyncio.sleep(self._pool_retry_delay * attempt)
+                    else:
+                        self._maybe_open_circuit(exc, context="create_pool")
+                        raise
         if loop_id not in self._schema_ready_loops:
             try:
                 await self._ensure_schema(pool, loop_id)
@@ -283,11 +314,21 @@ class PostgresStorage(BaseStorage):
                 asyncpg.PostgresError,
             ),
         ):
+            self._consecutive_failures += 1
+            logger.warning(
+                "[STORAGE] db_failure context=%s error=%s(%s) consecutive=%d/%d",
+                context, type(exc).__name__, str(exc)[:100],
+                self._consecutive_failures, self._max_consecutive_failures,
+            )
             # Only invalidate pool on explicit connection refused errors
-            # Do NOT invalidate on every error - causes cascade failures
             if isinstance(exc, ConnectionRefusedError):
                 self._invalidate_pool()
-            self._open_circuit(f"{context}:{exc.__class__.__name__}")
+            # Only open circuit after reaching threshold
+            if self._consecutive_failures >= self._max_consecutive_failures:
+                self._open_circuit(f"{context}:{exc.__class__.__name__}")
+        else:
+            # Non-connection errors (e.g. SQL errors) don't count toward circuit
+            logger.debug("[STORAGE] non_circuit_error context=%s error=%s", context, type(exc).__name__)
 
     async def _load_json_unlocked(self, filename: str) -> Dict[str, Any]:
         pool = await self._get_pool()
