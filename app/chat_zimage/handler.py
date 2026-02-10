@@ -66,7 +66,6 @@ def _parse_chat_username(raw: str) -> str:
 
 _TARGET_USERNAME: str = _parse_chat_username(CHAT_ZIMAGE_CHAT)
 CHAT_ZIMAGE_MODEL: str = "z-image"
-CHAT_ZIMAGE_COOLDOWN: int = int(os.getenv("CHAT_ZIMAGE_COOLDOWN", "300"))
 CHAT_ZIMAGE_MAX_CONCURRENCY: int = int(os.getenv("CHAT_ZIMAGE_MAX_CONCURRENCY", "1"))
 CHAT_ZIMAGE_MAX_QUEUE: int = int(os.getenv("CHAT_ZIMAGE_MAX_QUEUE", "20"))
 CHAT_ZIMAGE_ASPECT_RATIO: str = os.getenv("CHAT_ZIMAGE_ASPECT_RATIO", "1:1")
@@ -104,32 +103,6 @@ def _load_placeholder() -> bytes:
     if _placeholder_cache is None:
         _placeholder_cache = PLACEHOLDER_PATH.read_bytes()
     return _placeholder_cache
-
-
-# ═══════════════════════════════════════════════════════════════════════
-# COOLDOWN TRACKER
-# ═══════════════════════════════════════════════════════════════════════
-
-_cooldowns: Dict[int, float] = {}
-
-
-def _check_cooldown(user_id: int) -> Optional[float]:
-    """Returns remaining seconds if on cooldown, None if ready.
-    Admins (CHAT_ZIMAGE_ADMIN_IDS) bypass cooldown entirely.
-    """
-    if user_id in CHAT_ZIMAGE_ADMIN_IDS:
-        return None
-    last = _cooldowns.get(user_id)
-    if last is None:
-        return None
-    elapsed = time.monotonic() - last
-    if elapsed >= CHAT_ZIMAGE_COOLDOWN:
-        return None
-    return CHAT_ZIMAGE_COOLDOWN - elapsed
-
-
-def _set_cooldown(user_id: int) -> None:
-    _cooldowns[user_id] = time.monotonic()
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -350,37 +323,27 @@ async def _chat_zimage_gate(
         user_id = user.id if user else 0
 
         if prompt and user_id:
-            # Cooldown — silent skip
-            remaining = _check_cooldown(user_id)
-            if remaining is not None:
+            # Queue — silent skip if full
+            limiter = _get_limiter()
+            if not limiter.try_enter():
                 logger.info(
-                    "CHAT_ZIMAGE_COOLDOWN user_id=%s remaining_s=%.0f",
-                    user_id, remaining,
+                    "CHAT_ZIMAGE_QUEUE_FULL user_id=%s in_flight=%d",
+                    user_id, limiter._in_flight,
                 )
             else:
-                # Queue — silent skip if full
-                limiter = _get_limiter()
-                if not limiter.try_enter():
-                    logger.info(
-                        "CHAT_ZIMAGE_QUEUE_FULL user_id=%s in_flight=%d",
-                        user_id, limiter._in_flight,
-                    )
-                else:
-                    # Set cooldown immediately
-                    _set_cooldown(user_id)
+                # Launch background task (no webhook stall)
+                # Rate-limiting is handled by Telegram Slow Mode in chat settings
+                task = asyncio.create_task(
+                    _background_generate(message, user_id, prompt, limiter),
+                    name=f"chat_zimg_{user_id}_{uuid.uuid4().hex[:6]}",
+                )
+                _background_tasks.add(task)
+                task.add_done_callback(_background_tasks.discard)
 
-                    # Launch background task (no webhook stall)
-                    task = asyncio.create_task(
-                        _background_generate(message, user_id, prompt, limiter),
-                        name=f"chat_zimg_{user_id}_{uuid.uuid4().hex[:6]}",
-                    )
-                    _background_tasks.add(task)
-                    task.add_done_callback(_background_tasks.discard)
-
-                    logger.info(
-                        "CHAT_ZIMAGE_QUEUED user_id=%s chat_id=%s prompt_len=%d tasks=%d",
-                        user_id, chat.id, len(prompt), len(_background_tasks),
-                    )
+                logger.info(
+                    "CHAT_ZIMAGE_QUEUED user_id=%s chat_id=%s prompt_len=%d tasks=%d",
+                    user_id, chat.id, len(prompt), len(_background_tasks),
+                )
 
     # Block ALL further handler processing for this chat
     raise ApplicationHandlerStop
@@ -408,12 +371,11 @@ def register_chat_zimage_handler(application: Any) -> bool:
     application.add_handler(handler, group=-50)
 
     logger.info(
-        "CHAT_ZIMAGE_REGISTERED chat=%s resolved_username=%s model=%s cooldown=%ds "
+        "CHAT_ZIMAGE_REGISTERED chat=%s resolved_username=%s model=%s "
         "concurrency=%d queue=%d aspect=%s timeout=%ds admin_ids=%s group=-50",
         CHAT_ZIMAGE_CHAT,
         _TARGET_USERNAME,
         CHAT_ZIMAGE_MODEL,
-        CHAT_ZIMAGE_COOLDOWN,
         CHAT_ZIMAGE_MAX_CONCURRENCY,
         CHAT_ZIMAGE_MAX_QUEUE,
         CHAT_ZIMAGE_ASPECT_RATIO,

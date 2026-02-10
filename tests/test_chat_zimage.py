@@ -18,11 +18,8 @@ from app.chat_zimage.handler import (
     PHRASES_OK,
     PLACEHOLDER_PATH,
     _ChatLimiter,
-    _check_cooldown,
-    _cooldowns,
     _load_placeholder,
     _parse_chat_username,
-    _set_cooldown,
     _TARGET_USERNAME,
 )
 
@@ -64,33 +61,20 @@ def test_phrases_are_short():
 
 def test_silent_mode_no_error_phrases_sent():
     """In silent mode, errors are only logged — no messages sent to users."""
-    # The module no longer sends placeholder/error/cooldown messages.
+    # The module no longer sends placeholder/error messages.
     # Verify the OK phrases still exist (only thing ever sent).
     assert all(isinstance(p, str) and len(p) > 0 for p in PHRASES_OK)
 
 
-# ── Cooldown ─────────────────────────────────────────────────────────────
+# ── No internal cooldown (Telegram Slow Mode handles it) ────────────────
 
-def test_cooldown_not_set():
-    """User without cooldown should return None."""
-    _cooldowns.clear()
-    assert _check_cooldown(999999) is None
-
-
-def test_cooldown_set_and_active():
-    """Recently set cooldown should return remaining time."""
-    _cooldowns.clear()
-    _set_cooldown(123)
-    remaining = _check_cooldown(123)
-    assert remaining is not None
-    assert remaining > 0
-
-
-def test_cooldown_expired():
-    """Expired cooldown should return None."""
-    _cooldowns.clear()
-    _cooldowns[456] = time.monotonic() - 999  # way in the past
-    assert _check_cooldown(456) is None
+def test_no_internal_cooldown():
+    """Internal cooldown was removed — Telegram Slow Mode handles rate-limiting."""
+    import app.chat_zimage.handler as h
+    assert not hasattr(h, "_cooldowns"), "_cooldowns should be removed"
+    assert not hasattr(h, "_check_cooldown"), "_check_cooldown should be removed"
+    assert not hasattr(h, "_set_cooldown"), "_set_cooldown should be removed"
+    assert not hasattr(h, "CHAT_ZIMAGE_COOLDOWN"), "CHAT_ZIMAGE_COOLDOWN should be removed"
 
 
 # ── Limiter ──────────────────────────────────────────────────────────────

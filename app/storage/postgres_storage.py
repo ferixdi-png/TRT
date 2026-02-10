@@ -331,6 +331,9 @@ class PostgresStorage(BaseStorage):
                 try:
                     await asyncio.wait_for(old_pool.close(), timeout=5.0)
                     logger.info("[STORAGE] old_pool_closed=true")
+                except RuntimeError as e:
+                    # Pool was created on a different event loop — can't close, just discard
+                    logger.info("[STORAGE] old_pool_discarded=true reason=%s", e)
                 except Exception as e:
                     logger.warning("[STORAGE] old_pool_close_error=%s", e)
             
