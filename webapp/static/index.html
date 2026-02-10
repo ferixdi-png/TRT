@@ -2122,13 +2122,21 @@
                 `;
             }
             
-            // Video upload
-            if (field.name.includes('video_input') || field.name.includes('video_url')) {
+            // Video upload (includes video_urls for motion control reference)
+            if (field.name.includes('video_input') || field.name.includes('video_url') || field.name === 'video_urls') {
                 return `
                     <div class="form-group" data-field="${field.name}">
                         <label class="form-label">📹 ${field.label} ${field.required ? '<span style="color: var(--error);">*</span>' : ''}</label>
                         ${hint}
-                        <input type="file" id="field_${field.name}" data-field="${field.name}" accept="video/*" class="form-input" ${required} />
+                        <div id="videoUploadArea_${field.name}" class="image-upload-area" onclick="document.getElementById('videoInput_${field.name}').click()">
+                            <div id="videoPlaceholder_${field.name}">
+                                <div style="font-size: 48px; margin-bottom: 12px;">🎬</div>
+                                <div>Нажмите чтобы выбрать видео-референс</div>
+                                <div style="font-size: 12px; margin-top: 8px; opacity: 0.7;">MP4 до 50MB</div>
+                            </div>
+                            <video id="videoPreview_${field.name}" style="display: none; width: 100%; border-radius: 12px;" controls></video>
+                        </div>
+                        <input type="file" id="videoInput_${field.name}" data-field="${field.name}" accept="video/*" style="display: none;" onchange="handleVideoSelectField(this, '${field.name}')" />
                         <div id="fieldError_${field.name}" class="field-error" style="display: none;"></div>
                     </div>
                 `;
@@ -2276,12 +2284,14 @@
                     }
                 }
                 
-                // Check uploaded images
-                if ((field.type === 'file_urls' || field.name.includes('image_input')) && field.required) {
+                // Check uploaded images/videos
+                const isFileField = field.type === 'file_urls' || field.name.includes('image_input') || field.name.includes('video_urls');
+                if (isFileField && field.required) {
                     if (!appData.uploadedFields || !appData.uploadedFields[field.name]) {
                         isValid = false;
+                        const errorText = field.name.includes('video') ? 'Загрузите видео' : 'Загрузите изображение';
                         if (errorEl) {
-                            errorEl.textContent = 'Загрузите изображение';
+                            errorEl.textContent = errorText;
                             errorEl.style.display = 'block';
                         }
                         continue;
@@ -2351,6 +2361,56 @@
             } catch (e) {
                 tg.showAlert('Ошибка загрузки: ' + e.message);
                 placeholder.innerHTML = '<div style="font-size: 48px; margin-bottom: 12px;">📷</div><div>Нажмите чтобы выбрать фото</div>';
+            }
+        }
+        
+        async function handleVideoSelectField(input, fieldName) {
+            const file = input.files[0];
+            if (!file) return;
+            
+            if (file.size > 50 * 1024 * 1024) {
+                tg.showAlert('Видео слишком большое. Максимум 50MB.');
+                return;
+            }
+            
+            const preview = document.getElementById(`videoPreview_${fieldName}`);
+            const placeholder = document.getElementById(`videoPlaceholder_${fieldName}`);
+            const uploadArea = document.getElementById(`videoUploadArea_${fieldName}`);
+            
+            placeholder.innerHTML = '<div class="loading-spinner" style="width: 30px; height: 30px;"></div><div style="margin-top: 12px;">Загрузка видео...</div>';
+            
+            try {
+                const base64 = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+                
+                const result = await apiCall('/upload', {
+                    method: 'POST',
+                    body: JSON.stringify({ image: base64, type: 'video' })
+                });
+                
+                if (result.error) throw new Error(result.error);
+                
+                // Store URL
+                if (!appData.uploadedFields) appData.uploadedFields = {};
+                appData.uploadedFields[fieldName] = result.url;
+                
+                preview.src = URL.createObjectURL(file);
+                preview.style.display = 'block';
+                placeholder.style.display = 'none';
+                uploadArea.style.padding = '0';
+                uploadArea.style.background = 'transparent';
+                
+                // Clear error
+                const errorEl = document.getElementById(`fieldError_${fieldName}`);
+                if (errorEl) errorEl.style.display = 'none';
+                
+            } catch (e) {
+                tg.showAlert('Ошибка загрузки видео: ' + e.message);
+                placeholder.innerHTML = '<div style="font-size: 48px; margin-bottom: 12px;">🎬</div><div>Нажмите чтобы выбрать видео</div>';
             }
         }
         
@@ -2531,11 +2591,13 @@
                 for (const field of schema.fields) {
                     const el = document.getElementById(`field_${field.name}`);
                     
-                    // Handle uploaded files
-                    if (field.type === 'file_urls' || field.name.includes('image_input') || field.name.includes('image_urls')) {
+                    // Handle uploaded files (images and videos)
+                    if (field.type === 'file_urls' || field.name.includes('image_input') || field.name.includes('image_urls') || field.name.includes('video_urls')) {
                         if (appData.uploadedFields && appData.uploadedFields[field.name]) {
                             params[field.name] = [appData.uploadedFields[field.name]];
-                            imageUrl = appData.uploadedFields[field.name];
+                            if (!field.name.includes('video')) {
+                                imageUrl = appData.uploadedFields[field.name];
+                            }
                         }
                         continue;
                     }
