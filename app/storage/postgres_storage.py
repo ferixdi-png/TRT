@@ -297,13 +297,11 @@ class PostgresStorage(BaseStorage):
             current_loop_id = id(asyncio.get_running_loop())
             if self._pool_loop_id is not None and self._pool_loop_id != current_loop_id:
                 logger.info(
-                    "[STORAGE] pool_loop_mismatch=true old_loop=%s current_loop=%s — discarding stale pool",
+                    "[STORAGE] pool_loop_mismatch=true old_loop=%s current_loop=%s — orphaning stale pool",
                     self._pool_loop_id, current_loop_id,
                 )
-                try:
-                    self._pool.terminate()
-                except Exception:
-                    pass
+                # Don't terminate() — it kills in-flight operations with InterfaceError.
+                # Just orphan the old pool and let Python GC clean it up.
                 self._pool = None
                 self._pool_loop_id = None
                 self._schema_ready = False
@@ -316,10 +314,7 @@ class PostgresStorage(BaseStorage):
                 current_loop_id = id(asyncio.get_running_loop())
                 if self._pool_loop_id is None or self._pool_loop_id == current_loop_id:
                     return self._pool
-                try:
-                    self._pool.terminate()
-                except Exception:
-                    pass
+                # Don't terminate() — just orphan
                 self._pool = None
                 self._pool_loop_id = None
                 self._schema_ready = False
