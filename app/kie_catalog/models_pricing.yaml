@@ -225,14 +225,20 @@ models:
   - unit: image
     credits: 14.14
     official_usd: 0.18
-    notes: 1/2K
+    params:
+      resolution: 1K
+    notes: 1K
   - unit: image
     credits: 14.14
     official_usd: 0.18
-    notes: 1/2K
+    params:
+      resolution: 2K
+    notes: 2K
   - unit: image
     credits: 18.86
     official_usd: 0.24
+    params:
+      resolution: 4K
     notes: 4K
   description_ru: 'Профессиональная версия Nano Banana: больше деталей, выше точность.
     Для серьёзных задач.'
@@ -741,7 +747,7 @@ models:
     проектов.'
 - id: sora-watermark-remover
   title_ru: 🎞️ OpenAI Sora 2 Watermark Remover
-  type: tools
+  type: watermark_remove
   modes:
   - unit: removal
     credits: 15.7

@@ -472,7 +472,7 @@ def _verify_catalog_internal(models: List[ModelSpec]) -> None:
     allowed_types = {'t2i', 'i2i', 't2v', 'i2v', 'v2v', 'tts', 'stt', 'sfx', 'audio_isolation', 
                      'upscale', 'bg_remove', 'watermark_remove', 'music', 'lip_sync',
                      'text_to_speech', 'speech_to_text', 'text_to_music', 'text_to_audio',
-                     'audio_to_audio', 'text_to_chat'}
+                     'audio_to_audio', 'text_to_chat', 'speech_to_video'}
     invalid_types = [m.id for m in models if m.type not in allowed_types]
     if invalid_types:
         logger.warning(f"Catalog warning: models with invalid types: {invalid_types[:5]}")
