@@ -24,6 +24,9 @@ _webapp_rate_limiter = PerUserRateLimiter(
 # CRITICAL: Store background tasks to prevent GC from collecting them before completion
 _background_tasks: set = set()
 
+# In-memory job fallback when PostgreSQL is down
+_inmemory_jobs: dict = {}
+
 WEBAPP_STATIC_DIR = Path(__file__).parent / "static"
 
 
@@ -594,7 +597,13 @@ async def webapp_generate(request: web.Request) -> web.Response:
         
         # Check balance and free generations
         storage = get_storage()
-        balance = await storage.get_user_balance(user_id)
+        db_available = True
+        try:
+            balance = await storage.get_user_balance(user_id)
+        except Exception as bal_err:
+            logger.warning("========== WEBAPP_BALANCE_DB_DOWN ========== user_id=%s error=%s", user_id, bal_err)
+            balance = 999999  # При недоступной БД не блокируем генерацию
+            db_available = False
         
         # Get price and check if model is free
         price = 0
@@ -717,23 +726,34 @@ async def webapp_generate(request: web.Request) -> web.Response:
             job_id, list(session_params.keys()), "image_input" in session_params, "prompt" in session_params
         )
         
-        # CRITICAL: Save job to unified storage IMMEDIATELY so it can be polled
+        # Save job to unified storage (with DB-down fallback)
         model_name = getattr(spec, "name", model_id)
-        logger.info("WEBAPP_JOB_CREATE job_id=%s user_id=%s model_id=%s partner_id=%s", 
-                    job_id, user_id, model_id, getattr(storage, 'partner_id', 'unknown'))
-        await storage.add_generation_job(
-            job_id=job_id,
-            user_id=user_id,
-            model_id=model_id,
-            model_name=model_name,
-            params=session_params,
-            price=price,
-            correlation_id=correlation_id,
-            prompt=prompt,
-            status="pending",
-            is_free=is_free_generation,
-        )
-        logger.info("WEBAPP_JOB_CREATED job_id=%s", job_id)
+        logger.info("WEBAPP_JOB_CREATE job_id=%s user_id=%s model_id=%s partner_id=%s db_available=%s", 
+                    job_id, user_id, model_id, getattr(storage, 'partner_id', 'unknown'), db_available)
+        job_saved_to_db = False
+        try:
+            await storage.add_generation_job(
+                job_id=job_id,
+                user_id=user_id,
+                model_id=model_id,
+                model_name=model_name,
+                params=session_params,
+                price=price,
+                correlation_id=correlation_id,
+                prompt=prompt,
+                status="pending",
+                is_free=is_free_generation,
+            )
+            job_saved_to_db = True
+            logger.info("WEBAPP_JOB_CREATED job_id=%s", job_id)
+        except Exception as job_err:
+            logger.warning("========== WEBAPP_JOB_DB_DOWN ========== job_id=%s error=%s — proceeding with in-memory", job_id, job_err)
+            # In-memory fallback: генерация всё равно запустится
+            _inmemory_jobs[job_id] = {
+                "job_id": job_id, "user_id": user_id, "model_id": model_id,
+                "status": "pending", "result_url": None, "result_urls": [],
+                "error_message": None, "created_at": time.time(),
+            }
         
         # Start generation in background
         import asyncio
@@ -771,12 +791,20 @@ async def webapp_generate(request: web.Request) -> web.Response:
                         user_id, model_id, job_id, correlation_id, gen_duration_ms,
                         (result.result_url or "")[:80] if result.result_url else "none"
                     )
-                    await storage.update_job_status(
-                        job_id=job_id,
-                        status=result.state if result.state else "success",
-                        result_url=result.result_url,
-                        result_urls=result.result_urls if hasattr(result, 'result_urls') else [],
-                    )
+                    try:
+                        await storage.update_job_status(
+                            job_id=job_id,
+                            status=result.state if result.state else "success",
+                            result_url=result.result_url,
+                            result_urls=result.result_urls if hasattr(result, 'result_urls') else [],
+                        )
+                    except Exception as upd_err:
+                        logger.warning("WEBAPP_JOB_STATUS_UPDATE_FAILED job_id=%s error=%s", job_id, upd_err)
+                    # Update in-memory fallback too
+                    if job_id in _inmemory_jobs:
+                        _inmemory_jobs[job_id]["status"] = result.state if result.state else "success"
+                        _inmemory_jobs[job_id]["result_url"] = result.result_url
+                        _inmemory_jobs[job_id]["result_urls"] = result.result_urls if hasattr(result, 'result_urls') else []
                     
                     # CRITICAL: Charge balance or consume free generation AFTER successful result
                     task_id = result.task_id if hasattr(result, 'task_id') else job_id
@@ -817,18 +845,30 @@ async def webapp_generate(request: web.Request) -> web.Response:
                         "WEBAPP_GEN_NO_RESULT user_id=%s model_id=%s job_id=%s correlation_id=%s duration_ms=%s",
                         user_id, model_id, job_id, correlation_id, gen_duration_ms
                     )
-                    await storage.update_job_status(job_id=job_id, status="failed", error_message="No result returned")
+                    try:
+                        await storage.update_job_status(job_id=job_id, status="failed", error_message="No result returned")
+                    except Exception as upd_err:
+                        logger.warning("WEBAPP_JOB_STATUS_UPDATE_FAILED job_id=%s error=%s", job_id, upd_err)
+                    if job_id in _inmemory_jobs:
+                        _inmemory_jobs[job_id]["status"] = "failed"
+                        _inmemory_jobs[job_id]["error_message"] = "No result returned"
             except Exception as e:
                 gen_duration_ms = int((time.monotonic() - gen_start_ts) * 1000)
                 logger.error(
                     "WEBAPP_GEN_ERROR user_id=%s model_id=%s job_id=%s correlation_id=%s duration_ms=%s error=%s",
                     user_id, model_id, job_id, correlation_id, gen_duration_ms, str(e)[:200]
                 )
-                await storage.update_job_status(
-                    job_id=job_id,
-                    status="failed",
-                    error_message=str(e),
-                )
+                try:
+                    await storage.update_job_status(
+                        job_id=job_id,
+                        status="failed",
+                        error_message=str(e),
+                    )
+                except Exception as upd_err:
+                    logger.warning("WEBAPP_JOB_STATUS_UPDATE_FAILED job_id=%s error=%s", job_id, upd_err)
+                if job_id in _inmemory_jobs:
+                    _inmemory_jobs[job_id]["status"] = "failed"
+                    _inmemory_jobs[job_id]["error_message"] = str(e)[:200]
         
         task = asyncio.create_task(run_gen(), name=f"webapp_gen_{job_id}")
         # CRITICAL: Store task in set to prevent GC from collecting it before completion
@@ -866,7 +906,16 @@ async def webapp_job_status(request: web.Request) -> web.Response:
         storage = get_storage()
         
         # Use unified storage.get_job instead of separate webapp_jobs
-        job = await storage.get_job(job_id)
+        job = None
+        try:
+            job = await storage.get_job(job_id)
+        except Exception as db_err:
+            logger.warning("WEBAPP_JOB_STATUS_DB_DOWN job_id=%s error=%s", job_id, db_err)
+        
+        # Fallback to in-memory jobs if DB is down
+        if not job and job_id in _inmemory_jobs:
+            job = _inmemory_jobs[job_id]
+        
         logger.debug("WEBAPP_JOB_STATUS job_id=%s found=%s partner_id=%s", job_id, job is not None, getattr(storage, 'partner_id', 'unknown'))
         if not job:
             logger.warning("WEBAPP_JOB_NOT_FOUND job_id=%s", job_id)

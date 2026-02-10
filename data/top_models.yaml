@@ -6,21 +6,21 @@ version: "1.0"
 updated: "2026-02-09"
 
 categories:
-  - id: audio
-    label_ru: "Аудио / Голос"
-    label_en: "Audio / Voice"
-    order: 1
-  - id: chat
-    label_ru: "Чат / LLM"
-    label_en: "Chat / LLM"
-    order: 2
   - id: image
     label_ru: "Изображения"
     label_en: "Image"
-    order: 3
+    order: 1
   - id: video
     label_ru: "Видео"
     label_en: "Video"
+    order: 2
+  - id: audio
+    label_ru: "Аудио / Голос"
+    label_en: "Audio / Voice"
+    order: 3
+  - id: chat
+    label_ru: "Чат / LLM"
+    label_en: "Chat / LLM"
     order: 4
   - id: editing
     label_ru: "Редактирование"
@@ -28,6 +28,46 @@ categories:
     order: 5
 
 models:
+  # ============ IMAGE (FIRST!) ============
+  - id: "top-nano-banana-pro"
+    model_id: "nano-banana-pro"
+    category: image
+    title_ru: "🍌 Nano Banana Pro"
+    title_en: "🍌 Nano Banana Pro"
+    one_liner_ru: "Профессиональная генерация изображений от Google"
+    one_liner_en: "Professional image generation from Google"
+    best_for_ru:
+      - "Быстрые прототипы"
+      - "Социальные сети"
+      - "Контент-маркетинг"
+    best_for_en:
+      - "Quick prototypes"
+      - "Social media"
+      - "Content marketing"
+    skus:
+      - sku_id: "nano-banana-pro-1k"
+        label_ru: "1K/2K"
+        label_en: "1K/2K"
+        mode_key: "1/2K"
+        maps_to:
+          model_id: "nano-banana-pro"
+          params:
+            resolution: "1K"
+        price_ref: "nano-banana-pro"
+        unit: "изображение"
+        unit_en: "image"
+      - sku_id: "nano-banana-pro-4k"
+        label_ru: "4K"
+        label_en: "4K"
+        mode_key: "4K"
+        maps_to:
+          model_id: "nano-banana-pro"
+          params:
+            resolution: "4K"
+        price_ref: "nano-banana-pro"
+        unit: "изображение"
+        unit_en: "image"
+
   # ============ AUDIO / VOICE ============
   - id: "top-elevenlabs-v3"
     model_id: "elevenlabs/text-to-dialogue-v3"
@@ -228,46 +268,72 @@ models:
         unit: "изображение"
         unit_en: "image"
 
-  - id: "top-nano-banana-pro"
-    model_id: "nano-banana-pro"
-    category: image
-    title_ru: "Google Nano Banana Pro"
-    title_en: "Google Nano Banana Pro"
-    one_liner_ru: "Быстрая генерация от Google"
-    one_liner_en: "Fast generation from Google"
+  # ============ VIDEO (Sora FIRST!) ============
+  - id: "top-sora-2-pro"
+    model_id: "sora-2-pro-text-to-video"
+    category: video
+    title_ru: "🎬 OpenAI Sora 2 Pro"
+    title_en: "🎬 OpenAI Sora 2 Pro"
+    one_liner_ru: "Профессиональная генерация видео от OpenAI"
+    one_liner_en: "Professional video generation from OpenAI"
     best_for_ru:
-      - "Быстрые прототипы"
-      - "Социальные сети"
-      - "Контент-маркетинг"
+      - "Кинематографическое качество"
+      - "Рекламные ролики"
+      - "Премиум контент"
     best_for_en:
-      - "Quick prototypes"
-      - "Social media"
-      - "Content marketing"
+      - "Cinematic quality"
+      - "Commercials"
+      - "Premium content"
     skus:
-      - sku_id: "nano-banana-pro-1k"
-        label_ru: "1K/2K"
-        label_en: "1K/2K"
-        mode_key: "1/2K"
+      - sku_id: "sora-2-pro-standard-10s"
+        label_ru: "Standard 10с"
+        label_en: "Standard 10s"
+        mode_key: "Pro Standard-10.0s"
         maps_to:
-          model_id: "nano-banana-pro"
+          model_id: "sora-2-pro-text-to-video"
           params:
-            resolution: "1K"
-        price_ref: "nano-banana-pro"
-        unit: "изображение"
-        unit_en: "image"
-      - sku_id: "nano-banana-pro-4k"
-        label_ru: "4K"
-        label_en: "4K"
-        mode_key: "4K"
+            quality: "standard"
+            duration: "10"
+        price_ref: "sora-2-pro-text-to-video"
+        unit: "видео"
+        unit_en: "video"
+      - sku_id: "sora-2-pro-standard-15s"
+        label_ru: "Standard 15с"
+        label_en: "Standard 15s"
+        mode_key: "Pro Standard-15.0s"
         maps_to:
-          model_id: "nano-banana-pro"
+          model_id: "sora-2-pro-text-to-video"
           params:
-            resolution: "4K"
-        price_ref: "nano-banana-pro"
-        unit: "изображение"
-        unit_en: "image"
+            quality: "standard"
+            duration: "15"
+        price_ref: "sora-2-pro-text-to-video"
+        unit: "видео"
+        unit_en: "video"
+      - sku_id: "sora-2-pro-high-10s"
+        label_ru: "High 10с"
+        label_en: "High 10s"
+        mode_key: "Pro High-10.0s"
+        maps_to:
+          model_id: "sora-2-pro-text-to-video"
+          params:
+            quality: "high"
+            duration: "10"
+        price_ref: "sora-2-pro-text-to-video"
+        unit: "видео"
+        unit_en: "video"
+      - sku_id: "sora-2-pro-high-15s"
+        label_ru: "High 15с"
+        label_en: "High 15s"
+        mode_key: "Pro High-15.0s"
+        maps_to:
+          model_id: "sora-2-pro-text-to-video"
+          params:
+            quality: "high"
+            duration: "15"
+        price_ref: "sora-2-pro-text-to-video"
+        unit: "видео"
+        unit_en: "video"
 
-  # ============ VIDEO ============
   - id: "top-kling-2-6-motion"
     model_id: "kling-2.6/motion-control"
     category: video
@@ -694,71 +760,6 @@ models:
           params:
             resolution: "4K"
         price_ref: "google/veo-3.1"
-        unit: "видео"
-        unit_en: "video"
-
-  - id: "top-sora-2-pro"
-    model_id: "sora-2-pro-text-to-video"
-    category: video
-    title_ru: "OpenAI Sora 2 Pro"
-    title_en: "OpenAI Sora 2 Pro"
-    one_liner_ru: "Профессиональная генерация от OpenAI"
-    one_liner_en: "Professional generation from OpenAI"
-    best_for_ru:
-      - "Кинематографическое качество"
-      - "Рекламные ролики"
-      - "Премиум контент"
-    best_for_en:
-      - "Cinematic quality"
-      - "Commercials"
-      - "Premium content"
-    skus:
-      - sku_id: "sora-2-pro-standard-10s"
-        label_ru: "Standard 10с"
-        label_en: "Standard 10s"
-        mode_key: "Pro Standard-10.0s"
-        maps_to:
-          model_id: "sora-2-pro-text-to-video"
-          params:
-            quality: "standard"
-            duration: "10"
-        price_ref: "sora-2-pro-text-to-video"
-        unit: "видео"
-        unit_en: "video"
-      - sku_id: "sora-2-pro-standard-15s"
-        label_ru: "Standard 15с"
-        label_en: "Standard 15s"
-        mode_key: "Pro Standard-15.0s"
-        maps_to:
-          model_id: "sora-2-pro-text-to-video"
-          params:
-            quality: "standard"
-            duration: "15"
-        price_ref: "sora-2-pro-text-to-video"
-        unit: "видео"
-        unit_en: "video"
-      - sku_id: "sora-2-pro-high-10s"
-        label_ru: "High 10с"
-        label_en: "High 10s"
-        mode_key: "Pro High-10.0s"
-        maps_to:
-          model_id: "sora-2-pro-text-to-video"
-          params:
-            quality: "high"
-            duration: "10"
-        price_ref: "sora-2-pro-text-to-video"
-        unit: "видео"
-        unit_en: "video"
-      - sku_id: "sora-2-pro-high-15s"
-        label_ru: "High 15с"
-        label_en: "High 15s"
-        mode_key: "Pro High-15.0s"
-        maps_to:
-          model_id: "sora-2-pro-text-to-video"
-          params:
-            quality: "high"
-            duration: "15"
-        price_ref: "sora-2-pro-text-to-video"
         unit: "видео"
         unit_en: "video"
 
