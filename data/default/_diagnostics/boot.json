@@ -1,8 +1,8 @@
 {
-  "timestamp": "2026-01-28T06:04:34.743858+00:00",
+  "timestamp": "2026-02-09T13:42:58.111373+00:00",
   "result": "FAIL",
   "meta": {
-    "bot_instance_id": "",
+    "bot_instance_id": "p1",
     "bot_mode": "auto",
     "port": 10000
   },
@@ -11,14 +11,13 @@
       "status": "FAIL",
       "checks": {
         "ADMIN_ID": {
-          "status": "FAIL",
-          "details": "missing",
-          "hint": "Set ADMIN_ID"
+          "status": "OK",
+          "details": "valid"
         },
         "BOT_INSTANCE_ID": {
           "status": "FAIL",
-          "details": "missing",
-          "hint": "Set BOT_INSTANCE_ID"
+          "details": "invalid format",
+          "hint": "Use lowercase letters, digits, . _ - (slug)"
         },
         "BOT_MODE": {
           "status": "DEGRADED",
@@ -38,9 +37,8 @@
           "details": "db-only"
         },
         "KIE_API_KEY": {
-          "status": "DEGRADED",
-          "details": "NOT_SET",
-          "hint": "AI disabled"
+          "status": "OK",
+          "details": "SET"
         },
         "PAYMENT_SUPPORT": {
           "status": "DEGRADED",
@@ -67,13 +65,13 @@
       "checks": {
         "connect": {
           "status": "FAIL",
-          "details": "DATABASE_URL missing",
-          "hint": "Set DATABASE_URL"
+          "details": "connect failed",
+          "hint": "invalid DSN: scheme is expected to be either \"postgresql\" or \"postgres\", got ''"
         },
         "query": {
           "status": "FAIL",
-          "details": "DATABASE_URL missing",
-          "hint": "Set DATABASE_URL"
+          "details": "SELECT 1 failed",
+          "hint": "invalid DSN: scheme is expected to be either \"postgresql\" or \"postgres\", got ''"
         },
         "pool_size": {
           "status": "OK",
@@ -82,21 +80,20 @@
       },
       "meta": {
         "status": "FAIL",
-        "details": "DATABASE_URL missing",
-        "hint": "Set DATABASE_URL"
+        "details": "connect failed",
+        "hint": "invalid DSN: scheme is expected to be either \"postgresql\" or \"postgres\", got ''"
       }
     },
     "STORAGE": {
-      "status": "FAIL",
+      "status": "DEGRADED",
       "checks": {
         "backend": {
           "status": "OK",
           "details": "db-only"
         },
         "tenant_namespace": {
-          "status": "FAIL",
-          "details": "missing",
-          "hint": "Set BOT_INSTANCE_ID"
+          "status": "OK",
+          "details": "p1"
         },
         "rw_smoke": {
           "status": "OK",
@@ -132,8 +129,7 @@
       "checks": {
         "token_format": {
           "status": "FAIL",
-          "details": "missing",
-          "hint": "Set TELEGRAM_BOT_TOKEN"
+          "details": "invalid format"
         },
         "webhook_mode": {
           "status": "OK",
@@ -163,18 +159,16 @@
       }
     },
     "AI": {
-      "status": "DEGRADED",
+      "status": "OK",
       "checks": {
         "KIE": {
-          "status": "DEGRADED",
-          "details": "NOT_SET",
-          "hint": "AI disabled"
+          "status": "OK",
+          "details": "SET"
         }
       },
       "meta": {
-        "status": "DEGRADED",
-        "details": "NOT_SET",
-        "hint": "AI disabled"
+        "status": "OK",
+        "details": "SET"
       }
     },
     "UX": {
@@ -199,12 +193,12 @@
       "checks": {
         "base_structures": {
           "status": "OK",
-          "details": "initialized: user_registry.json, payments.json, referrals.json"
+          "details": "initialized: payments.json, referrals.json"
         }
       },
       "meta": {
         "status": "OK",
-        "details": "initialized: user_registry.json, payments.json, referrals.json"
+        "details": "initialized: payments.json, referrals.json"
       }
     }
   },
@@ -218,10 +212,10 @@
     },
     "DATABASE": {
       "status": "FAIL",
-      "details": "DATABASE_URL missing"
+      "details": "connect failed"
     },
     "STORAGE": {
-      "status": "FAIL",
+      "status": "DEGRADED",
       "details": "rw ok"
     },
     "REDIS": {
@@ -236,32 +230,29 @@
       "status": "OK"
     },
     "AI": {
-      "status": "DEGRADED",
-      "details": "NOT_SET"
+      "status": "OK",
+      "details": "SET"
     },
     "UX": {
       "status": "OK"
     },
     "DATA_INTEGRITY": {
       "status": "OK",
-      "details": "initialized: user_registry.json, payments.json, referrals.json"
+      "details": "initialized: payments.json, referrals.json"
     }
   },
   "critical_failures": {
-    "ADMIN_ID": "Set ADMIN_ID to numeric Telegram user id(s)",
-    "BOT_INSTANCE_ID": "Set BOT_INSTANCE_ID to lowercase identifier",
+    "BOT_INSTANCE_ID": "Use lowercase letters, digits, . _ - (3-32 chars)",
     "DATABASE": "Verify DATABASE_URL and DB availability",
-    "TELEGRAM_BOT_TOKEN": "Set TELEGRAM_BOT_TOKEN"
+    "TELEGRAM_BOT_TOKEN": "Fix TELEGRAM_BOT_TOKEN format"
   },
   "degraded_notes": {
     "BOT_MODE": "BOT_MODE not set; default applied",
-    "KIE_API_KEY": "AI generation disabled",
     "PAYMENT_SUPPORT": "Owner defaults in use"
   },
   "how_to_fix": [
-    "ADMIN_ID: Set ADMIN_ID to numeric Telegram user id(s)",
-    "BOT_INSTANCE_ID: Set BOT_INSTANCE_ID to lowercase identifier",
+    "BOT_INSTANCE_ID: Use lowercase letters, digits, . _ - (3-32 chars)",
     "DATABASE: Verify DATABASE_URL and DB availability",
-    "TELEGRAM_BOT_TOKEN: Set TELEGRAM_BOT_TOKEN"
+    "TELEGRAM_BOT_TOKEN: Fix TELEGRAM_BOT_TOKEN format"
   ]
 }
