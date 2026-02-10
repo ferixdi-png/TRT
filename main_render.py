@@ -112,13 +112,13 @@ def build_webhook_handler(
     ip_rate_limit_per_sec = float(os.getenv("WEBHOOK_IP_RATE_LIMIT_PER_SEC", "4"))
     ip_rate_limit_burst = float(os.getenv("WEBHOOK_IP_RATE_LIMIT_BURST", "12"))
     request_dedup_ttl_seconds = float(os.getenv("WEBHOOK_REQUEST_DEDUP_TTL_SECONDS", "30"))
-    process_timeout_seconds = float(os.getenv("WEBHOOK_PROCESS_TIMEOUT_SECONDS", "8"))
+    process_timeout_seconds = float(os.getenv("WEBHOOK_PROCESS_TIMEOUT_SECONDS", "25"))
     concurrency_limit = int(os.getenv("WEBHOOK_CONCURRENCY_LIMIT", "24"))
     concurrency_timeout_seconds = float(os.getenv("WEBHOOK_CONCURRENCY_TIMEOUT_SECONDS", "1.5"))
     ack_max_ms = int(os.getenv("WEBHOOK_ACK_MAX_MS", "200"))
     early_update_retry_after = int(os.getenv("WEBHOOK_EARLY_UPDATE_RETRY_AFTER", "2"))
     early_update_log_throttle_seconds = float(os.getenv("WEBHOOK_EARLY_UPDATE_LOG_THROTTLE_SECONDS", "30"))
-    handler_stall_seconds = float(os.getenv("WEBHOOK_HANDLER_STALL_SECONDS", "6.0"))
+    handler_stall_seconds = float(os.getenv("WEBHOOK_HANDLER_STALL_SECONDS", "15.0"))
 
     ip_rate_limiter = (
         PerKeyRateLimiter(ip_rate_limit_per_sec, ip_rate_limit_burst)
