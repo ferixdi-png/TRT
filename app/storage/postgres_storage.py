@@ -10,6 +10,7 @@ Bulletproof connection pool with self-healing:
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
 import logging
 import os
@@ -47,6 +48,42 @@ TRANSIENT_ERRORS: Tuple[type, ...] = (
     OSError,
 )
 _corr_lock_drop_total = 0
+
+
+def _retry_transient(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
+    """Decorator: retry method on transient DB errors with exponential backoff + jitter."""
+
+    @functools.wraps(func)
+    async def wrapper(self: "PostgresStorage", *args: Any, **kwargs: Any) -> T:
+        last_exc: Optional[Exception] = None
+        for attempt in range(self._retry_max_attempts):
+            try:
+                result = await func(self, *args, **kwargs)
+                if attempt > 0:
+                    self._reset_circuit()
+                return result
+            except asyncio.CancelledError:
+                raise
+            except TRANSIENT_ERRORS as exc:
+                last_exc = exc
+                if attempt < self._retry_max_attempts - 1:
+                    delay = self._retry_base_delay * (2 ** attempt) + random.uniform(0, self._retry_jitter)
+                    logger.warning(
+                        "[STORAGE] transient_retry context=%s attempt=%d/%d error=%s(%s) delay=%.2fs",
+                        func.__name__, attempt + 1, self._retry_max_attempts,
+                        type(exc).__name__, str(exc)[:80], delay,
+                    )
+                    try:
+                        await self._recreate_pool()
+                    except Exception:
+                        pass
+                    await asyncio.sleep(delay)
+                else:
+                    self._maybe_open_circuit(exc, context=func.__name__)
+                    raise
+        raise last_exc  # type: ignore[misc]
+
+    return wrapper  # type: ignore[return-value]
 
 # System garbage keys that should never be stored as user data
 SYSTEM_GARBAGE_KEYS = frozenset({
@@ -762,6 +799,7 @@ class PostgresStorage(BaseStorage):
             amount - balance_before,
         )
 
+    @_retry_transient
     async def add_user_balance(self, user_id: int, amount: float) -> float:
         """Add to user balance with transaction lock to prevent race conditions."""
         if not _validate_user_id(user_id, "add_user_balance"):
@@ -806,6 +844,7 @@ class PostgresStorage(BaseStorage):
         )
         return new_balance
 
+    @_retry_transient
     async def subtract_user_balance(self, user_id: int, amount: float) -> bool:
         """Subtract from user balance with transaction lock to prevent race conditions."""
         if not _validate_user_id(user_id, "subtract_user_balance"):
@@ -863,6 +902,7 @@ class PostgresStorage(BaseStorage):
         )
         return True
 
+    @_retry_transient
     async def charge_balance_once(
         self,
         user_id: int,
@@ -1057,6 +1097,7 @@ class PostgresStorage(BaseStorage):
         await self._save_json(self.free_generations_file, data)
         logger.info("Free gen incremented user_id=%s date=%s count=%s", user_id, today, old_count + 1)
 
+    @_retry_transient
     async def consume_free_generation_once(
         self,
         user_id: int,
@@ -1181,6 +1222,7 @@ class PostgresStorage(BaseStorage):
         data[str(user_id)] = int(max(0, remaining_count))
         await self._save_json(self.referral_free_bank_file, data)
 
+    @_retry_transient
     async def add_referral_free_bank(self, user_id: int, bonus: int) -> int:
         """Add to referral free bank with transaction lock to prevent race conditions."""
         if not _validate_user_id(user_id, "add_referral_free_bank"):
@@ -1527,6 +1569,7 @@ class PostgresStorage(BaseStorage):
 
     # ==================== REFERRALS ====================
 
+    @_retry_transient
     async def set_referrer(self, user_id: int, referrer_id: int) -> None:
         pool = await self._get_pool()
         async with pool.acquire() as conn:
@@ -1541,6 +1584,7 @@ class PostgresStorage(BaseStorage):
                 int(referrer_id),
             )
 
+    @_retry_transient
     async def get_referrer(self, user_id: int) -> Optional[int]:
         pool = await self._get_pool()
         async with pool.acquire() as conn:
@@ -1553,6 +1597,7 @@ class PostgresStorage(BaseStorage):
                 return int(row["referrer_id"])
         return None
 
+    @_retry_transient
     async def get_referrals(self, referrer_id: int) -> List[int]:
         pool = await self._get_pool()
         async with pool.acquire() as conn:
@@ -1571,6 +1616,7 @@ class PostgresStorage(BaseStorage):
 
         await self.update_json_file(self.free_generations_file, updater)
 
+    @_retry_transient
     async def create_referral_record(
         self,
         *,
@@ -1603,6 +1649,7 @@ class PostgresStorage(BaseStorage):
             )
             return result.startswith("INSERT")
 
+    @_retry_transient
     async def get_referral_stats(self, referrer_id: int, partner_id: str) -> Dict[str, Any]:
         pool = await self._get_pool()
         async with pool.acquire() as conn:
@@ -1628,6 +1675,7 @@ class PostgresStorage(BaseStorage):
                 "bonus_total": int(row["bonus_total"] or 0),
             }
 
+    @_retry_transient
     async def list_recent_referrals(self, *, partner_id: str, limit: int = 5) -> List[Dict[str, Any]]:
         pool = await self._get_pool()
         async with pool.acquire() as conn:
@@ -1653,6 +1701,7 @@ class PostgresStorage(BaseStorage):
                 for row in rows
             ]
 
+    @_retry_transient
     async def get_referral_admin_summary(self, *, partner_id: str, limit: int = 5) -> Dict[str, Any]:
         pool = await self._get_pool()
         async with pool.acquire() as conn:
@@ -1712,6 +1761,7 @@ class PostgresStorage(BaseStorage):
         await maybe_inject_sleep("TRT_FAULT_INJECT_STORAGE_SLEEP_MS", label=f"postgres_storage.write:{filename}")
         await self._save_json(filename, data)
 
+    @_retry_transient
     async def update_json_file(
         self,
         filename: str,
@@ -1915,6 +1965,8 @@ class PostgresStorage(BaseStorage):
                         skip_correlation_store=True,
                     )
                     return clean_updated
+        except TRANSIENT_ERRORS:
+            raise  # Let @_retry_transient handle these
         except Exception as exc:
             self._maybe_open_circuit(exc, context="update_json")
             raise
@@ -1931,10 +1983,19 @@ class PostgresStorage(BaseStorage):
 
     async def ping(self) -> bool:
         try:
-            pool = await self._get_pool()
+            pool = await self._ensure_pool()
             async with pool.acquire() as conn:
                 await conn.execute("SELECT 1")
             return True
+        except TRANSIENT_ERRORS:
+            try:
+                pool = await self._recreate_pool()
+                async with pool.acquire() as conn:
+                    await conn.execute("SELECT 1")
+                return True
+            except Exception as exc:
+                logger.warning("[STORAGE] ping_failed partner_id=%s error=%s", self.partner_id, exc)
+                return False
         except Exception as exc:
             logger.warning("[STORAGE] ping_failed partner_id=%s error=%s", self.partner_id, exc)
             return False
@@ -1958,12 +2019,14 @@ class PostgresStorage(BaseStorage):
 
     # ==================== MIGRATION HELPERS ====================
 
+    @_retry_transient
     async def has_completed_migration(self, key: str) -> bool:
         pool = await self._get_pool()
         async with pool.acquire() as conn:
             row = await conn.fetchrow("SELECT 1 FROM migrations_meta WHERE key=$1", key)
             return row is not None
 
+    @_retry_transient
     async def mark_migration_done(self, key: str) -> None:
         pool = await self._get_pool()
         async with pool.acquire() as conn:
@@ -1972,6 +2035,7 @@ class PostgresStorage(BaseStorage):
                 key,
             )
 
+    @_retry_transient
     async def is_empty(self) -> bool:
         pool = await self._get_pool()
         async with pool.acquire() as conn:
