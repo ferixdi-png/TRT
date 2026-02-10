@@ -63,7 +63,6 @@ class EnvValidator:
         'TELEGRAM_BOT_TOKEN',
         'KIE_API_KEY',
         'DATABASE_URL',
-        'REDIS_URL',
         'ADMIN_ID',
         'BOT_INSTANCE_ID',
     ]
