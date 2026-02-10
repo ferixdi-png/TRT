@@ -193,12 +193,18 @@ class PostgresStorage(BaseStorage):
             last_exc = None
             for attempt in range(1, self._pool_create_retries + 1):
                 try:
+                    async def _init_connection(conn):
+                        # Health check: verify connection is alive
+                        await conn.execute("SELECT 1")
+                    
                     pool = await asyncpg.create_pool(
                         self.dsn, 
-                        min_size=1, 
+                        min_size=2,  # Keep more warm connections
                         max_size=self.max_pool_size,
                         command_timeout=60,
                         timeout=30,
+                        # Health check on each connection init
+                        init=_init_connection,
                     )
                     self._pools[loop_id] = pool
                     # Reset circuit on successful pool creation
@@ -331,48 +337,64 @@ class PostgresStorage(BaseStorage):
             logger.debug("[STORAGE] non_circuit_error context=%s error=%s", context, type(exc).__name__)
 
     async def _load_json_unlocked(self, filename: str) -> Dict[str, Any]:
-        pool = await self._get_pool()
-        try:
-            async with pool.acquire() as conn:
-                row = await conn.fetchrow(
-                    "SELECT payload FROM storage_json WHERE partner_id=$1 AND filename=$2",
-                    self.partner_id,
-                    filename,
-                )
-                # AUDIT: Log critical files
-                if filename in ("user_registry.json", "payments.json", "user_balances.json"):
-                    if row:
-                        payload_preview = row[0]
-                        keys_count = len(payload_preview) if isinstance(payload_preview, dict) else 0
-                        sample_keys = list(payload_preview.keys())[:5] if isinstance(payload_preview, dict) else []
-                        logger.info("PG_LOAD_AUDIT file=%s partner_id=%s row_found=true keys=%d sample=%s", 
-                                   filename, self.partner_id, keys_count, sample_keys)
-                    else:
-                        logger.info("PG_LOAD_AUDIT file=%s partner_id=%s row_found=false", 
-                                   filename, self.partner_id)
-                if not row:
-                    return {}
-                payload = row[0]
-                if isinstance(payload, dict):
-                    return dict(payload)
-                if isinstance(payload, str):
-                    try:
-                        parsed = json.loads(payload)
-                    except json.JSONDecodeError:
-                        parsed = None
-                    if isinstance(parsed, dict):
-                        return parsed
-                correlation_id = uuid.uuid4().hex[:8]
-                logger.warning(
-                    "STORAGE_JSON_TYPE_INVALID correlation_id=%s filename=%s payload_type=%s",
-                    correlation_id,
-                    filename,
-                    type(payload).__name__,
-                )
-                return {}
-        except Exception as exc:
-            self._maybe_open_circuit(exc, context="load_json")
-            raise
+        # Retry logic for transient connection errors
+        max_retries = 2
+        row = None
+        for attempt in range(max_retries + 1):
+            pool = await self._get_pool()
+            try:
+                async with pool.acquire() as conn:
+                    row = await conn.fetchrow(
+                        "SELECT payload FROM storage_json WHERE partner_id=$1 AND filename=$2",
+                        self.partner_id,
+                        filename,
+                    )
+                    break  # Success - exit retry loop
+            except (asyncpg.InterfaceError, asyncpg.ConnectionDoesNotExistError) as exc:
+                if attempt < max_retries:
+                    logger.warning("[STORAGE] transient_error retry=%d/%d error=%s", attempt + 1, max_retries, type(exc).__name__)
+                    # Invalidate pool to get fresh connections
+                    self._invalidate_pool()
+                    await asyncio.sleep(0.1 * (attempt + 1))
+                    continue
+                else:
+                    self._maybe_open_circuit(exc, context="load_json")
+                    raise
+            except Exception as exc:
+                self._maybe_open_circuit(exc, context="load_json")
+                raise
+        
+        # AUDIT: Log critical files
+        if filename in ("user_registry.json", "payments.json", "user_balances.json"):
+            if row:
+                payload_preview = row[0]
+                keys_count = len(payload_preview) if isinstance(payload_preview, dict) else 0
+                sample_keys = list(payload_preview.keys())[:5] if isinstance(payload_preview, dict) else []
+                logger.info("PG_LOAD_AUDIT file=%s partner_id=%s row_found=true keys=%d sample=%s", 
+                           filename, self.partner_id, keys_count, sample_keys)
+            else:
+                logger.info("PG_LOAD_AUDIT file=%s partner_id=%s row_found=false", 
+                           filename, self.partner_id)
+        if not row:
+            return {}
+        payload = row[0]
+        if isinstance(payload, dict):
+            return dict(payload)
+        if isinstance(payload, str):
+            try:
+                parsed = json.loads(payload)
+            except json.JSONDecodeError:
+                parsed = None
+            if isinstance(parsed, dict):
+                return parsed
+        correlation_id = uuid.uuid4().hex[:8]
+        logger.warning(
+            "STORAGE_JSON_TYPE_INVALID correlation_id=%s filename=%s payload_type=%s",
+            correlation_id,
+            filename,
+            type(payload).__name__,
+        )
+        return {}
 
     async def _load_json(self, filename: str) -> Dict[str, Any]:
         lock = self._get_file_lock(filename)
@@ -404,26 +426,37 @@ class PostgresStorage(BaseStorage):
             # AUTO-BACKUP: Save backup before any write to critical files (if data exists)
             if current_keys_count > 0:
                 backup_filename = f"_backup_{filename}"
-                try:
-                    pool = await self._get_pool()
-                    async with pool.acquire() as conn:
-                        await conn.execute(
-                            """
-                            INSERT INTO storage_json (partner_id, filename, payload)
-                            VALUES ($1, $2, $3::jsonb)
-                            ON CONFLICT (partner_id, filename)
-                            DO UPDATE SET payload = EXCLUDED.payload, updated_at = now()
-                            """,
-                            self.partner_id,
-                            backup_filename,
-                            json.dumps(current_data),
+                backup_saved = False
+                for backup_attempt in range(3):
+                    try:
+                        pool = await self._get_pool()
+                        async with pool.acquire() as conn:
+                            await conn.execute(
+                                """
+                                INSERT INTO storage_json (partner_id, filename, payload)
+                                VALUES ($1, $2, $3::jsonb)
+                                ON CONFLICT (partner_id, filename)
+                                DO UPDATE SET payload = EXCLUDED.payload, updated_at = now()
+                                """,
+                                self.partner_id,
+                                backup_filename,
+                                json.dumps(current_data),
+                            )
+                        logger.info(
+                            "AUTO_BACKUP_SAVED file=%s backup=%s keys=%d partner_id=%s",
+                            filename, backup_filename, current_keys_count, self.partner_id
                         )
-                    logger.info(
-                        "AUTO_BACKUP_SAVED file=%s backup=%s keys=%d partner_id=%s",
-                        filename, backup_filename, current_keys_count, self.partner_id
-                    )
-                except Exception as backup_exc:
-                    logger.warning("AUTO_BACKUP_FAILED file=%s error=%s", filename, backup_exc)
+                        backup_saved = True
+                        break
+                    except (asyncpg.InterfaceError, asyncpg.ConnectionDoesNotExistError) as backup_exc:
+                        if backup_attempt < 2:
+                            self._invalidate_pool()
+                            await asyncio.sleep(0.1 * (backup_attempt + 1))
+                            continue
+                        logger.warning("AUTO_BACKUP_FAILED file=%s error=%s", filename, backup_exc)
+                    except Exception as backup_exc:
+                        logger.warning("AUTO_BACKUP_FAILED file=%s error=%s", filename, backup_exc)
+                        break
             
             # BLOCK 1: Never overwrite non-empty data with empty data
             if current_keys_count > 0 and new_keys_count == 0:
@@ -484,25 +517,37 @@ class PostgresStorage(BaseStorage):
                 filename, current_keys_count, new_keys_count, self.partner_id
             )
         
-        pool = await self._get_pool()
-        try:
-            async with pool.acquire() as conn:
-                # Use proper JSON serialization - empty dict is still valid JSON
-                payload_json = json.dumps(clean_data) if isinstance(clean_data, dict) else "{}"
-                await conn.execute(
-                    """
-                    INSERT INTO storage_json (partner_id, filename, payload)
-                    VALUES ($1, $2, $3::jsonb)
-                    ON CONFLICT (partner_id, filename)
-                    DO UPDATE SET payload = EXCLUDED.payload, updated_at = now()
-                    """,
-                    self.partner_id,
-                    filename,
-                    payload_json,
-                )
-        except Exception as exc:
-            self._maybe_open_circuit(exc, context="save_json")
-            raise
+        # Retry logic for transient connection errors
+        max_retries = 2
+        payload_json = json.dumps(clean_data) if isinstance(clean_data, dict) else "{}"
+        for attempt in range(max_retries + 1):
+            pool = await self._get_pool()
+            try:
+                async with pool.acquire() as conn:
+                    await conn.execute(
+                        """
+                        INSERT INTO storage_json (partner_id, filename, payload)
+                        VALUES ($1, $2, $3::jsonb)
+                        ON CONFLICT (partner_id, filename)
+                        DO UPDATE SET payload = EXCLUDED.payload, updated_at = now()
+                        """,
+                        self.partner_id,
+                        filename,
+                        payload_json,
+                    )
+                    return  # Success - exit
+            except (asyncpg.InterfaceError, asyncpg.ConnectionDoesNotExistError) as exc:
+                if attempt < max_retries:
+                    logger.warning("[STORAGE] transient_error retry=%d/%d error=%s context=save_json", attempt + 1, max_retries, type(exc).__name__)
+                    self._invalidate_pool()
+                    await asyncio.sleep(0.1 * (attempt + 1))
+                    continue
+                else:
+                    self._maybe_open_circuit(exc, context="save_json")
+                    raise
+            except Exception as exc:
+                self._maybe_open_circuit(exc, context="save_json")
+                raise
 
     async def _save_json(self, filename: str, data: Dict[str, Any]) -> None:
         lock = self._get_file_lock(filename)
