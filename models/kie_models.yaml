@@ -1800,6 +1800,15 @@ models:
           - '3:4'
           - '9:16'
         default: '16:9'
+      quality:
+        type: enum
+        required: false
+        values:
+          - Pro
+          - Max
+          - pro
+          - max
+        default: Pro
       model:
         type: enum
         required: false
@@ -2028,6 +2037,11 @@ models:
       instrumental:
         type: boolean
         required: false
+      action:
+        type: enum
+        required: false
+        values:
+          - lyrics
       model:
         type: enum
         required: false

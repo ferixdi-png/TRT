@@ -473,7 +473,17 @@ async def _storage_rw_smoke(
                 await asyncio.sleep(0.05)
         return False, last_error, last_error_meta
 
-    rw_ok, primary_error, primary_error_meta = await _attempt_rw(diagnostic_storage)
+    try:
+        rw_ok, primary_error, primary_error_meta = await _attempt_rw(diagnostic_storage)
+    finally:
+        # Close diagnostic storage pool to avoid leaking connections and
+        # "Future attached to a different loop" errors on subsequent operations
+        if diagnostic_storage is not storage and hasattr(diagnostic_storage, "_pool") and diagnostic_storage._pool is not None:
+            try:
+                await asyncio.wait_for(diagnostic_storage._pool.close(), timeout=3.0)
+            except Exception:
+                pass
+            diagnostic_storage._pool = None
 
     delete_ok = False
     partner_for_delete = getattr(diagnostic_storage, "partner_id", "diagnostics")
