@@ -287,38 +287,55 @@ class PostgresStorage(BaseStorage):
         return lock
 
     async def _ensure_pool(self) -> asyncpg.Pool:
-        """Get or create the connection pool with lazy initialization."""
+        """Get or create the connection pool with lazy initialization.
+
+        When called from a thread's temporary event loop (e.g. _run_storage_coro_sync
+        uses asyncio.run() in a thread), we must NOT replace self._pool — that would
+        destroy the main loop's pool.  Instead, create a lightweight throwaway pool
+        stored in self._pools[loop_id].  The main pool is ONLY set from the main loop.
+        """
         if self._is_circuit_open():
             raise RuntimeError(f"PostgresStorage circuit open: {self._circuit_open_reason or 'unknown'}")
-        
-        if self._pool is not None:
-            # Guard against pool created on a different event loop
-            # (happens when _run_storage_coro_sync uses asyncio.run() in a thread)
-            current_loop_id = id(asyncio.get_running_loop())
-            if self._pool_loop_id is not None and self._pool_loop_id != current_loop_id:
-                logger.info(
-                    "[STORAGE] pool_loop_mismatch=true old_loop=%s current_loop=%s — orphaning stale pool",
-                    self._pool_loop_id, current_loop_id,
+
+        current_loop_id = id(asyncio.get_running_loop())
+
+        # ── Fast path: main pool exists and matches current loop ──
+        if self._pool is not None and self._pool_loop_id == current_loop_id:
+            return self._pool
+
+        # ── Main pool exists but on a DIFFERENT loop (we're in a thread) ──
+        if self._pool is not None and self._pool_loop_id is not None and self._pool_loop_id != current_loop_id:
+            # Return existing throwaway pool for this loop if we have one
+            existing = self._pools.get(current_loop_id)
+            if existing is not None:
+                return existing
+            # Create a lightweight throwaway pool for this thread's loop.
+            # min_size=0 avoids keeping warm connections on a dying loop.
+            try:
+                tmp_pool = await asyncpg.create_pool(
+                    dsn=self.dsn,
+                    min_size=0,
+                    max_size=2,
+                    init=self._init_conn,
+                    command_timeout=self._command_timeout,
+                    max_inactive_connection_lifetime=10,
                 )
-                # Don't terminate() — it kills in-flight operations with InterfaceError.
-                # Just orphan the old pool and let Python GC clean it up.
-                self._pool = None
-                self._pool_loop_id = None
-                self._schema_ready = False
-            else:
-                return self._pool
-        
+                self._pools[current_loop_id] = tmp_pool
+                logger.debug(
+                    "[STORAGE] thread_pool_created=true loop=%s (main_loop=%s)",
+                    current_loop_id, self._pool_loop_id,
+                )
+                return tmp_pool
+            except Exception as exc:
+                logger.warning("[STORAGE] thread_pool_create_fail=%s", exc)
+                raise
+
+        # ── No main pool yet (first boot or after recreation) ──
         async with self._get_pool_lock():
-            # Double-check after acquiring lock (with same loop guard)
-            if self._pool is not None:
-                current_loop_id = id(asyncio.get_running_loop())
-                if self._pool_loop_id is None or self._pool_loop_id == current_loop_id:
-                    return self._pool
-                # Don't terminate() — just orphan
-                self._pool = None
-                self._pool_loop_id = None
-                self._schema_ready = False
-            
+            # Double-check after acquiring lock
+            if self._pool is not None and self._pool_loop_id == current_loop_id:
+                return self._pool
+
             self._pool = await asyncpg.create_pool(
                 dsn=self.dsn,
                 min_size=self._min_pool_size,
@@ -327,7 +344,7 @@ class PostgresStorage(BaseStorage):
                 command_timeout=self._command_timeout,
                 max_inactive_connection_lifetime=self._max_inactive_lifetime,
             )
-            self._pool_loop_id = id(asyncio.get_running_loop())
+            self._pool_loop_id = current_loop_id
             self._reset_circuit()
             logger.info(
                 "[STORAGE] pool_created=true min=%d max=%d timeout=%ds inactive_lifetime=%ds",
