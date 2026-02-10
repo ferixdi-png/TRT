@@ -2620,6 +2620,14 @@
                 
                 <form id="genForm" onsubmit="submitGenerationWithSchema(event, '${modelId}')">
                     ${fieldsHTML}
+                    
+                    <div style="margin: 16px 0; padding: 12px; background: rgba(100,100,255,0.08); border-radius: 10px; font-size: 12px; color: var(--tg-theme-hint-color);">
+                        💡 <b>Советы:</b><br>
+                        • Пишите промпт на английском для лучшего результата<br>
+                        • Чем детальнее описание — тем точнее результат<br>
+                        • Генерация занимает от 10 сек до 5 мин
+                    </div>
+                    
                     <button type="submit" class="btn" id="submitBtn">
                         ✨ Сгенерировать за ${(modelInfo.price || 0).toFixed(2)} ₽
                     </button>
@@ -2978,8 +2986,12 @@
                     📥 Скачать
                 </button>
                 <button class="btn btn-secondary" onclick="goHome()">
-                    🏠 На главную
+                    🏠 Новая генерация
                 </button>
+                
+                <div style="margin-top: 16px; padding: 12px; background: rgba(100,200,100,0.1); border-radius: 10px; font-size: 12px; color: var(--tg-theme-hint-color);">
+                    💡 <b>Совет:</b> Результат сохранён в разделе <b>История</b> — можете скачать позже
+                </div>
             `;
         }
         
@@ -2996,6 +3008,13 @@
                     <div class="error-icon">😔</div>
                     <div class="error-title">Генерация не удалась</div>
                     <div class="error-text">${errorMsg}</div>
+                </div>
+                
+                <div style="margin: 16px 0; padding: 12px; background: rgba(255,200,100,0.1); border-radius: 10px; font-size: 12px; color: var(--tg-theme-hint-color);">
+                    💡 <b>Что можно сделать:</b><br>
+                    • Попробуйте другую формулировку промпта<br>
+                    • Проверьте качество загруженного изображения<br>
+                    • Попробуйте другую модель
                 </div>
                 
                 <button class="btn" onclick="goBack()">
@@ -3069,6 +3088,10 @@
                         </div>
                     </div>
                 `}).join('')}
+                
+                <div style="margin-top: 16px; padding: 12px; background: rgba(100,100,255,0.08); border-radius: 10px; font-size: 12px; color: var(--tg-theme-hint-color);">
+                    💡 Нажмите на готовый результат чтобы скачать. Результаты хранятся 7 дней.
+                </div>
             `;
         }
         
