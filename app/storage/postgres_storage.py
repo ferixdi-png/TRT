@@ -262,18 +262,15 @@ class PostgresStorage(BaseStorage):
         self._consecutive_failures = 0
 
     def _invalidate_pool(self) -> None:
-        """Invalidate current pool to force reconnection."""
+        """Mark pool for recreation on next use. Do NOT close synchronously - causes race conditions."""
         loop = asyncio.get_running_loop()
         loop_id = id(loop)
         if loop_id in self._pools:
-            old_pool = self._pools.pop(loop_id, None)
-            if old_pool:
-                try:
-                    asyncio.create_task(old_pool.close())
-                except Exception:
-                    pass
+            # Do NOT close pool here - just remove reference so new one is created
+            # Closing causes ConnectionDoesNotExistError for in-flight requests
+            self._pools.pop(loop_id, None)
             self._schema_ready_loops.discard(loop_id)
-            logger.info("[STORAGE] pool_invalidated=true loop_id=%s", loop_id)
+            logger.info("[STORAGE] pool_invalidated=true loop_id=%s (will recreate on next use)", loop_id)
 
     def _maybe_open_circuit(self, exc: Exception, *, context: str) -> None:
         if isinstance(
