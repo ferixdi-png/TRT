@@ -187,6 +187,23 @@ def test_parse_chat_username_empty():
     assert _parse_chat_username("  ") == ""
 
 
+# ── ApplicationHandlerStop propagation (root cause of menu in chat) ────
+
+@pytest.mark.asyncio
+async def test_safe_handler_does_not_swallow_handler_stop():
+    """safe_handler wrapper must re-raise ApplicationHandlerStop, not swallow it."""
+    from telegram.ext import ApplicationHandlerStop
+    from app.observability.safe_handler import _safe_callback
+
+    async def _raises_stop(update, context):
+        raise ApplicationHandlerStop
+
+    wrapped = _safe_callback("test_handler", _raises_stop)
+
+    with pytest.raises(ApplicationHandlerStop):
+        await wrapped(None, None)
+
+
 # ── No interference with main bot ────────────────────────────────────────
 
 def test_main_bot_not_affected():

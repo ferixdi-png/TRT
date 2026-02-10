@@ -32,7 +32,7 @@ def _safe_callback(
         try:
             return await callback(update, context)
         except ApplicationHandlerStop:
-            return None
+            raise
         except Exception as exc:
             correlation_id = ensure_correlation_id(update, context)
             user_id = update.effective_user.id if isinstance(update, Update) and update.effective_user else None
