@@ -419,6 +419,11 @@ def build_webhook_handler(
     ) -> None:
         # Yield immediately to let webhook ACK return first
         await asyncio.sleep(0)
+        # ========== CRITICAL: LOG EVERY INCOMING UPDATE ==========
+        logger.info(
+            "📥 WEBHOOK_RAW_IN correlation_id=%s bytes=%s ip=%s route=%s",
+            correlation_id, len(raw_body) if raw_body else 0, client_ip, route
+        )
         process_started = time.monotonic()
         update_id: Optional[int] = None
         payload: Optional[dict] = None
@@ -494,6 +499,13 @@ def build_webhook_handler(
 
         update = Update.de_json(payload, application.bot)
         update_id = getattr(update, "update_id", None)
+        # ========== CRITICAL: LOG PARSED UPDATE ==========
+        user_id = update.effective_user.id if update.effective_user else None
+        update_type = _resolve_update_type(update)
+        logger.info(
+            "📨 WEBHOOK_PARSED update_id=%s user_id=%s type=%s correlation_id=%s",
+            update_id, user_id, update_type, correlation_id
+        )
         if _is_duplicate(update_id):
             increment_update_metric("webhook_update_in")
             log_structured_event(
@@ -625,10 +637,13 @@ def build_webhook_handler(
             )
 
     async def _handler(request: web.Request) -> web.StreamResponse:
+        # ========== ULTRA-CRITICAL: FIRST LINE LOG ==========
+        logger.info("🚨 WEBHOOK_HTTP_IN method=%s path=%s", request.method, request.path)
         global _early_update_count
         handler_start = time.monotonic()
         correlation_id = _resolve_correlation_id(request)
         client_ip = _resolve_client_ip(request)
+        logger.info("🚨 WEBHOOK_HTTP_PARSED correlation_id=%s ip=%s", correlation_id, client_ip)
         update_id: Optional[int] = None
         request_id = request.headers.get("X-Request-ID") or request.headers.get("X-Correlation-ID")
         ack_deadline_ms = ack_max_ms
