@@ -152,6 +152,38 @@ class TestHealthHandler:
                     assert isinstance(response, web.Response)
                     assert response.status in (200, 503)  # OK or Service Unavailable
 
+    @pytest.mark.asyncio
+    async def test_health_handler_ok_true_with_redis_warning(self):
+        """Redis warning (not set) must NOT cause ok:false or 503."""
+        from aiohttp import web
+        import json
+        mock_request = MagicMock()
+        
+        with patch('app.utils.healthcheck.check_database_health', return_value={"status": "healthy", "message": "OK"}):
+            with patch('app.utils.healthcheck.check_redis_health', return_value={"status": "warning", "message": "REDIS_URL not set"}):
+                with patch('app.utils.healthcheck.check_kie_api_health', return_value={"status": "healthy", "message": "OK"}):
+                    response = await health_handler(mock_request)
+                    assert response.status == 200
+                    body = json.loads(response.text)
+                    assert body["ok"] is True
+                    assert body["status"] == "ok_with_warnings"
+
+    @pytest.mark.asyncio
+    async def test_health_handler_503_only_on_error(self):
+        """Only actual errors (e.g. DB down) should cause ok:false + 503."""
+        from aiohttp import web
+        import json
+        mock_request = MagicMock()
+        
+        with patch('app.utils.healthcheck.check_database_health', return_value={"status": "error", "message": "DB down"}):
+            with patch('app.utils.healthcheck.check_redis_health', return_value={"status": "warning", "message": "REDIS_URL not set"}):
+                with patch('app.utils.healthcheck.check_kie_api_health', return_value={"status": "healthy", "message": "OK"}):
+                    response = await health_handler(mock_request)
+                    assert response.status == 503
+                    body = json.loads(response.text)
+                    assert body["ok"] is False
+                    assert body["status"] == "error"
+
 
 class TestHealthStatus:
     """Тесты статуса healthcheck."""

@@ -138,17 +138,27 @@ async def health_handler(request):
         health_checks["error"] = str(e)
     
     # Определяем общий статус
-    overall_status = "ok"
+    # Только "error" делает ok=false/503. "warning" информационный (Redis опционален).
+    has_error = False
+    has_warning = False
     for check_name, check_result in health_checks.items():
-        if check_result.get("status") == "error":
-            overall_status = "error"
+        st = check_result.get("status")
+        if st == "error":
+            has_error = True
             break
-        elif check_result.get("status") == "warning":
-            overall_status = "warning"
+        elif st == "warning":
+            has_warning = True
+
+    if has_error:
+        overall_status = "error"
+    elif has_warning:
+        overall_status = "ok_with_warnings"
+    else:
+        overall_status = "ok"
     
     # Формируем JSON ответ
     response_data = {
-        "ok": overall_status == "ok",
+        "ok": not has_error,
         "status": overall_status,
         "uptime": uptime,
         "storage": storage_mode,
@@ -166,7 +176,8 @@ async def health_handler(request):
         response_data["instance"] = os.getenv("BOT_INSTANCE_ID", "")
     
     # Возвращаем соответствующий HTTP статус
-    status_code = 200 if overall_status == "ok" else 503
+    # 503 только при реальных ошибках (error), не при warnings
+    status_code = 200 if not has_error else 503
     
     return web.Response(
         text=json.dumps(response_data),
