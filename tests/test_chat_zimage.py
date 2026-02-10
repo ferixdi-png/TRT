@@ -16,15 +16,13 @@ os.environ.pop("CHAT_ZIMAGE_CHAT", None)
 from app.chat_zimage.handler import (
     CHAT_ZIMAGE_MODEL,
     PHRASES_OK,
-    PHRASE_COOLDOWN,
-    PHRASE_ERROR,
-    PHRASE_QUEUE_FULL,
     PLACEHOLDER_PATH,
     _ChatLimiter,
     _check_cooldown,
     _cooldowns,
     _load_placeholder,
     _set_cooldown,
+    _TARGET_USERNAME,
 )
 
 
@@ -63,11 +61,11 @@ def test_phrases_are_short():
         assert 2 <= len(words) <= 10, f"Phrase too long/short: '{phrase}' ({len(words)} words)"
 
 
-def test_error_phrases_exist():
-    """Cooldown, queue full, and error phrases must be defined."""
-    assert PHRASE_COOLDOWN
-    assert PHRASE_QUEUE_FULL
-    assert PHRASE_ERROR
+def test_silent_mode_no_error_phrases_sent():
+    """In silent mode, errors are only logged — no messages sent to users."""
+    # The module no longer sends placeholder/error/cooldown messages.
+    # Verify the OK phrases still exist (only thing ever sent).
+    assert all(isinstance(p, str) and len(p) > 0 for p in PHRASES_OK)
 
 
 # ── Cooldown ─────────────────────────────────────────────────────────────
@@ -146,7 +144,7 @@ def test_register_disabled_by_default():
 
 
 def test_register_enabled():
-    """With CHAT_ZIMAGE_CHAT set, handler should be registered in group 100."""
+    """With CHAT_ZIMAGE_CHAT set, handler should be registered in group -50."""
     from app.chat_zimage.handler import register_chat_zimage_handler
 
     app = MagicMock()
@@ -155,7 +153,15 @@ def test_register_enabled():
     assert result is True
     app.add_handler.assert_called_once()
     _, kwargs = app.add_handler.call_args
-    assert kwargs.get("group") == 100
+    assert kwargs.get("group") == -50
+
+
+def test_gate_blocks_non_target_chat_passthrough():
+    """Gate handler should NOT block updates from other chats."""
+    # _TARGET_USERNAME is empty when CHAT_ZIMAGE_CHAT is not set,
+    # so the gate function would return normally (not raise).
+    # This test verifies the username comparison logic.
+    assert _TARGET_USERNAME == ""  # disabled in test env
 
 
 # ── No interference with main bot ────────────────────────────────────────

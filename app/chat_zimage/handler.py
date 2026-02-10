@@ -1,15 +1,24 @@
 """Chat Z-Image handler — isolated module for public chat auto-generation.
 
-Every text message in the target chat triggers a Z-Image generation.
-Response is always: image + short charismatic phrase (or placeholder on error).
+GATE architecture:
+  A single TypeHandler (group=-50) intercepts ALL updates from the target
+  chat BEFORE any main-bot handler runs.  For every update from that chat
+  it raises ApplicationHandlerStop, so the main bot never sees anything
+  from the chat — no menus, no buttons, no fallback text.
+
+  Only valid text messages (non-empty, non-command) trigger a Z-Image
+  generation which runs as a background task (no webhook stall).
+  On success the bot silently replies with the photo.
+  On any failure — cooldown, queue full, generation error — the bot
+  stays completely silent (details only in logs).
 
 Config via env vars:
-  CHAT_ZIMAGE_CHAT          — @username of the target chat (required to enable)
-  CHAT_ZIMAGE_COOLDOWN      — per-user cooldown in seconds (default 300)
+  CHAT_ZIMAGE_CHAT            — @username of the target chat (required)
+  CHAT_ZIMAGE_COOLDOWN        — per-user cooldown seconds (default 300)
   CHAT_ZIMAGE_MAX_CONCURRENCY — max parallel generations (default 1)
-  CHAT_ZIMAGE_MAX_QUEUE     — max queued requests (default 20)
-  CHAT_ZIMAGE_ASPECT_RATIO  — default aspect ratio (default 1:1)
-  CHAT_ZIMAGE_TIMEOUT       — generation timeout in seconds (default 120)
+  CHAT_ZIMAGE_MAX_QUEUE       — max queued requests (default 20)
+  CHAT_ZIMAGE_ASPECT_RATIO    — default aspect ratio (default 1:1)
+  CHAT_ZIMAGE_TIMEOUT         — generation timeout seconds (default 120)
 """
 
 from __future__ import annotations
@@ -22,12 +31,11 @@ import random
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 import aiohttp
 from telegram import Update
-from telegram.constants import ChatAction
-from telegram.ext import ContextTypes, MessageHandler, filters
+from telegram.ext import ApplicationHandlerStop, ContextTypes, TypeHandler
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +44,7 @@ logger = logging.getLogger(__name__)
 # ═══════════════════════════════════════════════════════════════════════
 
 CHAT_ZIMAGE_CHAT: str = os.getenv("CHAT_ZIMAGE_CHAT", "").strip()
+_TARGET_USERNAME: str = CHAT_ZIMAGE_CHAT.lstrip("@").lower() if CHAT_ZIMAGE_CHAT else ""
 CHAT_ZIMAGE_MODEL: str = "z-image"
 CHAT_ZIMAGE_COOLDOWN: int = int(os.getenv("CHAT_ZIMAGE_COOLDOWN", "300"))
 CHAT_ZIMAGE_MAX_CONCURRENCY: int = int(os.getenv("CHAT_ZIMAGE_MAX_CONCURRENCY", "1"))
@@ -44,7 +53,7 @@ CHAT_ZIMAGE_ASPECT_RATIO: str = os.getenv("CHAT_ZIMAGE_ASPECT_RATIO", "1:1")
 CHAT_ZIMAGE_TIMEOUT: int = int(os.getenv("CHAT_ZIMAGE_TIMEOUT", "120"))
 
 # ═══════════════════════════════════════════════════════════════════════
-# PHRASES
+# PHRASES (only used on successful generation)
 # ═══════════════════════════════════════════════════════════════════════
 
 PHRASES_OK: List[str] = [
@@ -58,12 +67,8 @@ PHRASES_OK: List[str] = [
     "Красиво вышло, держи",
 ]
 
-PHRASE_COOLDOWN: str = "Кулдаун, вернусь позже"
-PHRASE_QUEUE_FULL: str = "Очередь занята, повтори позже"
-PHRASE_ERROR: str = "Глюкнуло, повтори"
-
 # ═══════════════════════════════════════════════════════════════════════
-# PLACEHOLDER IMAGE
+# PLACEHOLDER (kept for tests, not sent to users)
 # ═══════════════════════════════════════════════════════════════════════
 
 PLACEHOLDER_PATH: Path = Path(__file__).parent / "placeholder.png"
@@ -143,18 +148,10 @@ def _get_limiter() -> _ChatLimiter:
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# HELPER: send placeholder reply
+# BACKGROUND TASK REGISTRY (prevent GC)
 # ═══════════════════════════════════════════════════════════════════════
 
-async def _send_placeholder(message: Any, text: str) -> None:
-    """Send placeholder image with short text as reply-to-message."""
-    try:
-        data = _load_placeholder()
-        photo = io.BytesIO(data)
-        photo.name = "placeholder.png"
-        await message.reply_photo(photo=photo, caption=text)
-    except Exception as exc:
-        logger.error("CHAT_ZIMAGE_PLACEHOLDER_FAIL error=%s", exc)
+_background_tasks: Set[asyncio.Task] = set()
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -228,68 +225,24 @@ async def _run_zimage(user_id: int, prompt: str) -> Any:
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# MAIN HANDLER
+# BACKGROUND GENERATION TASK
 # ═══════════════════════════════════════════════════════════════════════
 
-async def _handle_chat_zimage(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
+async def _background_generate(
+    message: Any,
+    user_id: int,
+    prompt: str,
+    limiter: _ChatLimiter,
 ) -> None:
-    """Handle a text message in the target public chat."""
-    message = update.effective_message
-    if not message or not message.text:
-        return
-
-    user = update.effective_user
-    user_id = user.id if user else 0
-    chat = update.effective_chat
-    prompt = message.text.strip()
-
-    if not prompt:
-        return
-
-    logger.info(
-        "CHAT_ZIMAGE_MSG user_id=%s chat_id=%s prompt_len=%d",
-        user_id, chat.id if chat else 0, len(prompt),
-    )
-
-    # ── Cooldown check ──────────────────────────────────────────────
-    remaining = _check_cooldown(user_id)
-    if remaining is not None:
-        logger.info(
-            "CHAT_ZIMAGE_COOLDOWN user_id=%s remaining_s=%.0f", user_id, remaining
-        )
-        await _send_placeholder(message, PHRASE_COOLDOWN)
-        return
-
-    # ── Queue check ─────────────────────────────────────────────────
-    limiter = _get_limiter()
-    if not limiter.try_enter():
-        logger.info("CHAT_ZIMAGE_QUEUE_FULL user_id=%s in_flight=%d", user_id, limiter._in_flight)
-        await _send_placeholder(message, PHRASE_QUEUE_FULL)
-        return
-
+    """Background task: wait for slot → generate → send photo silently."""
     try:
-        # Set cooldown immediately to prevent spam during generation
-        _set_cooldown(user_id)
-
-        # Wait for a concurrency slot
         await limiter.wait_for_slot()
     except Exception:
         limiter.leave_queue()
-        await _send_placeholder(message, PHRASE_ERROR)
+        logger.warning("CHAT_ZIMAGE_SLOT_FAIL user_id=%s", user_id)
         return
 
     try:
-        # Show typing indicator
-        if chat:
-            try:
-                await context.bot.send_chat_action(
-                    chat_id=chat.id, action=ChatAction.UPLOAD_PHOTO
-                )
-            except Exception:
-                pass
-
-        # Run generation
         result = await _run_zimage(user_id, prompt)
 
         if result and result.urls:
@@ -305,20 +258,86 @@ async def _handle_chat_zimage(
                 )
                 return
 
-        # No result or download failed
         logger.warning("CHAT_ZIMAGE_NO_RESULT user_id=%s", user_id)
-        await _send_placeholder(message, PHRASE_ERROR)
 
     except asyncio.CancelledError:
         raise
     except Exception as exc:
         logger.error(
             "CHAT_ZIMAGE_ERROR user_id=%s error=%s",
-            user_id, str(exc)[:200], exc_info=True,
+            user_id, str(exc)[:200],
         )
-        await _send_placeholder(message, PHRASE_ERROR)
     finally:
         limiter.release()
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# GATE HANDLER — intercepts ALL updates from the target chat
+# ═══════════════════════════════════════════════════════════════════════
+
+async def _chat_zimage_gate(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Gate for the target chat.
+
+    - Runs in group=-50 (before main bot handlers, after audit/logging).
+    - For ANY update from the target chat: raises ApplicationHandlerStop
+      so the main bot never sees it (no menus, no buttons, no fallback).
+    - For valid text messages: spawns a background generation task.
+    - For everything else (callbacks, commands, media): silently drops.
+    - Updates from OTHER chats pass through untouched (return normally).
+    """
+    chat = update.effective_chat
+    if not chat:
+        return  # not a chat update — pass through to main handlers
+
+    chat_username = (chat.username or "").lower()
+    if chat_username != _TARGET_USERNAME:
+        return  # not the target chat — pass through
+
+    # ═══ This IS the target chat — block ALL main handlers ═══
+
+    message = update.effective_message
+    if message and message.text and not message.text.startswith("/"):
+        prompt = message.text.strip()
+        user = update.effective_user
+        user_id = user.id if user else 0
+
+        if prompt and user_id:
+            # Cooldown — silent skip
+            remaining = _check_cooldown(user_id)
+            if remaining is not None:
+                logger.info(
+                    "CHAT_ZIMAGE_COOLDOWN user_id=%s remaining_s=%.0f",
+                    user_id, remaining,
+                )
+            else:
+                # Queue — silent skip if full
+                limiter = _get_limiter()
+                if not limiter.try_enter():
+                    logger.info(
+                        "CHAT_ZIMAGE_QUEUE_FULL user_id=%s in_flight=%d",
+                        user_id, limiter._in_flight,
+                    )
+                else:
+                    # Set cooldown immediately
+                    _set_cooldown(user_id)
+
+                    # Launch background task (no webhook stall)
+                    task = asyncio.create_task(
+                        _background_generate(message, user_id, prompt, limiter),
+                        name=f"chat_zimg_{user_id}_{uuid.uuid4().hex[:6]}",
+                    )
+                    _background_tasks.add(task)
+                    task.add_done_callback(_background_tasks.discard)
+
+                    logger.info(
+                        "CHAT_ZIMAGE_QUEUED user_id=%s chat_id=%s prompt_len=%d tasks=%d",
+                        user_id, chat.id, len(prompt), len(_background_tasks),
+                    )
+
+    # Block ALL further handler processing for this chat
+    raise ApplicationHandlerStop
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -326,7 +345,10 @@ async def _handle_chat_zimage(
 # ═══════════════════════════════════════════════════════════════════════
 
 def register_chat_zimage_handler(application: Any) -> bool:
-    """Register the chat Z-Image handler if CHAT_ZIMAGE_CHAT is set.
+    """Register the chat Z-Image gate handler if CHAT_ZIMAGE_CHAT is set.
+
+    Uses TypeHandler in group=-50 to intercept ALL update types from the
+    target chat before any main-bot handler runs.
 
     Returns True if registered, False if disabled.
     """
@@ -334,21 +356,14 @@ def register_chat_zimage_handler(application: Any) -> bool:
         logger.debug("CHAT_ZIMAGE_DISABLED env CHAT_ZIMAGE_CHAT not set")
         return False
 
-    username = CHAT_ZIMAGE_CHAT.lstrip("@")
-    chat_filter = filters.Chat(username=username)
-    text_filter = filters.TEXT & ~filters.COMMAND
+    handler = TypeHandler(Update, _chat_zimage_gate)
 
-    handler = MessageHandler(
-        chat_filter & text_filter,
-        _handle_chat_zimage,
-    )
-
-    # Group 100 — isolated from main bot handlers (groups 0-10)
-    application.add_handler(handler, group=100)
+    # group=-50: after audit/logging (-100, -99) but before main handlers (0+)
+    application.add_handler(handler, group=-50)
 
     logger.info(
         "CHAT_ZIMAGE_REGISTERED chat=%s model=%s cooldown=%ds "
-        "concurrency=%d queue=%d aspect=%s timeout=%ds",
+        "concurrency=%d queue=%d aspect=%s timeout=%ds group=-50",
         CHAT_ZIMAGE_CHAT,
         CHAT_ZIMAGE_MODEL,
         CHAT_ZIMAGE_COOLDOWN,
