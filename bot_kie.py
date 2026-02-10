@@ -2640,19 +2640,26 @@ def _build_param_order(input_params: Dict[str, Any]) -> List[str]:
         if media_kind:
             target = media_params if is_required else optional_params
             target.append(param_name)
+            logger.info("PARAM_ORDER_DEBUG param=%s media_kind=%s is_required=%s -> media_params", param_name, media_kind, is_required)
             continue
 
         if param_name in {"prompt", "text"}:
             target = text_params if is_required else optional_params
             target.append(param_name)
+            logger.info("PARAM_ORDER_DEBUG param=%s is_text=true is_required=%s -> text_params", param_name, is_required)
             continue
 
         if is_required:
             required_params.append(param_name)
+            logger.info("PARAM_ORDER_DEBUG param=%s is_required=%s -> required_params", param_name, is_required)
         else:
             optional_params.append(param_name)
+            logger.info("PARAM_ORDER_DEBUG param=%s is_required=%s -> optional_params", param_name, is_required)
 
-    return media_params + text_params + required_params + optional_params
+    result = media_params + text_params + required_params + optional_params
+    logger.info("PARAM_ORDER_RESULT media=%s text=%s required=%s optional=%s final_order=%s", 
+                media_params, text_params, required_params, optional_params, result)
+    return result
 
 
 def _enum_values(param_info: Dict[str, Any]) -> List[Any]:
