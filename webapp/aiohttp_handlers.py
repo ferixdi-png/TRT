@@ -599,36 +599,49 @@ async def webapp_generate(request: web.Request) -> web.Response:
         # Merge prompt into params
         session_params = {**params, "prompt": prompt}
         
-        # Handle image_input from params (frontend sends arrays like ['url'] or ['data:...'])
-        if "image_input" in session_params and isinstance(session_params["image_input"], list):
-            logger.info("WEBAPP_IMAGE_INPUT_FOUND raw_len=%s first_50=%s", 
-                       len(session_params["image_input"]), 
-                       session_params["image_input"][0][:50] if session_params["image_input"] else "empty")
-            # Convert list to single URL or data for processing
-            if session_params["image_input"]:
-                first_url = session_params["image_input"][0]
-                # Already base64 data URL - use as is
-                if first_url.startswith("data:"):
-                    logger.info("WEBAPP_IMAGE_INPUT_DATA_URL len=%s", len(first_url))
-                    # Keep as list with data URL
-                    session_params["image_input"] = [first_url]
-                elif first_url.startswith("/webapp/uploads/"):
-                    fname = first_url.replace("/webapp/uploads/", "")
-                    fpath = WEBAPP_UPLOADS_DIR / fname
-                    logger.info("WEBAPP_IMAGE_INPUT_FILE fname=%s exists=%s", fname, fpath.exists())
-                    if fpath.exists():
-                        media_bytes = fpath.read_bytes()
-                        media_base64 = base64.b64encode(media_bytes).decode()
-                        ext = Path(fname).suffix.lower()
-                        mime_type = CONTENT_TYPE_MAP.get(ext, "image/octet-stream")
-                        session_params["image_input"] = [f"data:{mime_type};base64,{media_base64}"]
-                        logger.info("WEBAPP_IMAGE_INPUT_CONVERTED to_base64=true len=%s", len(session_params["image_input"][0]))
-                    else:
-                        logger.warning("WEBAPP_IMAGE_INPUT_FILE_NOT_FOUND fname=%s", fname)
-                        session_params["image_input"] = [first_url]
+        # Helper to process media array field (converts file URLs to base64 data URLs)
+        def _process_media_array_field(field_name: str, default_mime: str = "application/octet-stream") -> None:
+            if field_name not in session_params:
+                return
+            if not isinstance(session_params[field_name], list):
+                return
+            if not session_params[field_name]:
+                return
+            
+            first_url = session_params[field_name][0]
+            logger.info("WEBAPP_MEDIA_FIELD_%s raw_len=%s first_50=%s", 
+                       field_name.upper(), len(session_params[field_name]), 
+                       first_url[:50] if first_url else "empty")
+            
+            # Already base64 data URL - use as is
+            if first_url.startswith("data:"):
+                logger.info("WEBAPP_MEDIA_FIELD_%s_DATA_URL len=%s", field_name.upper(), len(first_url))
+                session_params[field_name] = [first_url]
+            elif first_url.startswith("/webapp/uploads/"):
+                fname = first_url.replace("/webapp/uploads/", "")
+                fpath = WEBAPP_UPLOADS_DIR / fname
+                logger.info("WEBAPP_MEDIA_FIELD_%s_FILE fname=%s exists=%s", field_name.upper(), fname, fpath.exists())
+                if fpath.exists():
+                    media_bytes = fpath.read_bytes()
+                    media_base64 = base64.b64encode(media_bytes).decode()
+                    ext = Path(fname).suffix.lower()
+                    mime_type = CONTENT_TYPE_MAP.get(ext, default_mime)
+                    session_params[field_name] = [f"data:{mime_type};base64,{media_base64}"]
+                    logger.info("WEBAPP_MEDIA_FIELD_%s_CONVERTED len=%s", field_name.upper(), len(session_params[field_name][0]))
                 else:
-                    session_params["image_input"] = [first_url]
-                    logger.info("WEBAPP_IMAGE_INPUT_EXTERNAL url=%s", first_url[:100] if len(first_url) > 100 else first_url)
+                    logger.warning("WEBAPP_MEDIA_FIELD_%s_FILE_NOT_FOUND fname=%s", field_name.upper(), fname)
+            else:
+                logger.info("WEBAPP_MEDIA_FIELD_%s_EXTERNAL url=%s", field_name.upper(), first_url[:100] if len(first_url) > 100 else first_url)
+        
+        # Process all known media array fields
+        _process_media_array_field("image_input", "image/octet-stream")
+        _process_media_array_field("image_urls", "image/octet-stream")
+        _process_media_array_field("video_input", "video/mp4")
+        _process_media_array_field("video_urls", "video/mp4")
+        _process_media_array_field("audio_input", "audio/mpeg")
+        _process_media_array_field("audio_urls", "audio/mpeg")
+        _process_media_array_field("reference_image_input", "image/octet-stream")
+        _process_media_array_field("source_image", "image/octet-stream")
         
         # Helper to process media URL (image, video, audio)
         def _process_media_url(url: str, param_name: str, mime_prefix: str) -> None:
