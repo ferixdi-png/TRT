@@ -8952,16 +8952,9 @@ async def _send_menu_error_notice(
     *,
     correlation_id: str,
 ) -> None:
-    try:
-        notice_text = f"⚠️ Временный сбой, показываю меню. Лог: {correlation_id}."
-        if update.message:
-            await update.message.reply_text(notice_text)
-        elif update.callback_query and update.callback_query.message:
-            await update.callback_query.message.reply_text(notice_text)
-        elif update.effective_chat:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=notice_text)
-    except Exception:
-        logger.debug("menu error notice failed", exc_info=True)
+    # НЕ показываем пользователю сообщение об ошибке если меню всё равно работает
+    # Это только пугает пользователей. Просто логируем для диагностики.
+    logger.warning("MENU_ERROR_NOTICE correlation_id=%s (suppressed from user)", correlation_id)
 
 
 def _get_release_version() -> str:
@@ -11694,22 +11687,28 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 outcome="degraded",
                 param={"handler": "start", "partner_id": partner_id},
             )
+            # Тихо показываем меню без пугающего сообщения об ошибке
+            # Пользователь не должен видеть "Временный сбой" если меню всё равно работает
             try:
-                fallback_text = f"⚠️ Временный сбой, вернул в меню. Лог: {correlation_id}."
-                if update.message:
-                    await update.message.reply_text(fallback_text)
-                elif update.callback_query and update.callback_query.message:
-                    await update.callback_query.message.reply_text(fallback_text)
-            except Exception:
-                logger.debug("start fallback message failed", exc_info=True)
-            await _show_minimal_menu(
-                update,
-                context,
-                source="/start",
-                correlation_id=correlation_id,
-                prefer_edit=False,
-                include_refresh=_is_storage_degraded(),
-            )
+                await _show_minimal_menu(
+                    update,
+                    context,
+                    source="/start",
+                    correlation_id=correlation_id,
+                    prefer_edit=False,
+                    include_refresh=_is_storage_degraded(),
+                )
+            except Exception as menu_exc:
+                # Только если и fallback меню сломался — показываем ошибку
+                logger.error("❌ START_FALLBACK_MENU_FAILED correlation_id=%s error=%s", correlation_id, menu_exc)
+                try:
+                    fallback_text = f"⚠️ Временный сбой. Попробуйте /start ещё раз."
+                    if update.message:
+                        await update.message.reply_text(fallback_text)
+                    elif update.callback_query and update.callback_query.message:
+                        await update.callback_query.message.reply_text(fallback_text)
+                except Exception:
+                    pass
     except Exception as exc:
         fallback_correlation_id = correlation_id or uuid.uuid4().hex
         logger.error(
@@ -11732,14 +11731,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             action="COMMAND_START",
             action_path="command:/start",
         )
-        try:
-            fallback_text = f"⚠️ Временный сбой, вернул в меню. Лог: {fallback_correlation_id}."
-            if update.message:
-                await update.message.reply_text(fallback_text)
-            elif update.callback_query and update.callback_query.message:
-                await update.callback_query.message.reply_text(fallback_text)
-        except Exception:
-            logger.debug("start fallback message failed", exc_info=True)
+        # Пробуем тихо показать меню
         try:
             await _show_minimal_menu(
                 update,
@@ -11749,8 +11741,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 prefer_edit=False,
                 include_refresh=_is_storage_degraded(),
             )
-        except Exception:
-            logger.debug("start minimal menu fallback failed", exc_info=True)
+        except Exception as final_exc:
+            # Всё сломалось — показываем краткую ошибку
+            logger.error("❌ START_CRITICAL_FAILURE correlation_id=%s error=%s", fallback_correlation_id, final_exc)
+            try:
+                if update.message:
+                    await update.message.reply_text("⚠️ Ошибка. Попробуйте /start ещё раз.")
+                elif update.callback_query and update.callback_query.message:
+                    await update.callback_query.message.reply_text("⚠️ Ошибка. Попробуйте /start ещё раз.")
+            except Exception:
+                pass
     finally:
         increment_update_metric("handler_exit")
         _log_handler_latency("start", start_ts, update)
