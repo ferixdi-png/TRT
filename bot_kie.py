@@ -26275,13 +26275,51 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                                         "Please try again in a few minutes.\n\n"
                                         f"ID: <code>{correlation_id}</code>"
                                     )
-                                else:
+                                elif fail_code in ("CONTENT_POLICY", "NSFW", "MODERATION"):
                                     error_msg = (
-                                        "❌ <b>Сбой генерации</b>\n\n"
-                                        f"<code>{correlation_id}</code>"
+                                        "🚫 <b>Контент отклонён модерацией</b>\n\n"
+                                        "Запрос содержит недопустимый контент.\n"
+                                        "Попробуйте изменить промпт.\n\n"
+                                        f"ID: <code>{correlation_id}</code>"
                                         if user_lang == "ru" else
-                                        "❌ <b>Generation Failed</b>\n\n"
-                                        f"<code>{correlation_id}</code>"
+                                        "🚫 <b>Content rejected by moderation</b>\n\n"
+                                        "Request contains inappropriate content.\n"
+                                        "Try modifying your prompt.\n\n"
+                                        f"ID: <code>{correlation_id}</code>"
+                                    )
+                                elif fail_code in ("TIMEOUT", "QUEUE_TIMEOUT"):
+                                    error_msg = (
+                                        "⏱️ <b>Превышено время ожидания</b>\n\n"
+                                        "Сервис перегружен. Попробуйте позже.\n\n"
+                                        f"ID: <code>{correlation_id}</code>"
+                                        if user_lang == "ru" else
+                                        "⏱️ <b>Request timeout</b>\n\n"
+                                        "Service is overloaded. Try again later.\n\n"
+                                        f"ID: <code>{correlation_id}</code>"
+                                    )
+                                elif fail_code in ("INVALID_INPUT", "BAD_REQUEST"):
+                                    error_msg = (
+                                        "⚠️ <b>Некорректные параметры</b>\n\n"
+                                        "Проверьте введённые данные и попробуйте снова.\n\n"
+                                        f"ID: <code>{correlation_id}</code>"
+                                        if user_lang == "ru" else
+                                        "⚠️ <b>Invalid parameters</b>\n\n"
+                                        "Check your input and try again.\n\n"
+                                        f"ID: <code>{correlation_id}</code>"
+                                    )
+                                else:
+                                    # Показываем fail_msg если есть
+                                    fail_hint = ""
+                                    if fail_msg and len(fail_msg) < 100:
+                                        fail_hint = f"\n\n💡 {fail_msg}"
+                                    error_msg = (
+                                        f"❌ <b>Сбой генерации</b>{fail_hint}\n\n"
+                                        "Попробуйте снова или выберите другую модель.\n\n"
+                                        f"ID: <code>{correlation_id}</code>"
+                                        if user_lang == "ru" else
+                                        f"❌ <b>Generation Failed</b>{fail_hint}\n\n"
+                                        "Try again or choose a different model.\n\n"
+                                        f"ID: <code>{correlation_id}</code>"
                                     )
                                 await bot_instance.send_message(
                                     chat_id=chat_id_value,
@@ -27356,7 +27394,9 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         await send_or_edit_message(
             _append_free_counter_text(
-                f"❌ <b>Сбой генерации</b>\n\n<code>{correlation_id}</code>",
+                f"❌ <b>Сбой генерации</b>\n\n"
+                f"Попробуйте снова или выберите другую модель.\n\n"
+                f"ID: <code>{correlation_id}</code>",
                 free_counter_line,
             ),
             parse_mode='HTML'
