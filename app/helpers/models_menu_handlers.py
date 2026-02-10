@@ -49,7 +49,7 @@ async def handle_show_all_models_list(
         if user_lang == 'ru':
             models_text = (
                 f"╔═══════════════════════════════════════════╗\n"
-                f"║  🤖 ВСЕ МОДЕЛИ KIE AI 🤖                  ║\n"
+                f"║  🤖 ВСЕ НЕЙРОСЕТИ 🤖                      ║\n"
                 f"╚═══════════════════════════════════════════╝\n\n"
                 f"╔═══════════════════════════════════════════╗\n"
                 f"║  📦 ДОСТУПНО: <b>{len(catalog)} МОДЕЛЕЙ</b> 📦        ║\n"
@@ -63,7 +63,7 @@ async def handle_show_all_models_list(
         else:
             models_text = (
                 f"╔═══════════════════════════════════╗\n"
-                f"║  🤖 ALL KIE AI MODELS 🤖          ║\n"
+                f"║  🤖 ALL AI MODELS 🤖              ║\n"
                 f"╚═══════════════════════════════════╝\n\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"📦 <b>Available:</b> <b>{len(catalog)} models</b>\n"
