@@ -2007,38 +2007,6 @@ models:
         type: string
         required: true
     model_mode: audio_to_audio
-  gemini/3-flash:
-    model_type: text_to_chat
-    input:
-      prompt:
-        type: string
-        required: true
-        max: 100000
-    model_mode: text_to_chat
-  gemini/3-pro:
-    model_type: text_to_chat
-    input:
-      prompt:
-        type: string
-        required: true
-        max: 100000
-    model_mode: text_to_chat
-  gemini/2-5-flash:
-    model_type: text_to_chat
-    input:
-      prompt:
-        type: string
-        required: true
-        max: 100000
-    model_mode: text_to_chat
-  gemini/2-5-pro:
-    model_type: text_to_chat
-    input:
-      prompt:
-        type: string
-        required: true
-        max: 100000
-    model_mode: text_to_chat
   suno/v5:
     model_type: text_to_music
     input:
