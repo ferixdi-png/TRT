@@ -1,6 +1,11 @@
 """
 PostgreSQL storage implementation using json payloads per logical file.
 Stores all logical JSON files inside a single table with partner_id + filename keys.
+
+Bulletproof connection pool with self-healing:
+- Health checks on acquire
+- Exponential backoff + jitter for transient errors
+- Automatic pool recreation on stale connections
 """
 from __future__ import annotations
 
@@ -8,11 +13,12 @@ import asyncio
 import json
 import logging
 import os
+import random
 import uuid
 import math
 import time
 from datetime import datetime, date, timezone
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, TypeVar
 
 import asyncpg
 
@@ -21,6 +27,25 @@ from app.observability.trace import get_correlation_id
 from app.observability.structured_logs import log_structured_event
 
 logger = logging.getLogger(__name__)
+
+# Type variable for generic retry return type
+T = TypeVar("T")
+
+# Transient errors that warrant retry with backoff
+# These are connection/timeout issues that may resolve on retry
+TRANSIENT_ERRORS: Tuple[type, ...] = (
+    asyncpg.CannotConnectNowError,
+    asyncpg.TooManyConnectionsError,
+    asyncpg.ConnectionDoesNotExistError,
+    asyncpg.InterfaceError,
+    asyncpg.PostgresConnectionError,
+    ConnectionError,
+    ConnectionRefusedError,
+    ConnectionResetError,
+    TimeoutError,
+    asyncio.TimeoutError,
+    OSError,
+)
 _corr_lock_drop_total = 0
 
 # System garbage keys that should never be stored as user data
@@ -107,32 +132,56 @@ def _filter_garbage_keys_storage(data: dict, filename: str) -> dict:
 
 
 class PostgresStorage(BaseStorage):
-    """PostgreSQL-backed storage that mirrors JsonStorage semantics."""
+    """PostgreSQL-backed storage that mirrors JsonStorage semantics.
+    
+    Bulletproof connection pool with self-healing:
+    - Health checks on connection init and acquire
+    - Exponential backoff + jitter for transient errors
+    - Automatic pool recreation on stale connections
+    - Circuit breaker to prevent cascade failures
+    """
 
-    def __init__(self, dsn: str, partner_id: Optional[str] = None):
+    def __init__(self, dsn: str, partner_id: Optional[str] = None) -> None:
         self.dsn = self._prepare_dsn(dsn)
         self.partner_id = (partner_id or os.getenv("PARTNER_ID") or os.getenv("BOT_INSTANCE_ID") or "").strip()
         if not self.partner_id:
             raise ValueError("BOT_INSTANCE_ID is required for multi-tenant storage")
-        max_pool_env = os.getenv("DB_MAX_CONN")
-        if max_pool_env is None:
-            max_pool_env = os.getenv("DB_MAXCONN", "5")
+        
+        # Pool configuration from ENV
+        max_pool_env = os.getenv("DB_MAX_CONN") or os.getenv("DB_MAXCONN", "10")
         try:
-            self.max_pool_size = max(1, int(max_pool_env))
+            self._max_pool_size = max(2, int(max_pool_env))
         except ValueError:
-            logger.warning("Invalid DB_MAX_CONN=%s, using default 5", max_pool_env)
-            self.max_pool_size = 5
+            logger.warning("Invalid DB_MAX_CONN=%s, using default 10", max_pool_env)
+            self._max_pool_size = 10
+        self._min_pool_size = 2  # Keep warm connections
+        
+        # Timeouts
+        self._command_timeout = int(os.getenv("DB_COMMAND_TIMEOUT", "25"))
+        self._max_inactive_lifetime = int(os.getenv("DB_MAX_INACTIVE_LIFETIME", "90"))
+        
+        # Pool state (per event loop)
+        self._pool: Optional[asyncpg.Pool] = None
+        self._pool_lock = asyncio.Lock()
+        self._schema_ready = False
+        
+        # Legacy compatibility
+        self.max_pool_size = self._max_pool_size
         self._pools: Dict[int, asyncpg.Pool] = {}
         self._schema_ready_loops: set[int] = set()
         self._file_locks: Dict[Tuple[int, str], asyncio.Lock] = {}
+        
+        # Circuit breaker
         self._circuit_open_until = 0.0
-        # Reduced from 20s to 5s for faster recovery
         self._circuit_open_seconds = float(os.getenv("DB_CIRCUIT_OPEN_SECONDS", "5"))
         self._circuit_open_reason: Optional[str] = None
         self._consecutive_failures = 0
         self._max_consecutive_failures = int(os.getenv("DB_CIRCUIT_FAILURE_THRESHOLD", "3"))
-        self._pool_create_retries = int(os.getenv("DB_POOL_CREATE_RETRIES", "3"))
-        self._pool_retry_delay = float(os.getenv("DB_POOL_RETRY_DELAY", "1.0"))
+        
+        # Retry configuration
+        self._retry_base_delay = 0.25
+        self._retry_max_attempts = 4
+        self._retry_jitter = 0.15
 
         # logical filenames (same as JsonStorage/GitHubStorage)
         self.balances_file = "user_balances.json"
@@ -183,50 +232,190 @@ class PostgresStorage(BaseStorage):
             pass
         return dsn
 
-    async def _get_pool(self) -> asyncpg.Pool:
+    async def _init_conn(self, conn: asyncpg.Connection) -> None:
+        """Initialize connection with health check and session settings."""
+        await conn.execute("SELECT 1")
+        # Optional: set session-level timeouts
+        # await conn.execute("SET statement_timeout = '30s'")
+        # await conn.execute("SET idle_in_transaction_session_timeout = '60s'")
+
+    async def _ensure_pool(self) -> asyncpg.Pool:
+        """Get or create the connection pool with lazy initialization."""
         if self._is_circuit_open():
             raise RuntimeError(f"PostgresStorage circuit open: {self._circuit_open_reason or 'unknown'}")
-        loop = asyncio.get_running_loop()
-        loop_id = id(loop)
-        pool = self._pools.get(loop_id)
-        if pool is None:
-            last_exc = None
-            for attempt in range(1, self._pool_create_retries + 1):
+        
+        if self._pool is not None:
+            return self._pool
+        
+        async with self._pool_lock:
+            # Double-check after acquiring lock
+            if self._pool is not None:
+                return self._pool
+            
+            self._pool = await asyncpg.create_pool(
+                dsn=self.dsn,
+                min_size=self._min_pool_size,
+                max_size=self._max_pool_size,
+                init=self._init_conn,
+                command_timeout=self._command_timeout,
+                max_inactive_connection_lifetime=self._max_inactive_lifetime,
+            )
+            self._reset_circuit()
+            logger.info(
+                "[STORAGE] pool_created=true min=%d max=%d timeout=%ds inactive_lifetime=%ds",
+                self._min_pool_size, self._max_pool_size,
+                self._command_timeout, self._max_inactive_lifetime,
+            )
+            
+            # Ensure schema
+            if not self._schema_ready:
+                await self._ensure_schema_new(self._pool)
+                self._schema_ready = True
+            
+            return self._pool
+
+    async def _recreate_pool(self) -> asyncpg.Pool:
+        """Close old pool and create a fresh one."""
+        async with self._pool_lock:
+            old_pool = self._pool
+            self._pool = None
+            self._schema_ready = False
+            
+            if old_pool is not None:
                 try:
-                    async def _init_connection(conn):
-                        # Health check: verify connection is alive
-                        await conn.execute("SELECT 1")
-                    
-                    pool = await asyncpg.create_pool(
-                        self.dsn, 
-                        min_size=2,  # Keep more warm connections
-                        max_size=self.max_pool_size,
-                        command_timeout=60,
-                        timeout=30,
-                        # Health check on each connection init
-                        init=_init_connection,
-                    )
-                    self._pools[loop_id] = pool
-                    # Reset circuit on successful pool creation
-                    self._reset_circuit()
-                    logger.info("[STORAGE] pool_created=true loop_id=%s max_size=%s attempt=%d", loop_id, self.max_pool_size, attempt)
-                    break
-                except Exception as exc:
-                    last_exc = exc
-                    logger.warning("[STORAGE] pool_create_failed attempt=%d/%d error=%s(%s)", 
-                                  attempt, self._pool_create_retries, type(exc).__name__, str(exc)[:100])
-                    if attempt < self._pool_create_retries:
-                        await asyncio.sleep(self._pool_retry_delay * attempt)
-                    else:
-                        self._maybe_open_circuit(exc, context="create_pool")
-                        raise
-        if loop_id not in self._schema_ready_loops:
+                    await asyncio.wait_for(old_pool.close(), timeout=5.0)
+                    logger.info("[STORAGE] old_pool_closed=true")
+                except Exception as e:
+                    logger.warning("[STORAGE] old_pool_close_error=%s", e)
+            
+            return await self._ensure_pool()
+
+    async def _with_retry(
+        self,
+        fn: Callable[[], Awaitable[T]],
+        *,
+        context: str = "db_op",
+    ) -> T:
+        """Execute fn with exponential backoff + jitter for transient errors."""
+        last_exc: Optional[Exception] = None
+        
+        for attempt in range(self._retry_max_attempts):
             try:
-                await self._ensure_schema(pool, loop_id)
-            except Exception as exc:
-                self._maybe_open_circuit(exc, context="ensure_schema")
+                result = await fn()
+                # Success - reset failure counter
+                if self._consecutive_failures > 0:
+                    self._reset_circuit()
+                return result
+            except asyncio.CancelledError:
+                # Never retry on cancellation - propagate immediately
                 raise
-        return pool
+            except TRANSIENT_ERRORS as exc:
+                last_exc = exc
+                self._consecutive_failures += 1
+                
+                if attempt == self._retry_max_attempts - 1:
+                    # Last attempt failed
+                    logger.error(
+                        "[STORAGE] retry_exhausted context=%s attempts=%d error=%s",
+                        context, self._retry_max_attempts, exc,
+                    )
+                    self._maybe_open_circuit(exc, context=context)
+                    raise
+                
+                # Calculate backoff with jitter
+                delay = self._retry_base_delay * (2 ** attempt) + random.random() * self._retry_jitter
+                logger.warning(
+                    "[STORAGE] transient_retry context=%s attempt=%d/%d error=%s delay=%.2fs",
+                    context, attempt + 1, self._retry_max_attempts, type(exc).__name__, delay,
+                )
+                
+                # Recreate pool on connection errors
+                if isinstance(exc, (asyncpg.ConnectionDoesNotExistError, asyncpg.InterfaceError, ConnectionError)):
+                    try:
+                        await self._recreate_pool()
+                    except Exception as recreate_exc:
+                        logger.warning("[STORAGE] pool_recreate_failed=%s", recreate_exc)
+                
+                await asyncio.sleep(delay)
+            except Exception as exc:
+                # Non-transient error - don't retry
+                self._maybe_open_circuit(exc, context=context)
+                raise
+        
+        # Should not reach here, but satisfy type checker
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError("Retry loop exited without result or exception")
+
+    async def _acquire_healthy(self) -> asyncpg.connection.Connection:
+        """Acquire a connection with health check, recreate pool on failure."""
+        pool = await self._ensure_pool()
+        conn = await pool.acquire()
+        
+        try:
+            # Quick health check
+            await conn.execute("SELECT 1")
+            return conn
+        except Exception as health_exc:
+            # Connection is bad - release and recreate pool
+            logger.warning("[STORAGE] health_check_failed=%s", health_exc)
+            try:
+                await pool.release(conn)
+            except Exception:
+                pass
+            
+            # Recreate pool and try again
+            pool = await self._recreate_pool()
+            conn = await pool.acquire()
+            await conn.execute("SELECT 1")
+            return conn
+
+    async def _release_conn(self, conn: asyncpg.connection.Connection) -> None:
+        """Safely release connection back to pool."""
+        pool = self._pool
+        if pool is not None:
+            try:
+                await pool.release(conn)
+            except Exception as e:
+                logger.warning("[STORAGE] release_conn_error=%s", e)
+
+    async def _get_pool(self) -> asyncpg.Pool:
+        """Legacy method for backward compatibility."""
+        return await self._ensure_pool()
+
+    async def _ensure_schema_new(self, pool: asyncpg.Pool) -> None:
+        """Ensure database schema exists."""
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS storage_json (
+                    partner_id TEXT NOT NULL,
+                    filename   TEXT NOT NULL,
+                    payload    JSONB NOT NULL,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    PRIMARY KEY (partner_id, filename)
+                );
+                CREATE TABLE IF NOT EXISTS migrations_meta (
+                    key TEXT PRIMARY KEY,
+                    completed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                );
+                CREATE TABLE IF NOT EXISTS referrals (
+                    partner_id TEXT NOT NULL,
+                    referred_user_id BIGINT NOT NULL,
+                    referrer_id BIGINT NOT NULL,
+                    ref_param TEXT,
+                    bonus_amount INTEGER,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    bonus_granted_at TIMESTAMPTZ,
+                    PRIMARY KEY (partner_id, referred_user_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_referrals_referrer_id
+                    ON referrals(partner_id, referrer_id);
+                CREATE INDEX IF NOT EXISTS idx_referrals_created_at
+                    ON referrals(partner_id, created_at DESC);
+                """
+            )
+        logger.info("[STORAGE] schema_ready=true partner_id=%s", self.partner_id)
 
     async def _ensure_schema(self, pool: asyncpg.Pool, loop_id: int) -> None:
         if loop_id in self._schema_ready_loops:
@@ -337,32 +526,18 @@ class PostgresStorage(BaseStorage):
             logger.debug("[STORAGE] non_circuit_error context=%s error=%s", context, type(exc).__name__)
 
     async def _load_json_unlocked(self, filename: str) -> Dict[str, Any]:
-        # Retry logic for transient connection errors
-        max_retries = 2
-        row = None
-        for attempt in range(max_retries + 1):
-            pool = await self._get_pool()
-            try:
-                async with pool.acquire() as conn:
-                    row = await conn.fetchrow(
-                        "SELECT payload FROM storage_json WHERE partner_id=$1 AND filename=$2",
-                        self.partner_id,
-                        filename,
-                    )
-                    break  # Success - exit retry loop
-            except (asyncpg.InterfaceError, asyncpg.ConnectionDoesNotExistError) as exc:
-                if attempt < max_retries:
-                    logger.warning("[STORAGE] transient_error retry=%d/%d error=%s", attempt + 1, max_retries, type(exc).__name__)
-                    # Invalidate pool to get fresh connections
-                    self._invalidate_pool()
-                    await asyncio.sleep(0.1 * (attempt + 1))
-                    continue
-                else:
-                    self._maybe_open_circuit(exc, context="load_json")
-                    raise
-            except Exception as exc:
-                self._maybe_open_circuit(exc, context="load_json")
-                raise
+        """Load JSON data from storage with automatic retry on transient errors."""
+        
+        async def _do_load() -> Optional[asyncpg.Record]:
+            pool = await self._ensure_pool()
+            async with pool.acquire() as conn:
+                return await conn.fetchrow(
+                    "SELECT payload FROM storage_json WHERE partner_id=$1 AND filename=$2",
+                    self.partner_id,
+                    filename,
+                )
+        
+        row = await self._with_retry(_do_load, context="load_json")
         
         # AUDIT: Log critical files
         if filename in ("user_registry.json", "payments.json", "user_balances.json"):
@@ -375,26 +550,11 @@ class PostgresStorage(BaseStorage):
             else:
                 logger.info("PG_LOAD_AUDIT file=%s partner_id=%s row_found=false", 
                            filename, self.partner_id)
+        
         if not row:
             return {}
-        payload = row[0]
-        if isinstance(payload, dict):
-            return dict(payload)
-        if isinstance(payload, str):
-            try:
-                parsed = json.loads(payload)
-            except json.JSONDecodeError:
-                parsed = None
-            if isinstance(parsed, dict):
-                return parsed
-        correlation_id = uuid.uuid4().hex[:8]
-        logger.warning(
-            "STORAGE_JSON_TYPE_INVALID correlation_id=%s filename=%s payload_type=%s",
-            correlation_id,
-            filename,
-            type(payload).__name__,
-        )
-        return {}
+        
+        return self._coerce_payload(row[0], filename=filename)
 
     async def _load_json(self, filename: str) -> Dict[str, Any]:
         lock = self._get_file_lock(filename)
@@ -426,37 +586,31 @@ class PostgresStorage(BaseStorage):
             # AUTO-BACKUP: Save backup before any write to critical files (if data exists)
             if current_keys_count > 0:
                 backup_filename = f"_backup_{filename}"
-                backup_saved = False
-                for backup_attempt in range(3):
-                    try:
-                        pool = await self._get_pool()
-                        async with pool.acquire() as conn:
-                            await conn.execute(
-                                """
-                                INSERT INTO storage_json (partner_id, filename, payload)
-                                VALUES ($1, $2, $3::jsonb)
-                                ON CONFLICT (partner_id, filename)
-                                DO UPDATE SET payload = EXCLUDED.payload, updated_at = now()
-                                """,
-                                self.partner_id,
-                                backup_filename,
-                                json.dumps(current_data),
-                            )
-                        logger.info(
-                            "AUTO_BACKUP_SAVED file=%s backup=%s keys=%d partner_id=%s",
-                            filename, backup_filename, current_keys_count, self.partner_id
+                backup_json = json.dumps(current_data)
+                
+                async def _do_backup() -> None:
+                    pool = await self._ensure_pool()
+                    async with pool.acquire() as conn:
+                        await conn.execute(
+                            """
+                            INSERT INTO storage_json (partner_id, filename, payload)
+                            VALUES ($1, $2, $3::jsonb)
+                            ON CONFLICT (partner_id, filename)
+                            DO UPDATE SET payload = EXCLUDED.payload, updated_at = now()
+                            """,
+                            self.partner_id,
+                            backup_filename,
+                            backup_json,
                         )
-                        backup_saved = True
-                        break
-                    except (asyncpg.InterfaceError, asyncpg.ConnectionDoesNotExistError) as backup_exc:
-                        if backup_attempt < 2:
-                            self._invalidate_pool()
-                            await asyncio.sleep(0.1 * (backup_attempt + 1))
-                            continue
-                        logger.warning("AUTO_BACKUP_FAILED file=%s error=%s", filename, backup_exc)
-                    except Exception as backup_exc:
-                        logger.warning("AUTO_BACKUP_FAILED file=%s error=%s", filename, backup_exc)
-                        break
+                
+                try:
+                    await self._with_retry(_do_backup, context="auto_backup")
+                    logger.info(
+                        "AUTO_BACKUP_SAVED file=%s backup=%s keys=%d partner_id=%s",
+                        filename, backup_filename, current_keys_count, self.partner_id
+                    )
+                except Exception as backup_exc:
+                    logger.warning("AUTO_BACKUP_FAILED file=%s error=%s", filename, backup_exc)
             
             # BLOCK 1: Never overwrite non-empty data with empty data
             if current_keys_count > 0 and new_keys_count == 0:
@@ -517,37 +671,25 @@ class PostgresStorage(BaseStorage):
                 filename, current_keys_count, new_keys_count, self.partner_id
             )
         
-        # Retry logic for transient connection errors
-        max_retries = 2
+        # Save with automatic retry on transient errors
         payload_json = json.dumps(clean_data) if isinstance(clean_data, dict) else "{}"
-        for attempt in range(max_retries + 1):
-            pool = await self._get_pool()
-            try:
-                async with pool.acquire() as conn:
-                    await conn.execute(
-                        """
-                        INSERT INTO storage_json (partner_id, filename, payload)
-                        VALUES ($1, $2, $3::jsonb)
-                        ON CONFLICT (partner_id, filename)
-                        DO UPDATE SET payload = EXCLUDED.payload, updated_at = now()
-                        """,
-                        self.partner_id,
-                        filename,
-                        payload_json,
-                    )
-                    return  # Success - exit
-            except (asyncpg.InterfaceError, asyncpg.ConnectionDoesNotExistError) as exc:
-                if attempt < max_retries:
-                    logger.warning("[STORAGE] transient_error retry=%d/%d error=%s context=save_json", attempt + 1, max_retries, type(exc).__name__)
-                    self._invalidate_pool()
-                    await asyncio.sleep(0.1 * (attempt + 1))
-                    continue
-                else:
-                    self._maybe_open_circuit(exc, context="save_json")
-                    raise
-            except Exception as exc:
-                self._maybe_open_circuit(exc, context="save_json")
-                raise
+        
+        async def _do_save() -> None:
+            pool = await self._ensure_pool()
+            async with pool.acquire() as conn:
+                await conn.execute(
+                    """
+                    INSERT INTO storage_json (partner_id, filename, payload)
+                    VALUES ($1, $2, $3::jsonb)
+                    ON CONFLICT (partner_id, filename)
+                    DO UPDATE SET payload = EXCLUDED.payload, updated_at = now()
+                    """,
+                    self.partner_id,
+                    filename,
+                    payload_json,
+                )
+        
+        await self._with_retry(_do_save, context="save_json")
 
     async def _save_json(self, filename: str, data: Dict[str, Any]) -> None:
         lock = self._get_file_lock(filename)
