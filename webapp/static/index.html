@@ -2110,13 +2110,21 @@
                 `;
             }
             
-            // Audio upload
+            // Audio upload (for lip_sync and speech models)
             if (field.name.includes('audio')) {
                 return `
                     <div class="form-group" data-field="${field.name}">
                         <label class="form-label">🎵 ${field.label} ${field.required ? '<span style="color: var(--error);">*</span>' : ''}</label>
                         ${hint}
-                        <input type="file" id="field_${field.name}" data-field="${field.name}" accept="audio/*" class="form-input" ${required} />
+                        <div id="audioUploadArea_${field.name}" class="image-upload-area" onclick="document.getElementById('audioInput_${field.name}').click()">
+                            <div id="audioPlaceholder_${field.name}">
+                                <div style="font-size: 48px; margin-bottom: 12px;">🎤</div>
+                                <div>Нажмите чтобы выбрать аудио</div>
+                                <div style="font-size: 12px; margin-top: 8px; opacity: 0.7;">MP3, WAV до 25MB</div>
+                            </div>
+                            <audio id="audioPreview_${field.name}" style="display: none; width: 100%;" controls></audio>
+                        </div>
+                        <input type="file" id="audioInput_${field.name}" data-field="${field.name}" accept="audio/*" style="display: none;" onchange="handleAudioSelectField(this, '${field.name}')" />
                         <div id="fieldError_${field.name}" class="field-error" style="display: none;"></div>
                     </div>
                 `;
@@ -2284,12 +2292,15 @@
                     }
                 }
                 
-                // Check uploaded images/videos
-                const isFileField = field.type === 'file_urls' || field.name.includes('image_input') || field.name.includes('video_urls');
+                // Check uploaded images/videos/audio
+                const isFileField = field.type === 'file_urls' || field.name.includes('image_input') || field.name.includes('video_urls') || field.name.includes('video_input') || field.name.includes('audio');
                 if (isFileField && field.required) {
                     if (!appData.uploadedFields || !appData.uploadedFields[field.name]) {
                         isValid = false;
-                        const errorText = field.name.includes('video') ? 'Загрузите видео' : 'Загрузите изображение';
+                        let errorText = 'Загрузите файл';
+                        if (field.name.includes('video')) errorText = 'Загрузите видео';
+                        else if (field.name.includes('audio')) errorText = 'Загрузите аудио';
+                        else if (field.name.includes('image')) errorText = 'Загрузите изображение';
                         if (errorEl) {
                             errorEl.textContent = errorText;
                             errorEl.style.display = 'block';
@@ -2411,6 +2422,55 @@
             } catch (e) {
                 tg.showAlert('Ошибка загрузки видео: ' + e.message);
                 placeholder.innerHTML = '<div style="font-size: 48px; margin-bottom: 12px;">🎬</div><div>Нажмите чтобы выбрать видео</div>';
+            }
+        }
+        
+        async function handleAudioSelectField(input, fieldName) {
+            const file = input.files[0];
+            if (!file) return;
+            
+            if (file.size > 25 * 1024 * 1024) {
+                tg.showAlert('Аудио слишком большое. Максимум 25MB.');
+                return;
+            }
+            
+            const preview = document.getElementById(`audioPreview_${fieldName}`);
+            const placeholder = document.getElementById(`audioPlaceholder_${fieldName}`);
+            const uploadArea = document.getElementById(`audioUploadArea_${fieldName}`);
+            
+            placeholder.innerHTML = '<div class="loading-spinner" style="width: 30px; height: 30px;"></div><div style="margin-top: 12px;">Загрузка аудио...</div>';
+            
+            try {
+                const base64 = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+                
+                const result = await apiCall('/upload', {
+                    method: 'POST',
+                    body: JSON.stringify({ image: base64, type: 'audio' })
+                });
+                
+                if (result.error) throw new Error(result.error);
+                
+                // Store URL
+                if (!appData.uploadedFields) appData.uploadedFields = {};
+                appData.uploadedFields[fieldName] = result.url;
+                
+                preview.src = URL.createObjectURL(file);
+                preview.style.display = 'block';
+                placeholder.style.display = 'none';
+                uploadArea.style.padding = '12px';
+                
+                // Clear error
+                const errorEl = document.getElementById(`fieldError_${fieldName}`);
+                if (errorEl) errorEl.style.display = 'none';
+                
+            } catch (e) {
+                tg.showAlert('Ошибка загрузки аудио: ' + e.message);
+                placeholder.innerHTML = '<div style="font-size: 48px; margin-bottom: 12px;">🎤</div><div>Нажмите чтобы выбрать аудио</div>';
             }
         }
         
@@ -2591,11 +2651,12 @@
                 for (const field of schema.fields) {
                     const el = document.getElementById(`field_${field.name}`);
                     
-                    // Handle uploaded files (images and videos)
-                    if (field.type === 'file_urls' || field.name.includes('image_input') || field.name.includes('image_urls') || field.name.includes('video_urls')) {
+                    // Handle uploaded files (images, videos, audio)
+                    if (field.type === 'file_urls' || field.name.includes('image_input') || field.name.includes('image_urls') || field.name.includes('video_urls') || field.name.includes('video_input') || field.name.includes('audio')) {
                         if (appData.uploadedFields && appData.uploadedFields[field.name]) {
                             params[field.name] = [appData.uploadedFields[field.name]];
-                            if (!field.name.includes('video')) {
+                            // Set imageUrl for preview (only for images)
+                            if (!field.name.includes('video') && !field.name.includes('audio')) {
                                 imageUrl = appData.uploadedFields[field.name];
                             }
                         }
