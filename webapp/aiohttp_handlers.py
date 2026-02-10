@@ -472,11 +472,14 @@ async def webapp_generate(request: web.Request) -> web.Response:
     audio_url = data.get("audio_url")
     media_url = data.get("media_url")  # Generic media field
     
-    # Log incoming request for debugging
+    # Log incoming request for debugging - DETAILED
     logger.info(
-        "WEBAPP_GEN_REQUEST user_id=%s model_id=%s prompt_len=%s params_keys=%s image=%s video=%s audio=%s",
+        "WEBAPP_GEN_REQUEST user_id=%s model_id=%s prompt_len=%s params_keys=%s params=%s image_url=%s video_url=%s audio_url=%s",
         user_id, model_id, len(prompt) if prompt else 0, list(params.keys()),
-        bool(image_url), bool(video_url), bool(audio_url)
+        {k: (v[:50] if isinstance(v, str) and len(v) > 50 else v) for k, v in params.items()},
+        image_url[:100] if image_url else None,
+        video_url[:100] if video_url else None,
+        audio_url[:100] if audio_url else None
     )
     
     if not model_id:
@@ -589,22 +592,27 @@ async def webapp_generate(request: web.Request) -> web.Response:
         
         # Handle image_input from params (frontend sends arrays like ['url'])
         if "image_input" in session_params and isinstance(session_params["image_input"], list):
+            logger.info("WEBAPP_IMAGE_INPUT_FOUND raw=%s", session_params["image_input"])
             # Convert list to single URL or data for processing
             if session_params["image_input"]:
                 first_url = session_params["image_input"][0]
                 if first_url.startswith("/webapp/uploads/"):
                     fname = first_url.replace("/webapp/uploads/", "")
                     fpath = WEBAPP_UPLOADS_DIR / fname
+                    logger.info("WEBAPP_IMAGE_INPUT_FILE fname=%s exists=%s", fname, fpath.exists())
                     if fpath.exists():
                         media_bytes = fpath.read_bytes()
                         media_base64 = base64.b64encode(media_bytes).decode()
                         ext = Path(fname).suffix.lower()
                         mime_type = CONTENT_TYPE_MAP.get(ext, "image/octet-stream")
                         session_params["image_input"] = [f"data:{mime_type};base64,{media_base64}"]
+                        logger.info("WEBAPP_IMAGE_INPUT_CONVERTED to_base64=true len=%s", len(session_params["image_input"][0]))
                     else:
+                        logger.warning("WEBAPP_IMAGE_INPUT_FILE_NOT_FOUND fname=%s", fname)
                         session_params["image_input"] = [first_url]
                 else:
                     session_params["image_input"] = [first_url]
+                    logger.info("WEBAPP_IMAGE_INPUT_EXTERNAL url=%s", first_url[:100])
         
         # Helper to process media URL (image, video, audio)
         def _process_media_url(url: str, param_name: str, mime_prefix: str) -> None:
@@ -636,6 +644,12 @@ async def webapp_generate(request: web.Request) -> web.Response:
         if media_url:
             media_type = _get_media_type(media_url)
             _process_media_url(media_url, media_type, media_type)
+        
+        # Log session_params before job creation
+        logger.info(
+            "WEBAPP_SESSION_PARAMS job_id=%s keys=%s has_image_input=%s has_prompt=%s",
+            job_id, list(session_params.keys()), "image_input" in session_params, "prompt" in session_params
+        )
         
         # CRITICAL: Save job to unified storage IMMEDIATELY so it can be polled
         model_name = getattr(spec, "name", model_id)
