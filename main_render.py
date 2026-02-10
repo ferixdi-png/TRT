@@ -638,11 +638,18 @@ def build_webhook_handler(
 
     async def _handler(request: web.Request) -> web.StreamResponse:
         # ========== ULTRA-CRITICAL: FIRST LINE LOG ==========
+        # Используем print() + flush чтобы точно не потерять в буфере
+        import sys
+        _wh_ts = time.strftime("%Y-%m-%d %H:%M:%S")
+        print(f"{_wh_ts} 🚨🚨🚨 WEBHOOK_HTTP_IN method={request.method} path={request.path}", flush=True)
+        sys.stdout.flush()
+        sys.stderr.flush()
         logger.info("🚨 WEBHOOK_HTTP_IN method=%s path=%s", request.method, request.path)
         global _early_update_count
         handler_start = time.monotonic()
         correlation_id = _resolve_correlation_id(request)
         client_ip = _resolve_client_ip(request)
+        print(f"{_wh_ts} 🚨🚨🚨 WEBHOOK_PARSED corr={correlation_id} ip={client_ip}", flush=True)
         logger.info("🚨 WEBHOOK_HTTP_PARSED correlation_id=%s ip=%s", correlation_id, client_ip)
         update_id: Optional[int] = None
         request_id = request.headers.get("X-Request-ID") or request.headers.get("X-Correlation-ID")
