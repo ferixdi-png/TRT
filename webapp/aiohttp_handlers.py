@@ -74,11 +74,17 @@ WEBAPP_UPLOADS_DIR.mkdir(exist_ok=True)
 
 
 async def webapp_index(request: web.Request) -> web.Response:
-    """Serve the main Mini App HTML."""
+    """Serve the main Mini App HTML with bot name."""
     index_file = WEBAPP_STATIC_DIR / "index.html"
     if index_file.exists():
+        html_content = index_file.read_text(encoding="utf-8")
+        
+        # Insert bot name from environment
+        from bot_kie import BOT_NAME
+        html_content = html_content.replace("{{BOT_NAME}}", BOT_NAME)
+        
         return web.Response(
-            text=index_file.read_text(encoding="utf-8"),
+            text=html_content,
             content_type="text/html",
         )
     return web.Response(text="<h1>Mini App</h1><p>Frontend not found</p>", content_type="text/html")
