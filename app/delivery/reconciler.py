@@ -1010,8 +1010,8 @@ async def reconcile_pending_results(
                 "⚠️ RECONCILER_ORPHAN_JOB job_id=%s user_id=%s model=%s status=%s age_s=%s reason=no_task_id",
                 job_id_orphan, job.get("user_id"), job.get("model_id"), job.get("status"), int(age_orphan) if age_orphan else None
             )
-            # After 5 minutes, mark orphan jobs as failed
-            if age_orphan and age_orphan > 300:
+            # After 3 minutes, mark orphan jobs as failed (reduced from 5 min for faster cleanup)
+            if age_orphan and age_orphan > 180:
                 try:
                     await storage.update_job_status(
                         job_id_orphan, "failed",

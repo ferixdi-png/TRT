@@ -4,19 +4,46 @@ import json
 import logging
 import os
 import re
+import time
 import uuid
 from pathlib import Path
 
 from aiohttp import web
 
 from webapp.api.auth import validate_webapp_data, get_user_id_from_init_data
+from app.middleware.rate_limit import PerUserRateLimiter
 
 logger = logging.getLogger(__name__)
+
+# Rate limiter for WebApp API (per user_id)
+_webapp_rate_limiter = PerUserRateLimiter(
+    rate=float(os.getenv("WEBAPP_RATE_LIMIT_PER_SEC", "2.0")),  # 2 requests/sec
+    capacity=float(os.getenv("WEBAPP_RATE_LIMIT_BURST", "10.0")),  # burst of 10
+)
 
 # CRITICAL: Store background tasks to prevent GC from collecting them before completion
 _background_tasks: set = set()
 
 WEBAPP_STATIC_DIR = Path(__file__).parent / "static"
+
+
+def _check_rate_limit(user_id: int) -> tuple[bool, float]:
+    """Check rate limit for user. Returns (allowed, retry_after_seconds)."""
+    allowed, wait_time = _webapp_rate_limiter.check(user_id)
+    return allowed, wait_time
+
+
+def _rate_limit_response(wait_time: float) -> web.Response:
+    """Return 429 Too Many Requests response."""
+    return web.json_response(
+        {
+            "error": "Too many requests",
+            "error_ru": "Слишком много запросов. Подождите немного.",
+            "retry_after": round(wait_time, 1),
+        },
+        status=429,
+        headers={"Retry-After": str(int(wait_time) + 1)},
+    )
 
 
 def _get_job_status_info(status: str) -> dict:
@@ -471,6 +498,12 @@ async def webapp_generate(request: web.Request) -> web.Response:
     if not user_id:
         return web.json_response({"error": "Unauthorized"}, status=401)
     
+    # Rate limit check for generate endpoint (expensive operation)
+    allowed, wait_time = _check_rate_limit(user_id)
+    if not allowed:
+        logger.warning("WEBAPP_RATE_LIMITED user_id=%s endpoint=generate wait_s=%.1f", user_id, wait_time)
+        return _rate_limit_response(wait_time)
+    
     try:
         data = await request.json()
     except Exception:
@@ -897,6 +930,12 @@ async def webapp_job_retry(request: web.Request) -> web.Response:
     user_id = get_user_id_from_init_data(init_data)
     if not user_id:
         return web.json_response({"error": "Unauthorized"}, status=401)
+    
+    # Rate limit check for retry endpoint (expensive operation)
+    allowed, wait_time = _check_rate_limit(user_id)
+    if not allowed:
+        logger.warning("WEBAPP_RATE_LIMITED user_id=%s endpoint=retry wait_s=%.1f", user_id, wait_time)
+        return _rate_limit_response(wait_time)
     
     job_id = request.match_info.get("job_id", "")
     if not job_id:

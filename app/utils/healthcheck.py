@@ -554,6 +554,16 @@ async def start_health_server(
             app.router.add_get('/diag/ready', ready_diag_handler)
             app.router.add_post('/webhook/health', webhook_health_echo)
             
+            # Prometheus metrics endpoint
+            try:
+                from app.observability.metrics import metrics_handler
+                app.router.add_get('/metrics', metrics_handler)
+                logger.info("[METRICS] Prometheus endpoint registered at /metrics")
+            except ImportError as metrics_err:
+                logger.debug("[METRICS] Metrics module not available: %s", metrics_err)
+            except Exception as metrics_err:
+                logger.warning("[METRICS] Failed to register metrics endpoint: %s", metrics_err)
+            
             # Mini App routes (native aiohttp handlers)
             try:
                 from webapp.aiohttp_handlers import register_webapp_routes

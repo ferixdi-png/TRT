@@ -69,13 +69,40 @@ class PerUserRateLimiter:
 
 
 class PerKeyRateLimiter:
-    def __init__(self, rate: float, capacity: float, time_fn: Callable[[], float] | None = None) -> None:
+    def __init__(
+        self, 
+        rate: float, 
+        capacity: float, 
+        time_fn: Callable[[], float] | None = None,
+        max_buckets: int = 10000,
+        bucket_ttl_seconds: float = 3600.0,
+    ) -> None:
         self.rate = rate
         self.capacity = capacity
         self._time_fn = time_fn or time.monotonic
         self._buckets: Dict[Hashable, TokenBucket] = {}
+        self._max_buckets = max_buckets
+        self._bucket_ttl = bucket_ttl_seconds
+        self._last_cleanup: float = 0.0
+
+    def _maybe_cleanup(self, now: float) -> None:
+        """Remove stale buckets to prevent memory leak."""
+        if now - self._last_cleanup < 60.0:  # Cleanup at most once per minute
+            return
+        self._last_cleanup = now
+        cutoff = now - self._bucket_ttl
+        stale = [k for k, b in self._buckets.items() if b.updated_at < cutoff]
+        for k in stale:
+            self._buckets.pop(k, None)
+        # If still too large, remove oldest 20%
+        if len(self._buckets) > self._max_buckets:
+            sorted_buckets = sorted(self._buckets.items(), key=lambda x: x[1].updated_at)
+            for k, _ in sorted_buckets[:len(sorted_buckets) // 5]:
+                self._buckets.pop(k, None)
 
     def check(self, key: Hashable, amount: float = 1.0) -> Tuple[bool, float]:
+        now = self._time_fn()
+        self._maybe_cleanup(now)
         bucket = self._buckets.get(key)
         if bucket is None:
             bucket = TokenBucket.create(self.rate, self.capacity, self._time_fn)

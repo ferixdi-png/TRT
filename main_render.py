@@ -35,7 +35,8 @@ _app_ready_event = asyncio.Event()
 _app_init_lock = asyncio.Lock()
 _app_init_task: Optional[asyncio.Task] = None
 _handler_ready: bool = False
-_seen_update_ids: set[int] = set()
+_seen_update_ids: dict[int, float] = {}  # update_id -> timestamp
+_seen_update_ids_max_age: float = 300.0  # 5 minutes TTL
 _early_update_count: int = 0
 _early_update_log_last_ts: Optional[float] = None
 
@@ -81,11 +82,23 @@ def _resolve_client_ip(request: web.Request) -> str:
 def _is_duplicate(update_id: Optional[int]) -> bool:
     if update_id is None:
         return False
+    now = time.time()
+    # Check if seen recently
     if update_id in _seen_update_ids:
         return True
-    _seen_update_ids.add(update_id)
-    if len(_seen_update_ids) > 5000:
-        _seen_update_ids.clear()
+    # Add with timestamp
+    _seen_update_ids[update_id] = now
+    # TTL-based cleanup: remove entries older than max_age (every 1000 entries)
+    if len(_seen_update_ids) > 1000:
+        cutoff = now - _seen_update_ids_max_age
+        expired = [uid for uid, ts in _seen_update_ids.items() if ts < cutoff]
+        for uid in expired:
+            _seen_update_ids.pop(uid, None)
+        # If still too large after cleanup, remove oldest 20%
+        if len(_seen_update_ids) > 5000:
+            sorted_ids = sorted(_seen_update_ids.items(), key=lambda x: x[1])
+            for uid, _ in sorted_ids[:len(sorted_ids) // 5]:
+                _seen_update_ids.pop(uid, None)
     return False
 
 
