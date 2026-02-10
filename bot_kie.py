@@ -12591,11 +12591,9 @@ async def _button_callback_impl(
         broadcast_text = None
         stats_text = None
         
-        # CRITICAL: Route image-related callbacks to input_parameters handler
-        # These callbacks come from the image upload flow and must be handled in input_parameters
-        if data in ("image_done", "add_image", "skip_image"):
-            logger.info("🔀 ROUTING image callback to input_parameters: data=%s user_id=%s", data, user_id)
-            return await input_parameters(update, context)
+        # NOTE: image_done, add_image, skip_image are handled later in this function (button_callback)
+        # They should NOT be routed to input_parameters because input_parameters expects message, not callback_query
+        # The handlers for these callbacks are at lines ~14381 (add_image), ~14427 (image_done), etc.
         
         # Handle claim gift
         if data == "claim_gift":
