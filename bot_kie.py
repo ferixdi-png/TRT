@@ -2880,6 +2880,8 @@ def _select_next_param(session: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     required_order = [name for name in param_order if name in required_params]
     if not required_order:
         required_order = [name for name in required_params if name in properties]
+    logger.info("SELECT_NEXT_PARAM_DEBUG model_id=%s param_order=%s required_params=%s required_order=%s filled_params=%s",
+                session.get("model_id"), param_order, required_params, required_order, list(params.keys()))
     for param_name in required_order:
         if param_name in params:
             continue
