@@ -2292,19 +2292,30 @@
                     }
                 }
                 
-                // Check uploaded images/videos/audio
-                const isFileField = field.type === 'file_urls' || field.name.includes('image_input') || field.name.includes('video_urls') || field.name.includes('video_input') || field.name.includes('audio');
+                // Check uploaded images/videos/audio (file_urls type or name contains file-related keywords)
+                const isFileField = field.type === 'file_urls' || 
+                    field.name.includes('image_input') || field.name.includes('image_urls') || 
+                    field.name.includes('video_urls') || field.name.includes('video_input') ||
+                    field.name.includes('audio') || field.name.includes('input_urls') ||
+                    field.name.includes('fileUrls') || field.name.includes('source_image') ||
+                    field.name.includes('reference_image');
+                    
                 if (isFileField && field.required) {
                     if (!appData.uploadedFields || !appData.uploadedFields[field.name]) {
                         isValid = false;
                         let errorText = 'Загрузите файл';
                         if (field.name.includes('video')) errorText = 'Загрузите видео';
                         else if (field.name.includes('audio')) errorText = 'Загрузите аудио';
-                        else if (field.name.includes('image')) errorText = 'Загрузите изображение';
+                        else errorText = 'Загрузите изображение';
+                        errors.push({ field: field.name, error: errorText });
                         if (errorEl) {
                             errorEl.textContent = errorText;
                             errorEl.style.display = 'block';
                         }
+                        continue;
+                    } else {
+                        // File uploaded, clear error
+                        if (errorEl) errorEl.style.display = 'none';
                         continue;
                     }
                 }
@@ -2652,7 +2663,13 @@
                     const el = document.getElementById(`field_${field.name}`);
                     
                     // Handle uploaded files (images, videos, audio)
-                    if (field.type === 'file_urls' || field.name.includes('image_input') || field.name.includes('image_urls') || field.name.includes('video_urls') || field.name.includes('video_input') || field.name.includes('audio')) {
+                    const isFileField = field.type === 'file_urls' || 
+                        field.name.includes('image_input') || field.name.includes('image_urls') || 
+                        field.name.includes('video_urls') || field.name.includes('video_input') ||
+                        field.name.includes('audio') || field.name.includes('input_urls') ||
+                        field.name.includes('fileUrls') || field.name.includes('source_image') ||
+                        field.name.includes('reference_image');
+                    if (isFileField) {
                         if (appData.uploadedFields && appData.uploadedFields[field.name]) {
                             params[field.name] = [appData.uploadedFields[field.name]];
                             // Set imageUrl for preview (only for images)
