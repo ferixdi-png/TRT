@@ -71,6 +71,10 @@ CHAT_ZIMAGE_MAX_CONCURRENCY: int = int(os.getenv("CHAT_ZIMAGE_MAX_CONCURRENCY", 
 CHAT_ZIMAGE_MAX_QUEUE: int = int(os.getenv("CHAT_ZIMAGE_MAX_QUEUE", "20"))
 CHAT_ZIMAGE_ASPECT_RATIO: str = os.getenv("CHAT_ZIMAGE_ASPECT_RATIO", "1:1")
 CHAT_ZIMAGE_TIMEOUT: int = int(os.getenv("CHAT_ZIMAGE_TIMEOUT", "120"))
+CHAT_ZIMAGE_ADMIN_IDS: Set[int] = {
+    int(x.strip()) for x in os.getenv("CHAT_ZIMAGE_ADMIN_IDS", "").split(",")
+    if x.strip().isdigit()
+}
 
 # ═══════════════════════════════════════════════════════════════════════
 # PHRASES (only used on successful generation)
@@ -110,7 +114,11 @@ _cooldowns: Dict[int, float] = {}
 
 
 def _check_cooldown(user_id: int) -> Optional[float]:
-    """Returns remaining seconds if on cooldown, None if ready."""
+    """Returns remaining seconds if on cooldown, None if ready.
+    Admins (CHAT_ZIMAGE_ADMIN_IDS) bypass cooldown entirely.
+    """
+    if user_id in CHAT_ZIMAGE_ADMIN_IDS:
+        return None
     last = _cooldowns.get(user_id)
     if last is None:
         return None
@@ -200,10 +208,10 @@ async def _download_image(url: str) -> Optional[bytes]:
 # HELPER: run Z-Image generation via universal engine
 # ═══════════════════════════════════════════════════════════════════════
 
-async def _run_zimage(user_id: int, prompt: str) -> Any:
+async def _run_zimage(user_id: int, prompt: str) -> tuple:
     """Run Z-Image generation through the existing KIE adapter.
 
-    Returns a JobResult on success, None on failure.
+    Returns (JobResult, job_id) on success, (None, None) on failure.
     """
     from app.generations.universal_engine import run_generation
     from app.storage import get_storage
@@ -241,7 +249,7 @@ async def _run_zimage(user_id: int, prompt: str) -> Any:
         wait_for_result=True,
         timeout=CHAT_ZIMAGE_TIMEOUT,
     )
-    return result
+    return result, job_id
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -263,7 +271,7 @@ async def _background_generate(
         return
 
     try:
-        result = await _run_zimage(user_id, prompt)
+        result, job_id = await _run_zimage(user_id, prompt)
 
         if result and result.urls:
             image_data = await _download_image(result.urls[0])
@@ -276,6 +284,24 @@ async def _background_generate(
                     "CHAT_ZIMAGE_OK user_id=%s task_id=%s prompt_len=%d",
                     user_id, result.task_id, len(prompt),
                 )
+                # Mark job as delivered so reconciler does NOT send to DM
+                try:
+                    from app.storage import get_storage
+                    st = get_storage()
+                    if st and job_id:
+                        await st.update_job_status(
+                            job_id, "delivered",
+                            result_urls=result.urls,
+                        )
+                        logger.debug(
+                            "CHAT_ZIMAGE_MARKED_DELIVERED job_id=%s",
+                            job_id,
+                        )
+                except Exception as mark_exc:
+                    logger.warning(
+                        "CHAT_ZIMAGE_MARK_DELIVERED_FAIL error=%s",
+                        mark_exc,
+                    )
                 return
 
         logger.warning("CHAT_ZIMAGE_NO_RESULT user_id=%s", user_id)
@@ -383,7 +409,7 @@ def register_chat_zimage_handler(application: Any) -> bool:
 
     logger.info(
         "CHAT_ZIMAGE_REGISTERED chat=%s resolved_username=%s model=%s cooldown=%ds "
-        "concurrency=%d queue=%d aspect=%s timeout=%ds group=-50",
+        "concurrency=%d queue=%d aspect=%s timeout=%ds admin_ids=%s group=-50",
         CHAT_ZIMAGE_CHAT,
         _TARGET_USERNAME,
         CHAT_ZIMAGE_MODEL,
@@ -392,5 +418,6 @@ def register_chat_zimage_handler(application: Any) -> bool:
         CHAT_ZIMAGE_MAX_QUEUE,
         CHAT_ZIMAGE_ASPECT_RATIO,
         CHAT_ZIMAGE_TIMEOUT,
+        CHAT_ZIMAGE_ADMIN_IDS or "none",
     )
     return True
