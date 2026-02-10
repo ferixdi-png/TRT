@@ -214,7 +214,7 @@ async def _run_zimage(user_id: int, prompt: str) -> Optional[GenerationResult]:
 # BACKGROUND GENERATION TASK
 # ═══════════════════════════════════════════════════════════════════════
 
-async def _background_generate(self, update: Update, context: CallbackContext, prompt: str) -> None:
+async def _background_generate(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, limiter: _ChatLimiter) -> None:
     """Background task: wait for slot, run generation, download, reply."""
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
@@ -224,7 +224,7 @@ async def _background_generate(self, update: Update, context: CallbackContext, p
 
     try:
         logger.info("[CHAT_ZIMAGE] BEFORE_SLOT_WAIT corr_id=%s", corr_id)
-        async with _generation_semaphore:
+        async with limiter._sem:
             logger.info("[CHAT_ZIMAGE] SLOT_ACQUIRED corr_id=%s", corr_id)
             result, job_id = await _run_zimage(user_id, prompt)
 
@@ -234,42 +234,27 @@ async def _background_generate(self, update: Update, context: CallbackContext, p
                 phrase = random.choice(PHRASES_OK)
                 photo = io.BytesIO(image_data)
                 photo.name = "zimage.png"
-                await message.reply_photo(photo=photo, caption=phrase)
+                await update.effective_message.reply_photo(photo=photo, caption=phrase)
                 logger.info(
                     "CHAT_ZIMAGE_OK user_id=%s task_id=%s prompt_len=%d",
-                    user_id, result.task_id, len(prompt),
+                    user_id, job_id, len(prompt),
                 )
-                # Mark job as delivered so reconciler does NOT send to DM
-                try:
-                    from app.storage import get_storage
-                    st = get_storage()
-                    if st and job_id:
-                        await st.update_job_status(
-                            job_id, "delivered",
-                            result_urls=result.urls,
-                        )
-                        logger.debug(
-                            "CHAT_ZIMAGE_MARKED_DELIVERED job_id=%s",
-                            job_id,
-                        )
-                except Exception as mark_exc:
-                    logger.warning(
-                        "CHAT_ZIMAGE_MARK_DELIVERED_FAIL error=%s",
-                        mark_exc,
-                    )
-                return
-
-        logger.warning("CHAT_ZIMAGE_NO_RESULT user_id=%s", user_id)
-
+            else:
+                await update.effective_message.reply_text("Не скачалось :(")
+                logger.warning("CHAT_ZIMAGE_DOWNLOAD_FAIL user_id=%s job_id=%s", user_id, job_id)
+        else:
+            await update.effective_message.reply_text("Не сгенерировалось :(")
+            logger.warning("CHAT_ZIMAGE_GENERATION_FAIL user_id=%s job_id=%s", user_id, job_id)
     except asyncio.CancelledError:
         raise
     except Exception as exc:
-        logger.error(
-            "CHAT_ZIMAGE_ERROR user_id=%s error=%s",
-            user_id, str(exc)[:200],
-        )
+        logger.exception("CHAT_ZIMAGE_BACKGROUND_ERROR user_id=%s error=%s", user_id, exc)
+        try:
+            await update.effective_message.reply_text("Упс, ошибка :(")
+        except Exception:
+            pass  # Best effort
     finally:
-        limiter.release()
+        limiter._in_flight -= 1
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -316,7 +301,7 @@ async def _chat_zimage_gate(
                 # Launch background task (no webhook stall)
                 # Rate-limiting is handled by Telegram Slow Mode in chat settings
                 task = asyncio.create_task(
-                    _background_generate(message, user_id, prompt, limiter),
+                    _background_generate(update, context, prompt, limiter),
                     name=f"chat_zimg_{user_id}_{uuid.uuid4().hex[:6]}",
                 )
                 _background_tasks.add(task)
