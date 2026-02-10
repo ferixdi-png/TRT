@@ -2638,9 +2638,9 @@ def _build_param_order(input_params: Dict[str, Any]) -> List[str]:
         media_kind = _get_media_kind(param_name)
 
         if media_kind:
-            target = media_params if is_required else optional_params
-            target.append(param_name)
-            logger.info(">>>>> PARAM_ORDER: %s -> MEDIA (kind=%s req=%s)", param_name, media_kind, is_required)
+            # Медиа-параметры ВСЕГДА первыми для i2i/редакторов фото
+            media_params.append(param_name)
+            logger.info(">>>>> PARAM_ORDER: %s -> MEDIA_FIRST (kind=%s req=%s)", param_name, media_kind, is_required)
             continue
 
         if param_name in {"prompt", "text"}:
@@ -2877,12 +2877,17 @@ def _select_next_param(session: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     param_order = session.get("param_order") or _build_param_order(properties)
     session["param_order"] = param_order
     required_params = session.get("required", [])
-    required_order = [name for name in param_order if name in required_params]
-    if not required_order:
-        required_order = [name for name in required_params if name in properties]
-    logger.info("========== SELECT_NEXT_PARAM ========== model=%s order=%s required=%s filled=%s",
-                session.get("model_id"), param_order, required_params, list(params.keys()))
-    for param_name in required_order:
+    
+    # Собираем медиа-параметры отдельно - они ВСЕГДА идут первыми
+    media_first = [p for p in param_order if _get_media_kind(p)]
+    # Затем required параметры в порядке param_order
+    required_order = [p for p in param_order if p in required_params and p not in media_first]
+    # Финальный порядок: медиа первыми, потом required
+    iteration_order = media_first + required_order
+    
+    logger.info("========== SELECT_NEXT_PARAM ========== model=%s param_order=%s media_first=%s required=%s filled=%s iteration=%s",
+                session.get("model_id"), param_order, media_first, required_params, list(params.keys()), iteration_order)
+    for param_name in iteration_order:
         if param_name in params:
             continue
         param_info = properties.get(param_name, {})
