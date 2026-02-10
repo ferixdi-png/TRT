@@ -49,8 +49,10 @@ def _get_model_brand(model_id: str, title: str) -> str:
         return "Ideogram"
     elif model_id.startswith("bytedance") or "seedance" in model_lower or "seedream" in model_lower:
         return "ByteDance"
-    elif model_id.startswith("sora") or "openai" in model_lower:
+    elif model_id.startswith("sora") or "openai" in model_lower or model_id.startswith("gpt-image"):
         return "OpenAI"
+    elif model_id.startswith("nano-banana"):
+        return "Google"
     elif model_id.startswith("qwen") or model_id.startswith("z-image"):
         return "Qwen"
     elif model_id.startswith("elevenlabs"):
@@ -79,8 +81,10 @@ def _get_model_brand(model_id: str, title: str) -> str:
         return "Kling"
     elif "google" in title_lower:
         return "Google"
-    elif "openai" in title_lower or "sora" in title_lower:
+    elif "openai" in title_lower or "sora" in title_lower or "gpt" in title_lower:
         return "OpenAI"
+    elif "nano banana" in title_lower or "nanobanana" in title_lower:
+        return "Google"
     
     return "Other"
 
@@ -269,7 +273,7 @@ def build_models_menu_by_type(
                 continue
             
             # Кнопки моделей (по 1 в ряд, так как могут быть длинными)
-            for model in sorted(brand_models, key=lambda m: m.title_ru):
+            for model in brand_models:  # preserve catalog order (priority models first)
                 # Получаем эмодзи для типа модели
                 type_emoji = _get_type_emoji(model.type)
                 
@@ -334,7 +338,7 @@ def build_models_menu_for_type(
         filtered_models.append(model)
 
     keyboard: List[List[InlineKeyboardButton]] = []
-    for model in sorted(filtered_models, key=lambda m: m.title_ru):
+    for model in filtered_models:  # preserve catalog order
         type_emoji = _get_type_emoji(model.type)
         button_text = f"{type_emoji} {model.title_ru}"
         if len(button_text.encode("utf-8")) > 60:

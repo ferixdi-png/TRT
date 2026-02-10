@@ -3183,7 +3183,7 @@ GENERATION_TYPES = {
     "text-to-video": {
         "name": "🎬 Текст в видео",
         "description": "Создавайте видео из текстового описания",
-        "models": ["sora-2-text-to-video", "sora-2-pro-text-to-video", "kling-2.6/text-to-video", "kling/v2-5-turbo-text-to-video-pro", "wan/2-6-text-to-video", "wan/2-5-text-to-video", "hailuo/02-text-to-video-pro", "hailuo/02-text-to-video-standard", "kling/v2-1-master-text-to-video", "grok-imagine/text-to-video", "grok/imagine", "kling/v2-5-turbo", "hailuo/2.3", "runway/gen-4", "runway/aleph"]
+        "models": ["sora-2-pro-text-to-video", "sora-2-text-to-video", "kling-2.6/text-to-video", "kling/v2-5-turbo-text-to-video-pro", "wan/2-6-text-to-video", "wan/2-5-text-to-video", "hailuo/02-text-to-video-pro", "hailuo/02-text-to-video-standard", "kling/v2-1-master-text-to-video", "grok-imagine/text-to-video", "grok/imagine", "kling/v2-5-turbo", "hailuo/2.3", "runway/gen-4", "runway/aleph"]
     },
     "image-to-video": {
         "name": "📸 Фото в видео",
@@ -3219,7 +3219,7 @@ GENERATION_TYPES = {
     "image-to-image": {
         "name": "🎨 Фото в фото",
         "description": "Трансформация и стилизация изображений",
-        "models": ["seedream/4.5-edit", "flux-2/pro-image-to-image", "flux-2/flex-image-to-image", "nano-banana-pro", "bytedance/seedream-v4-edit", "qwen/image-to-image", "ideogram/v3-remix", "openai/4o-image", "flux/kontext", "google/nanobanana-gemini-2.5-flash", "google/nano-banana-edit", "gpt-image/1.5-image-to-image", "ideogram/v3-reframe", "qwen/image-edit", "ideogram/character-edit", "ideogram/character-remix", "ideogram/character", "ideogram/v3-edit"]
+        "models": ["nano-banana-pro", "seedream/4.5-edit", "flux-2/pro-image-to-image", "flux-2/flex-image-to-image", "bytedance/seedream-v4-edit", "qwen/image-to-image", "ideogram/v3-remix", "openai/4o-image", "flux/kontext", "google/nanobanana-gemini-2.5-flash", "google/nano-banana-edit", "gpt-image/1.5-image-to-image", "ideogram/v3-reframe", "qwen/image-edit", "ideogram/character-edit", "ideogram/character-remix", "ideogram/character", "ideogram/v3-edit"]
     },
     "text-to-speech": {
         "name": "🗣️ Текст в речь",

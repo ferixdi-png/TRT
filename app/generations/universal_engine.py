@@ -1178,60 +1178,70 @@ async def run_generation(
             },
         )
         if storage:
-            # Check if job already exists (created by webapp) - update with task_id
-            existing_job = await storage.get_job(job_id) if job_id else None
-            if existing_job:
-                # Update existing job with task_id
-                if hasattr(storage, 'update_job_task_id'):
-                    await storage.update_job_task_id(job_id, task_id)
-                await storage.update_job_status(job_id, "queued")
-                logger.info("JOB_UPDATED_WITH_TASK_ID job_id=%s task_id=%s", job_id, task_id)
-            else:
-                # Create new job
-                job_id = await storage.add_generation_job(
-                    user_id=user_id,
-                    model_id=model_id,
-                    model_name=spec.name or model_id,
-                    params=session_params,
-                    price=price,
-                    task_id=task_id,
-                    status="queued",
-                    job_id=job_id,
+            # DB operations after task creation — must not kill generation if DB is down
+            try:
+                # Check if job already exists (created by webapp) - update with task_id
+                existing_job = await storage.get_job(job_id) if job_id else None
+                if existing_job:
+                    # Update existing job with task_id
+                    if hasattr(storage, 'update_job_task_id'):
+                        await storage.update_job_task_id(job_id, task_id)
+                    await storage.update_job_status(job_id, "queued")
+                    logger.info("JOB_UPDATED_WITH_TASK_ID job_id=%s task_id=%s", job_id, task_id)
+                else:
+                    # Create new job
+                    job_id = await storage.add_generation_job(
+                        user_id=user_id,
+                        model_id=model_id,
+                        model_name=spec.name or model_id,
+                        params=session_params,
+                        price=price,
+                        task_id=task_id,
+                        status="queued",
+                        job_id=job_id,
+                        correlation_id=correlation_id,
+                        request_id=request_id,
+                        prompt=prompt or session_params.get("prompt") or session_params.get("text"),
+                        prompt_hash=prompt_hash,
+                        sku_id=sku_id,
+                        is_free=is_free,
+                        is_admin_user=is_admin_user,
+                        chat_id=chat_id,
+                        message_id=message_id,
+                    )
+            except Exception as db_err:
+                logger.warning("========== ENGINE_JOB_DB_DOWN ========== task_id=%s job_id=%s error=%s — generation continues", task_id, job_id, db_err)
+            try:
+                await register_correlation_ids(
                     correlation_id=correlation_id,
                     request_id=request_id,
-                    prompt=prompt or session_params.get("prompt") or session_params.get("text"),
+                    task_id=task_id,
+                    job_id=job_id,
+                    user_id=user_id,
+                    model_id=model_id,
+                    storage=storage,
+                    source="run_generation.job_persisted",
+                )
+            except Exception as corr_err:
+                logger.warning("ENGINE_CORR_IDS_FAILED task_id=%s error=%s", task_id, corr_err)
+            try:
+                await _enqueue_delivery_tracking(
+                    storage,
+                    user_id=user_id,
+                    task_id=task_id,
+                    job_id=job_id,
+                    model_id=model_id,
+                    request_id=request_id,
                     prompt_hash=prompt_hash,
-                    sku_id=sku_id,
-                    is_free=is_free,
-                    is_admin_user=is_admin_user,
                     chat_id=chat_id,
                     message_id=message_id,
+                    sku_id=sku_id,
+                    price=price,
+                    is_free=is_free,
+                    is_admin_user=is_admin_user,
                 )
-            await register_correlation_ids(
-                correlation_id=correlation_id,
-                request_id=request_id,
-                task_id=task_id,
-                job_id=job_id,
-                user_id=user_id,
-                model_id=model_id,
-                storage=storage,
-                source="run_generation.job_persisted",
-            )
-            await _enqueue_delivery_tracking(
-                storage,
-                user_id=user_id,
-                task_id=task_id,
-                job_id=job_id,
-                model_id=model_id,
-                request_id=request_id,
-                prompt_hash=prompt_hash,
-                chat_id=chat_id,
-                message_id=message_id,
-                sku_id=sku_id,
-                price=price,
-                is_free=is_free,
-                is_admin_user=is_admin_user,
-            )
+            except Exception as track_err:
+                logger.warning("ENGINE_DELIVERY_TRACKING_FAILED task_id=%s error=%s", task_id, track_err)
         log_task_lifecycle(
             state="queued",
             user_id=user_id,
