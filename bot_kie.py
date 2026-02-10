@@ -29298,6 +29298,15 @@ async def _register_all_handlers_internal(application: Application):
                 )
         await ensure_main_menu(update, context, source="unknown_callback", prefer_edit=True)
     
+    # ── Chat Z-Image mode (before fallback, same group so only one fires) ──
+    try:
+        from app.chat_zimage import register_chat_zimage_handler
+        _zimage_ok = register_chat_zimage_handler(application)
+        if _zimage_ok:
+            logger.info("✅ Chat Z-Image handler registered (group=100, before fallback)")
+    except Exception as _zimg_err:
+        logger.warning("CHAT_ZIMAGE_IMPORT_FAIL error=%s", _zimg_err)
+
     # Add fallback handlers with lowest priority (group=100, added last)
     application.add_handler(CallbackQueryHandler(unknown_callback_handler), group=100)
     application.add_handler(
