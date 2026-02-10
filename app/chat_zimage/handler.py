@@ -227,7 +227,6 @@ async def _background_generate(self, update: Update, context: CallbackContext, p
         async with _generation_semaphore:
             logger.info("[CHAT_ZIMAGE] SLOT_ACQUIRED corr_id=%s", corr_id)
             result, job_id = await _run_zimage(user_id, prompt)
-            logger.info("[CHAT_ZIMAGE] GENERATION_DONE corr_id=%s job_id=%s", corr_id, job_id)
 
         if result and result.urls:
             image_data = await _download_image(result.urls[0])
