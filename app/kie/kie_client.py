@@ -381,6 +381,8 @@ class KIEClient:
         callback_url: Optional[str] = None,
         correlation_id: Optional[str] = None,
     ) -> Dict[str, Any]:
+        logger.info("========== KIE_CREATE_TASK ========== model=%s input_keys=%s corr=%s",
+                    model_id, list(input_data.keys()), correlation_id)
         payload: Dict[str, Any] = {"model": model_id, "input": input_data}
         if callback_url:
             payload["callBackUrl"] = callback_url
@@ -462,6 +464,8 @@ class KIEClient:
                 "error_code": error.code,
             }
         task_id = data.get("data", {}).get("taskId")
+        logger.info("========== KIE_TASK_RESPONSE ========== model=%s task_id=%s code=%s",
+                    model_id, task_id, data.get("code"))
         if not task_id:
             error = self._classify_error(status=422, message="No taskId in response", correlation_id=result["correlation_id"])
             log_structured_event(

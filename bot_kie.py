@@ -2640,25 +2640,25 @@ def _build_param_order(input_params: Dict[str, Any]) -> List[str]:
         if media_kind:
             target = media_params if is_required else optional_params
             target.append(param_name)
-            logger.info("PARAM_ORDER_DEBUG param=%s media_kind=%s is_required=%s -> media_params", param_name, media_kind, is_required)
+            logger.info(">>>>> PARAM_ORDER: %s -> MEDIA (kind=%s req=%s)", param_name, media_kind, is_required)
             continue
 
         if param_name in {"prompt", "text"}:
             target = text_params if is_required else optional_params
             target.append(param_name)
-            logger.info("PARAM_ORDER_DEBUG param=%s is_text=true is_required=%s -> text_params", param_name, is_required)
+            logger.info(">>>>> PARAM_ORDER: %s -> TEXT (req=%s)", param_name, is_required)
             continue
 
         if is_required:
             required_params.append(param_name)
-            logger.info("PARAM_ORDER_DEBUG param=%s is_required=%s -> required_params", param_name, is_required)
+            logger.info(">>>>> PARAM_ORDER: %s -> REQUIRED", param_name)
         else:
             optional_params.append(param_name)
-            logger.info("PARAM_ORDER_DEBUG param=%s is_required=%s -> optional_params", param_name, is_required)
+            logger.info(">>>>> PARAM_ORDER: %s -> OPTIONAL", param_name)
 
     result = media_params + text_params + required_params + optional_params
-    logger.info("PARAM_ORDER_RESULT media=%s text=%s required=%s optional=%s final_order=%s", 
-                media_params, text_params, required_params, optional_params, result)
+    logger.info("========== PARAM_ORDER_RESULT ========== FINAL=%s (media=%s text=%s req=%s opt=%s)", 
+                result, media_params, text_params, required_params, optional_params)
     return result
 
 
@@ -2880,8 +2880,8 @@ def _select_next_param(session: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     required_order = [name for name in param_order if name in required_params]
     if not required_order:
         required_order = [name for name in required_params if name in properties]
-    logger.info("SELECT_NEXT_PARAM_DEBUG model_id=%s param_order=%s required_params=%s required_order=%s filled_params=%s",
-                session.get("model_id"), param_order, required_params, required_order, list(params.keys()))
+    logger.info("========== SELECT_NEXT_PARAM ========== model=%s order=%s required=%s filled=%s",
+                session.get("model_id"), param_order, required_params, list(params.keys()))
     for param_name in required_order:
         if param_name in params:
             continue
@@ -11899,7 +11899,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # CRITICAL: Log EVERY button click for debugging
             correlation_id = ensure_correlation_id(update, context)
             logger.info(
-                "BUTTON_CALLBACK_RECEIVED user_id=%s callback_data=%s message_id=%s correlation_id=%s",
+                "========== BUTTON_CLICK ========== user_id=%s data=%s msg_id=%s corr=%s",
                 user_id, data, query.message.message_id if query.message else None, correlation_id
             )
             log_structured_event(
@@ -18733,7 +18733,7 @@ async def _button_callback_impl(
                         data = f"select_model:{canonicalize_model_id(model_id)}"
             
             # 🔥 MAXIMUM LOGGING: select_model entry
-            logger.debug(f"🔥🔥🔥 SELECT_MODEL START: user_id={user_id}, data={data}")
+            logger.info("========== SELECT_MODEL START ========== user=%s data=%s", user_id, data)
             reset_session_context(
                 user_id,
                 reason="select_model",
