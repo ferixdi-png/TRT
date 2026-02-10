@@ -199,6 +199,7 @@ class PostgresStorage(BaseStorage):
         
         # Pool state (per event loop) - locks created lazily to avoid event loop binding issues
         self._pool: Optional[asyncpg.Pool] = None
+        self._pool_loop_id: Optional[int] = None  # id() of the loop that created the pool
         self._pool_locks: Dict[int, asyncio.Lock] = {}  # Per-loop locks
         self._schema_ready = False
         
@@ -291,12 +292,37 @@ class PostgresStorage(BaseStorage):
             raise RuntimeError(f"PostgresStorage circuit open: {self._circuit_open_reason or 'unknown'}")
         
         if self._pool is not None:
-            return self._pool
+            # Guard against pool created on a different event loop
+            # (happens when _run_storage_coro_sync uses asyncio.run() in a thread)
+            current_loop_id = id(asyncio.get_running_loop())
+            if self._pool_loop_id is not None and self._pool_loop_id != current_loop_id:
+                logger.info(
+                    "[STORAGE] pool_loop_mismatch=true old_loop=%s current_loop=%s — discarding stale pool",
+                    self._pool_loop_id, current_loop_id,
+                )
+                try:
+                    self._pool.terminate()
+                except Exception:
+                    pass
+                self._pool = None
+                self._pool_loop_id = None
+                self._schema_ready = False
+            else:
+                return self._pool
         
         async with self._get_pool_lock():
-            # Double-check after acquiring lock
+            # Double-check after acquiring lock (with same loop guard)
             if self._pool is not None:
-                return self._pool
+                current_loop_id = id(asyncio.get_running_loop())
+                if self._pool_loop_id is None or self._pool_loop_id == current_loop_id:
+                    return self._pool
+                try:
+                    self._pool.terminate()
+                except Exception:
+                    pass
+                self._pool = None
+                self._pool_loop_id = None
+                self._schema_ready = False
             
             self._pool = await asyncpg.create_pool(
                 dsn=self.dsn,
@@ -306,6 +332,7 @@ class PostgresStorage(BaseStorage):
                 command_timeout=self._command_timeout,
                 max_inactive_connection_lifetime=self._max_inactive_lifetime,
             )
+            self._pool_loop_id = id(asyncio.get_running_loop())
             self._reset_circuit()
             logger.info(
                 "[STORAGE] pool_created=true min=%d max=%d timeout=%ds inactive_lifetime=%ds",
@@ -325,6 +352,7 @@ class PostgresStorage(BaseStorage):
         async with self._get_pool_lock():
             old_pool = self._pool
             self._pool = None
+            self._pool_loop_id = None
             self._schema_ready = False
             
             if old_pool is not None:
