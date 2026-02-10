@@ -1715,7 +1715,7 @@ models:
       image_urls:
         type: array
         item_type: string
-        required: false
+        required: true
         max_items: 1
       prompt:
         type: string
