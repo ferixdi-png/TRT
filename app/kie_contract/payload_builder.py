@@ -1,9 +1,12 @@
 """Universal payload builder for KIE models based on SSOT."""
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List
 
 from app.kie_catalog import ModelSpec
+
+logger = logging.getLogger(__name__)
 from app.models.canonical import canonicalize_kie_model
 from app.kie_contract.image_adapter import adapt_image_input
 from app.kie_contract.normalizer import _coerce_value
@@ -48,6 +51,10 @@ def build_kie_payload(model_spec: ModelSpec, session_params: Dict[str, Any]) -> 
 
     missing = _validate_required(required, normalized)
     if missing:
+        logger.error(
+            "PAYLOAD_BUILD_ERROR model_id=%s missing_fields=%s provided_fields=%s required_fields=%s",
+            model_spec.id, missing, list(normalized.keys()), required
+        )
         raise PayloadBuildError(f"Missing required fields: {', '.join(missing)}")
 
     adapted = adapt_image_input(model_spec.id, normalized)

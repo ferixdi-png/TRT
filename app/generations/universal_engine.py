@@ -967,6 +967,10 @@ async def run_generation(
     try:
         payload = build_kie_payload(spec, session_params)
     except PayloadBuildError as exc:
+        logger.error(
+            "GEN_PAYLOAD_ERROR model_id=%s user_id=%s job_id=%s error=%s session_params_keys=%s",
+            model_id, user_id, job_id, str(exc), list(session_params.keys())
+        )
         raise ValueError(str(exc)) from exc
 
     try:

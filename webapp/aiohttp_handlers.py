@@ -472,6 +472,13 @@ async def webapp_generate(request: web.Request) -> web.Response:
     audio_url = data.get("audio_url")
     media_url = data.get("media_url")  # Generic media field
     
+    # Log incoming request for debugging
+    logger.info(
+        "WEBAPP_GEN_REQUEST user_id=%s model_id=%s prompt_len=%s params_keys=%s image=%s video=%s audio=%s",
+        user_id, model_id, len(prompt) if prompt else 0, list(params.keys()),
+        bool(image_url), bool(video_url), bool(audio_url)
+    )
+    
     if not model_id:
         return web.json_response({"error": "model_id required"}, status=400)
     
