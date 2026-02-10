@@ -34,9 +34,9 @@ logger = logging.getLogger(__name__)
 try:  # pragma: no cover - optional dependency
     import asyncpg
 
-    _DB_DEGRADED_EXCEPTIONS = (asyncio.TimeoutError, TimeoutError, asyncpg.PostgresError)
+    _DB_DEGRADED_EXCEPTIONS = (asyncio.TimeoutError, TimeoutError, OSError, ConnectionError, asyncpg.PostgresError, RuntimeError)
 except Exception:  # pragma: no cover - asyncpg may be unavailable in tests
-    _DB_DEGRADED_EXCEPTIONS = (asyncio.TimeoutError, TimeoutError)
+    _DB_DEGRADED_EXCEPTIONS = (asyncio.TimeoutError, TimeoutError, OSError, ConnectionError, RuntimeError)
 
 PENDING_STATES = set(CANONICAL_PENDING_STATES) | {"running", "succeeded", "completed"}
 SUCCESS_STATES = {"success"}
