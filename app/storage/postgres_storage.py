@@ -173,8 +173,8 @@ class PostgresStorage(BaseStorage):
                     self.dsn, 
                     min_size=1, 
                     max_size=self.max_pool_size,
-                    command_timeout=30,
-                    timeout=10,
+                    command_timeout=60,
+                    timeout=30,
                 )
                 self._pools[loop_id] = pool
                 # Reset circuit on successful pool creation
@@ -286,8 +286,9 @@ class PostgresStorage(BaseStorage):
                 asyncpg.PostgresError,
             ),
         ):
-            # Invalidate pool on connection errors to force fresh connection
-            if isinstance(exc, (OSError, ConnectionError, ConnectionRefusedError)):
+            # Only invalidate pool on explicit connection refused errors
+            # Do NOT invalidate on every error - causes cascade failures
+            if isinstance(exc, ConnectionRefusedError):
                 self._invalidate_pool()
             self._open_circuit(f"{context}:{exc.__class__.__name__}")
 
