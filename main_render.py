@@ -724,6 +724,14 @@ async def _initialize_application(settings):
         # Гарантируем установку обоих атрибутов после инициализации
         setattr(application, "_initialized", True)
         setattr(application, "initialized", True)
+    
+    # 🔴 CRITICAL: Start reconcilers for delivery and dedupe
+    # Without this, generation results are never delivered to users!
+    from bot_kie import start_delivery_reconciler, start_dedupe_reconciler
+    start_delivery_reconciler(application.bot)
+    start_dedupe_reconciler(application.bot)
+    logger.info("✅ RECONCILERS_STARTED delivery=true dedupe=true")
+    
     init_ms = int((time.monotonic() - init_started) * 1000)
     _app_ready_event.set()
     logger.info("action=WEBHOOK_APP_READY ready=true init_ms=%s", init_ms)
