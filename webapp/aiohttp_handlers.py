@@ -587,6 +587,25 @@ async def webapp_generate(request: web.Request) -> web.Response:
         # Merge prompt into params
         session_params = {**params, "prompt": prompt}
         
+        # Handle image_input from params (frontend sends arrays like ['url'])
+        if "image_input" in session_params and isinstance(session_params["image_input"], list):
+            # Convert list to single URL or data for processing
+            if session_params["image_input"]:
+                first_url = session_params["image_input"][0]
+                if first_url.startswith("/webapp/uploads/"):
+                    fname = first_url.replace("/webapp/uploads/", "")
+                    fpath = WEBAPP_UPLOADS_DIR / fname
+                    if fpath.exists():
+                        media_bytes = fpath.read_bytes()
+                        media_base64 = base64.b64encode(media_bytes).decode()
+                        ext = Path(fname).suffix.lower()
+                        mime_type = CONTENT_TYPE_MAP.get(ext, "image/octet-stream")
+                        session_params["image_input"] = [f"data:{mime_type};base64,{media_base64}"]
+                    else:
+                        session_params["image_input"] = [first_url]
+                else:
+                    session_params["image_input"] = [first_url]
+        
         # Helper to process media URL (image, video, audio)
         def _process_media_url(url: str, param_name: str, mime_prefix: str) -> None:
             if not url:
@@ -604,8 +623,8 @@ async def webapp_generate(request: web.Request) -> web.Response:
             else:
                 session_params[f"{param_name}_url"] = url
         
-        # Add image if provided
-        _process_media_url(image_url, "image", "image")
+        # Add image if provided (map to image_input for compatibility with KIE models)
+        _process_media_url(image_url, "image_input", "image")
         
         # Add video if provided
         _process_media_url(video_url, "video", "video")

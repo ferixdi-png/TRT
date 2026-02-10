@@ -889,18 +889,23 @@ def build_param_prompt_text(
         values_str = ", ".join(spec.enum_values[:5])
         if len(spec.enum_values) > 5:
             values_str += "..."
-        lines.append(f"\nℹ️ {"Доступные значения" if lang == "ru" else "Available values"}: {values_str}")
+        label = "Доступные значения" if lang == "ru" else "Available values"
+        lines.append(f"\nℹ️ {label}: {values_str}")
     elif spec.type == ParamType.STRING:
         if spec.max_length:
-            lines.append(f"\n📏 {"Максимум" if lang == "ru" else "Maximum"}: {spec.max_length} {"символов" if lang == "ru" else "characters"}")
+            max_label = "Максимум" if lang == "ru" else "Maximum"
+            chars_label = "символов" if lang == "ru" else "characters"
+            lines.append(f"\n📏 {max_label}: {spec.max_length} {chars_label}")
     
     # Add example
     if include_example and spec.example:
-        lines.append(f"\n🧪 {"Пример" if lang == "ru" else "Example"}: {spec.example[:100]}")
+        example_label = "Пример" if lang == "ru" else "Example"
+        lines.append(f"\n🧪 {example_label}: {spec.example[:100]}")
     
     # Add default info
     if spec.default is not None:
-        lines.append(f"\n⏭️ {"По умолчанию" if lang == "ru" else "Default"}: {spec.default}")
+        default_label = "По умолчанию" if lang == "ru" else "Default"
+        lines.append(f"\n⏭️ {default_label}: {spec.default}")
     
     return "".join(lines)
 
