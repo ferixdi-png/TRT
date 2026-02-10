@@ -947,14 +947,19 @@ async def reconcile_pending_results(
     get_user_language: Optional[Callable[[int], str]] = None,
 ) -> None:
     jobs = await storage.list_jobs_by_status(list(PENDING_STATES), limit=batch_limit)
+    
+    # КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: всегда логируем reconciler tick
+    job_statuses = {}
+    for j in jobs:
+        s = j.get("status", "unknown")
+        job_statuses[s] = job_statuses.get(s, 0) + 1
+    logger.info(
+        "🔄 RECONCILER_TICK pending_jobs=%d states_searched=%s found_statuses=%s",
+        len(jobs), list(PENDING_STATES), job_statuses
+    )
+    
     if not jobs:
         return
-    
-    # КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: сколько pending jobs найдено
-    logger.info(
-        "RECONCILER_PROCESSING pending_jobs=%d states=%s",
-        len(jobs), list(PENDING_STATES)
-    )
 
     now_ts = time.time()
     pending_ages = []
