@@ -184,34 +184,30 @@ async def _download_image(url: str) -> Optional[bytes]:
 async def _run_zimage(user_id: int, prompt: str) -> Optional[GenerationResult]:
     """Run Z-Image generation via storage and KIE."""
     logger.info("[CHAT_ZIMAGE] RUN_ZIMAGE_START user_id=%s prompt=%s", user_id, prompt[:50])
-    from app.storage import get_storage
-
-    job_id = f"chat-zimg-{uuid.uuid4().hex[:12]}"
-    correlation_id = f"corr-chat-zimg-{user_id}-{uuid.uuid4().hex[:8]}"
-
+    
+    from app.generations.universal_engine import run_generation
+    
     session_params: Dict[str, Any] = {
         "prompt": prompt,
         "aspect_ratio": CHAT_ZIMAGE_ASPECT_RATIO,
     }
-
-    storage = get_storage()
-    await storage.add_generation_job(
-        job_id=job_id,
+    
+    job_id = f"chat-zimg-{uuid.uuid4().hex[:12]}"
+    correlation_id = f"corr-chat-zimg-{user_id}-{uuid.uuid4().hex[:8]}"
+    
+    result = await run_generation(
         user_id=user_id,
         model_id=CHAT_ZIMAGE_MODEL,
-        model_name="Z-Image",
-        params=session_params,
-        price=0.0,
-        status="pending",
-        is_free=True,
+        session_params=session_params,
+        timeout=CHAT_ZIMAGE_TIMEOUT,
+        wait_for_result=True,
         correlation_id=correlation_id,
-        prompt=prompt,
+        job_id=job_id,
+        is_free=True,
+        chat_id=user_id,  # For chat mode, chat_id = user_id (private chat)
     )
-    logger.info("[CHAT_ZIMAGE] RUN_ZIMAGE_DONE user_id=%s job_id=%s result=OK", user_id, job_id)
     
-    # Wait for result using reconciler polling
-    from app.delivery.reconciler import wait_for_job_result
-    result = await wait_for_job_result(job_id, timeout=CHAT_ZIMAGE_TIMEOUT)
+    logger.info("[CHAT_ZIMAGE] RUN_ZIMAGE_DONE user_id=%s job_id=%s result=%s", user_id, job_id, "OK" if result else "FAIL")
     return result, job_id
 
 
