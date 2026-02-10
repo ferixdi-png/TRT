@@ -79,10 +79,10 @@
     "correlation_id": "corr-test",
     "request_id": "corr-test",
     "task_id": "task-123",
-    "job_id": "job-67b0240a0222",
+    "job_id": "job-b69c6c4a1c2e",
     "user_id": 42,
     "model_id": "sora-2-text-to-video",
-    "updated_at_ms": 1770618935480,
+    "updated_at_ms": 1770704799975,
     "missing_actions": [],
     "source": "run_generation.task_created"
   },
@@ -90,8 +90,8 @@
     "correlation_id": "corr-test",
     "request_id": "corr-test",
     "task_id": "task-123",
-    "job_id": "job-67b0240a0222",
-    "updated_at_ms": 1770618935480
+    "job_id": "job-b69c6c4a1c2e",
+    "updated_at_ms": 1770704799975
   },
   "1fc88320-e38e-444e-9774-b5268137a1be": {
     "correlation_id": "1fc88320-e38e-444e-9774-b5268137a1be",
@@ -4192,5 +4192,59 @@
     "task_id": null,
     "job_id": null,
     "updated_at_ms": 1770618911746
+  },
+  "corr-1-9911-e55beaa4": {
+    "correlation_id": "corr-1-9911-e55beaa4",
+    "request_id": "corr-1-9911-e55beaa4",
+    "task_id": "task-123",
+    "job_id": "job-f2b324443f5e",
+    "user_id": 9911,
+    "model_id": "test-model",
+    "updated_at_ms": 1770704515192,
+    "missing_actions": [],
+    "source": "confirm_generate.delivery_tracking"
+  },
+  "request:corr-1-9911-e55beaa4": {
+    "correlation_id": "corr-1-9911-e55beaa4",
+    "request_id": "corr-1-9911-e55beaa4",
+    "task_id": "task-123",
+    "job_id": "job-f2b324443f5e",
+    "updated_at_ms": 1770704515192
+  },
+  "corr-1-9911-6af0607f": {
+    "correlation_id": "corr-1-9911-6af0607f",
+    "request_id": "corr-1-9911-6af0607f",
+    "task_id": "task-123",
+    "job_id": "job-baae883a2dff",
+    "user_id": 9911,
+    "model_id": "test-model",
+    "updated_at_ms": 1770704623089,
+    "missing_actions": [],
+    "source": "confirm_generate.delivery_tracking"
+  },
+  "request:corr-1-9911-6af0607f": {
+    "correlation_id": "corr-1-9911-6af0607f",
+    "request_id": "corr-1-9911-6af0607f",
+    "task_id": "task-123",
+    "job_id": "job-baae883a2dff",
+    "updated_at_ms": 1770704623089
+  },
+  "corr-203-9911-3464664e": {
+    "correlation_id": "corr-203-9911-3464664e",
+    "request_id": "corr-203-9911-3464664e",
+    "task_id": "task-123",
+    "job_id": "job-d304ba53bd05",
+    "user_id": 9911,
+    "model_id": "flux-2/flex-image-to-image",
+    "updated_at_ms": 1770704698033,
+    "missing_actions": [],
+    "source": "missing_ids"
+  },
+  "request:corr-203-9911-3464664e": {
+    "correlation_id": "corr-203-9911-3464664e",
+    "request_id": "corr-203-9911-3464664e",
+    "task_id": "task-123",
+    "job_id": "job-d304ba53bd05",
+    "updated_at_ms": 1770704698033
   }
 }

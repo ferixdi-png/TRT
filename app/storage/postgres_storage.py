@@ -1063,6 +1063,19 @@ class PostgresStorage(BaseStorage):
         await self._save_json(self.jobs_file, data)
         return job_id
 
+    async def update_job_task_id(self, job_id: str, task_id: str) -> None:
+        """Update job with task_id after KIE task creation."""
+        data = await self._load_json(self.jobs_file)
+        if job_id not in data:
+            logger.warning("update_job_task_id: job_id=%s not found", job_id)
+            return
+        job = data[job_id]
+        job["task_id"] = task_id
+        job["external_task_id"] = task_id
+        job["updated_at"] = datetime.now().isoformat()
+        await self._save_json(self.jobs_file, data)
+        logger.info("JOB_TASK_ID_UPDATED job_id=%s task_id=%s", job_id, task_id)
+
     async def update_job_status(
         self,
         job_id: str,

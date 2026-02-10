@@ -582,6 +582,28 @@
       ],
       "price": 0.0,
       "timestamp": "2026-02-09T09:33:06.282589"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-10T09:21:33.588799"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-10T09:23:22.451139"
     }
   ],
   "9911": [
@@ -1508,6 +1530,46 @@
       ],
       "price": 12.0,
       "timestamp": "2026-02-09T09:34:33.817935"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-10T09:21:55.316929"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-10T09:23:43.221444"
+    },
+    {
+      "id": "task-123",
+      "model_id": "flux-2/flex-image-to-image",
+      "model_name": "✨ Flux 2 Flex Image to Image",
+      "params": {
+        "prompt": "test",
+        "image_input": [
+          "https://example.com/file"
+        ],
+        "aspect_ratio": "1:1",
+        "resolution": "1K"
+      },
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 12.0,
+      "timestamp": "2026-02-10T09:24:58.913148"
     }
   ],
   "7777": [
@@ -2038,6 +2100,28 @@
       ],
       "price": 0.0,
       "timestamp": "2026-02-09T09:33:21.432814"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-10T09:21:55.586328"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-10T09:23:43.470382"
     }
   ]
 }

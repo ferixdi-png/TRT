@@ -1003,6 +1003,24 @@ async def reconcile_pending_results(
     for job in jobs:
         task_id = job.get("task_id") or job.get("external_task_id")
         if not task_id:
+            # Job without task_id cannot be polled - mark as failed after timeout
+            job_id_orphan = job.get("job_id")
+            age_orphan = _job_age_seconds(job, now_ts=now_ts)
+            logger.warning(
+                "⚠️ RECONCILER_ORPHAN_JOB job_id=%s user_id=%s model=%s status=%s age_s=%s reason=no_task_id",
+                job_id_orphan, job.get("user_id"), job.get("model_id"), job.get("status"), int(age_orphan) if age_orphan else None
+            )
+            # After 5 minutes, mark orphan jobs as failed
+            if age_orphan and age_orphan > 300:
+                try:
+                    await storage.update_job_status(
+                        job_id_orphan, "failed",
+                        error_message="Task creation failed - no task_id",
+                        error_code="ERR_NO_TASK_ID"
+                    )
+                    logger.info("🗑️ RECONCILER_ORPHAN_CLEANED job_id=%s", job_id_orphan)
+                except Exception as e:
+                    logger.warning("Failed to clean orphan job %s: %s", job_id_orphan, e)
             continue
         age_s = _job_age_seconds(job, now_ts=now_ts)
         await _maybe_notify_timeout(
