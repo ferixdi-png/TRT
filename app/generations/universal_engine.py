@@ -1139,6 +1139,11 @@ async def run_generation(
             correlation_id=correlation_id,
         )
         record_create_latency(create_duration_ms)
+        # ✅ SUMMARY LOG: Task created successfully
+        logger.info(
+            "✅ GEN_TASK_CREATED user_id=%s model=%s task_id=%s job_id=%s latency_ms=%s",
+            user_id, model_id, task_id, job_id, create_duration_ms
+        )
         log_task_lifecycle(
             state="created",
             user_id=user_id,
@@ -1454,6 +1459,11 @@ async def run_generation(
             error_text = fail_msg or "Task failed"
             if fail_code:
                 error_text = f"{error_text} (code: {fail_code})"
+            # ❌ SUMMARY LOG: Generation failed
+            logger.error(
+                "❌ GEN_FAILED user_id=%s model=%s task_id=%s fail_code=%s fail_msg=%s",
+                user_id, model_id, task_id, fail_code, (fail_msg or "")[:100]
+            )
             raise KIEJobFailed(
                 error_text,
                 fail_code=fail_code,
@@ -1503,6 +1513,12 @@ async def run_generation(
                 stage="KIE_PARSE",
                 outcome="success",
                 duration_ms=int((time.monotonic() - parse_start) * 1000),
+            )
+            # ✅ SUMMARY LOG: Generation completed successfully
+            total_duration_ms = int((time.monotonic() - create_start) * 1000)
+            logger.info(
+                "✅ GEN_SUCCESS user_id=%s model=%s task_id=%s urls_count=%s media_type=%s total_ms=%s",
+                user_id, model_id, task_id, len(result.urls), result.media_type, total_duration_ms
             )
             return result
         except Exception:

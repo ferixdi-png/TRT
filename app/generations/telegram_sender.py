@@ -284,6 +284,12 @@ async def deliver_result(
         )
         try:
             await getattr(bot, tg_method)(chat_id=chat_id, **payload)
+            delivery_ms = int((time.monotonic() - start_ts) * 1000)
+            # ✅ SUMMARY LOG: Result delivered to Telegram
+            logger.info(
+                "✅ DELIVER_SUCCESS user_id=%s model=%s media_type=%s tg_method=%s delivery_ms=%s",
+                chat_id, model_id, media_type, tg_method, delivery_ms
+            )
             log_structured_event(
                 correlation_id=correlation_id,
                 request_id=request_id,
@@ -297,7 +303,7 @@ async def deliver_result(
                 job_id=job_id,
                 stage="TG_DELIVER",
                 outcome="success",
-                duration_ms=int((time.monotonic() - start_ts) * 1000),
+                duration_ms=delivery_ms,
                 param={"tg_method": tg_method, "media_type": media_type},
             )
             log_structured_event(
@@ -317,6 +323,11 @@ async def deliver_result(
             )
         except Exception as exc:
             fallback_urls = ", ".join(normalized_urls[:3]) if normalized_urls else "URL missing"
+            # ⚠️ SUMMARY LOG: Telegram delivery failed, using URL fallback
+            logger.warning(
+                "⚠️ DELIVER_FALLBACK user_id=%s model=%s error=%s using_url_fallback=true",
+                chat_id, model_id, str(exc)[:80]
+            )
             log_structured_event(
                 correlation_id=correlation_id,
                 request_id=request_id,
