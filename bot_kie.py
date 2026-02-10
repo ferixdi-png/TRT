@@ -8471,23 +8471,30 @@ async def upload_image_to_kie_file_api(image_data: bytes, filename: str = "image
 
 
 async def upload_image_with_fallback(image_data: bytes, filename: str = "image.jpg") -> str:
-    """Try public hosting first, fall back to KIE file upload API."""
+    """
+    Upload file to KIE API first (recommended), fallback to public hosting.
+    
+    🔴 КРИТИЧНО: KIE File Upload API должен быть ПЕРВЫМ!
+    Внешние хостинги используются только как fallback.
+    """
     logger.info("IMAGE_UPLOAD_START filename=%s size=%d", filename, len(image_data))
     
-    public_url = await upload_image_to_hosting(image_data, filename=filename)
-    if public_url:
-        logger.info("IMAGE_UPLOAD_COMPLETE source=public_hosting url=%s", public_url[:80])
-        return public_url
-    
-    logger.warning("IMAGE_UPLOAD_PUBLIC_FAILED trying KIE file upload API fallback")
+    # 1. Сначала пробуем KIE File Upload API (рекомендуется)
     kie_url = await upload_image_to_kie_file_api(image_data, filename=filename)
-    
     if kie_url:
         logger.info("IMAGE_UPLOAD_COMPLETE source=kie_file_api url=%s", kie_url[:80])
+        return kie_url
+    
+    # 2. Fallback на внешние хостинги если KIE API недоступен
+    logger.warning("IMAGE_UPLOAD_KIE_FAILED trying public hosting fallback")
+    public_url = await upload_image_to_hosting(image_data, filename=filename)
+    
+    if public_url:
+        logger.info("IMAGE_UPLOAD_COMPLETE source=public_hosting_fallback url=%s", public_url[:80])
     else:
         logger.error("IMAGE_UPLOAD_ALL_FAILED filename=%s size=%d", filename, len(image_data))
     
-    return kie_url
+    return public_url
 
 
 MAIN_MENU_TEXT_FALLBACK = "Главное меню"
@@ -22244,9 +22251,9 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
                 elif "mp4" in update.message.document.mime_type:
                     file_extension = "m4a"
             
-            # Upload to public hosting
+            # Upload to KIE API first, fallback to public hosting
             filename = f"audio_{user_id}_{audio_file.file_id[:8]}.{file_extension}"
-            public_url = await upload_image_to_hosting(audio_data, filename=filename)
+            public_url = await upload_image_with_fallback(audio_data, filename=filename)
             
             # Delete loading message
             if loading_msg:
