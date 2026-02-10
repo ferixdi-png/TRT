@@ -126,8 +126,11 @@ class PostgresStorage(BaseStorage):
         self._schema_ready_loops: set[int] = set()
         self._file_locks: Dict[Tuple[int, str], asyncio.Lock] = {}
         self._circuit_open_until = 0.0
-        self._circuit_open_seconds = float(os.getenv("DB_CIRCUIT_OPEN_SECONDS", "20"))
+        # Reduced from 20s to 5s for faster recovery
+        self._circuit_open_seconds = float(os.getenv("DB_CIRCUIT_OPEN_SECONDS", "5"))
         self._circuit_open_reason: Optional[str] = None
+        self._consecutive_failures = 0
+        self._max_consecutive_failures = 3
 
         # logical filenames (same as JsonStorage/GitHubStorage)
         self.balances_file = "user_balances.json"
@@ -166,8 +169,17 @@ class PostgresStorage(BaseStorage):
         pool = self._pools.get(loop_id)
         if pool is None:
             try:
-                pool = await asyncpg.create_pool(self.dsn, min_size=1, max_size=self.max_pool_size)
+                pool = await asyncpg.create_pool(
+                    self.dsn, 
+                    min_size=1, 
+                    max_size=self.max_pool_size,
+                    command_timeout=30,
+                    timeout=10,
+                )
                 self._pools[loop_id] = pool
+                # Reset circuit on successful pool creation
+                self._reset_circuit()
+                logger.info("[STORAGE] pool_created=true loop_id=%s max_size=%s", loop_id, self.max_pool_size)
             except Exception as exc:
                 self._maybe_open_circuit(exc, context="create_pool")
                 raise
@@ -240,6 +252,29 @@ class PostgresStorage(BaseStorage):
             self._circuit_open_seconds,
         )
 
+    def _reset_circuit(self) -> None:
+        """Reset circuit breaker after successful connection."""
+        if self._circuit_open_reason or self._consecutive_failures > 0:
+            logger.info("[STORAGE] circuit_reset=true previous_reason=%s failures=%d", 
+                       self._circuit_open_reason, self._consecutive_failures)
+        self._circuit_open_until = 0.0
+        self._circuit_open_reason = None
+        self._consecutive_failures = 0
+
+    def _invalidate_pool(self) -> None:
+        """Invalidate current pool to force reconnection."""
+        loop = asyncio.get_running_loop()
+        loop_id = id(loop)
+        if loop_id in self._pools:
+            old_pool = self._pools.pop(loop_id, None)
+            if old_pool:
+                try:
+                    asyncio.create_task(old_pool.close())
+                except Exception:
+                    pass
+            self._schema_ready_loops.discard(loop_id)
+            logger.info("[STORAGE] pool_invalidated=true loop_id=%s", loop_id)
+
     def _maybe_open_circuit(self, exc: Exception, *, context: str) -> None:
         if isinstance(
             exc,
@@ -251,6 +286,9 @@ class PostgresStorage(BaseStorage):
                 asyncpg.PostgresError,
             ),
         ):
+            # Invalidate pool on connection errors to force fresh connection
+            if isinstance(exc, (OSError, ConnectionError, ConnectionRefusedError)):
+                self._invalidate_pool()
             self._open_circuit(f"{context}:{exc.__class__.__name__}")
 
     async def _load_json_unlocked(self, filename: str) -> Dict[str, Any]:
