@@ -178,15 +178,12 @@ async def _download_image(url: str) -> Optional[bytes]:
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# HELPER: run Z-Image generation via universal engine
+# HELPER: run Z-Image generation via storage and KIE
 # ═══════════════════════════════════════════════════════════════════════
 
-async def _run_zimage(user_id: int, prompt: str) -> tuple:
-    """Run Z-Image generation through the existing KIE adapter.
-
-    Returns (JobResult, job_id) on success, (None, None) on failure.
-    """
-    from app.generations.universal_engine import run_generation
+async def _run_zimage(user_id: int, prompt: str) -> Optional[GenerationResult]:
+    """Run Z-Image generation via storage and KIE."""
+    logger.info("[CHAT_ZIMAGE] RUN_ZIMAGE_START user_id=%s prompt=%s", user_id, prompt[:50])
     from app.storage import get_storage
 
     job_id = f"chat-zimg-{uuid.uuid4().hex[:12]}"
@@ -198,30 +195,18 @@ async def _run_zimage(user_id: int, prompt: str) -> tuple:
     }
 
     storage = get_storage()
-    await storage.add_generation_job(
+    result = await storage.add_generation_job(
         job_id=job_id,
         user_id=user_id,
         model_id=CHAT_ZIMAGE_MODEL,
         model_name="Z-Image",
         params=session_params,
-        price=0.0,
         status="pending",
-        is_free=True,
-        prompt=prompt,
-        correlation_id=correlation_id,
-    )
-
-    result = await run_generation(
-        user_id=user_id,
-        model_id=CHAT_ZIMAGE_MODEL,
-        session_params=session_params,
-        correlation_id=correlation_id,
-        job_id=job_id,
-        price=0.0,
         is_free=True,
         wait_for_result=True,
         timeout=CHAT_ZIMAGE_TIMEOUT,
     )
+    logger.info("[CHAT_ZIMAGE] RUN_ZIMAGE_DONE user_id=%s job_id=%s result=%s", user_id, job_id, "OK" if result else "FAIL")
     return result, job_id
 
 
@@ -229,22 +214,20 @@ async def _run_zimage(user_id: int, prompt: str) -> tuple:
 # BACKGROUND GENERATION TASK
 # ═══════════════════════════════════════════════════════════════════════
 
-async def _background_generate(
-    message: Any,
-    user_id: int,
-    prompt: str,
-    limiter: _ChatLimiter,
-) -> None:
-    """Background task: wait for slot → generate → send photo silently."""
-    try:
-        await limiter.wait_for_slot()
-    except Exception:
-        limiter.leave_queue()
-        logger.warning("CHAT_ZIMAGE_SLOT_FAIL user_id=%s", user_id)
-        return
+async def _background_generate(self, update: Update, context: CallbackContext, prompt: str) -> None:
+    """Background task: wait for slot, run generation, download, reply."""
+    user_id = update.effective_user.id
+    chat_id = update.effective_chat.id
+    message_id = update.effective_message.message_id
+    corr_id = f"corr-{update.update_id}-{user_id}"
+    logger.info("[CHAT_ZIMAGE] BACKGROUND_START corr_id=%s user_id=%s chat_id=%s prompt=%s", corr_id, user_id, chat_id, prompt[:50])
 
     try:
-        result, job_id = await _run_zimage(user_id, prompt)
+        logger.info("[CHAT_ZIMAGE] BEFORE_SLOT_WAIT corr_id=%s", corr_id)
+        async with _generation_semaphore:
+            logger.info("[CHAT_ZIMAGE] SLOT_ACQUIRED corr_id=%s", corr_id)
+            result, job_id = await _run_zimage(user_id, prompt)
+            logger.info("[CHAT_ZIMAGE] GENERATION_DONE corr_id=%s job_id=%s", corr_id, job_id)
 
         if result and result.urls:
             image_data = await _download_image(result.urls[0])
