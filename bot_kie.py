@@ -264,6 +264,9 @@ def _create_background_task(coro: Any, *, action: str) -> asyncio.Task:
     return task
 
 
+RECONCILER_BOOT_DELAY_SECONDS = float(os.getenv("RECONCILER_BOOT_DELAY_SECONDS", "5.0"))
+
+
 def start_delivery_reconciler(bot) -> None:
     global _delivery_reconciler_task
     if _delivery_reconciler_task and not _delivery_reconciler_task.done():
@@ -275,13 +278,17 @@ def start_delivery_reconciler(bot) -> None:
     storage_instance = get_storage()
     kie_client = get_kie_client_or_stub()
     logger.info(
-        "RECONCILER_STARTING interval_s=%s batch_limit=%s kie_client_type=%s",
+        "RECONCILER_STARTING interval_s=%s batch_limit=%s kie_client_type=%s boot_delay_s=%s",
         DELIVERY_RECONCILE_INTERVAL_SECONDS,
         DELIVERY_RECONCILE_BATCH_LIMIT,
-        type(kie_client).__name__
+        type(kie_client).__name__,
+        RECONCILER_BOOT_DELAY_SECONDS,
     )
-    _delivery_reconciler_task = _create_background_task(
-        run_reconciler_loop(
+
+    async def _delayed_reconciler():
+        await asyncio.sleep(RECONCILER_BOOT_DELAY_SECONDS)
+        logger.info("RECONCILER_BOOT_DELAY_DONE delay_s=%s", RECONCILER_BOOT_DELAY_SECONDS)
+        await run_reconciler_loop(
             bot,
             storage_instance,
             kie_client,
@@ -290,7 +297,10 @@ def start_delivery_reconciler(bot) -> None:
             pending_age_alert_seconds=DELIVERY_PENDING_AGE_ALERT_SECONDS,
             queue_tail_alert_threshold=DELIVERY_QUEUE_TAIL_ALERT_THRESHOLD,
             get_user_language=get_user_language,
-        ),
+        )
+
+    _delivery_reconciler_task = _create_background_task(
+        _delayed_reconciler(),
         action="delivery_reconciler",
     )
 

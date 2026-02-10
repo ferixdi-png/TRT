@@ -18,7 +18,7 @@ import random
 import uuid
 import math
 import time
-from datetime import datetime, date, timezone
+from datetime import datetime, date, timedelta, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, TypeVar
 
 import asyncpg
@@ -1285,6 +1285,33 @@ class PostgresStorage(BaseStorage):
 
     # ==================== GENERATION JOBS ====================
 
+    _TERMINAL_JOB_STATUSES = frozenset({
+        "done", "delivered", "completed", "failed", "canceled", "success",
+        "timeout", "error", "refunded",
+    })
+    _JOBS_MAX_AGE_HOURS = int(os.getenv("JOBS_PRUNE_MAX_AGE_HOURS", "24"))
+    _JOBS_MAX_KEEP = int(os.getenv("JOBS_PRUNE_MAX_KEEP", "200"))
+
+    async def _prune_old_jobs(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Remove terminal jobs older than _JOBS_MAX_AGE_HOURS, keep at most _JOBS_MAX_KEEP."""
+        if len(data) <= self._JOBS_MAX_KEEP:
+            return data
+        cutoff = (datetime.now() - timedelta(hours=self._JOBS_MAX_AGE_HOURS)).isoformat()
+        to_remove = []
+        for jid, job in data.items():
+            if not isinstance(job, dict):
+                to_remove.append(jid)
+                continue
+            status = (job.get("status") or "").lower()
+            updated = job.get("updated_at") or job.get("created_at") or ""
+            if status in self._TERMINAL_JOB_STATUSES and updated < cutoff:
+                to_remove.append(jid)
+        if to_remove:
+            for jid in to_remove:
+                del data[jid]
+            logger.info("JOBS_PRUNED removed=%d remaining=%d cutoff=%s", len(to_remove), len(data), cutoff)
+        return data
+
     async def add_generation_job(
         self,
         user_id: int,
@@ -1312,6 +1339,7 @@ class PostgresStorage(BaseStorage):
 
         job_id = job_id or task_id or str(uuid.uuid4())
         data = await self._load_json(self.jobs_file)
+        data = await self._prune_old_jobs(data)
         job = {
             "job_id": job_id,
             "request_id": request_id,

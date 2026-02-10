@@ -1511,10 +1511,15 @@
         let pollInterval = null;
         let currentLang = 'ru';
         
+        const API_TIMEOUT_MS = 8000;
+        
         async function apiCall(endpoint, options = {}) {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
             try {
                 const response = await fetch(`${API_BASE}${endpoint}`, {
                     ...options,
+                    signal: controller.signal,
                     headers: { 
                         'X-Telegram-Init-Data': tg.initData || '',
                         'Content-Type': 'application/json',
@@ -1523,8 +1528,10 @@
                 });
                 return await response.json();
             } catch (error) {
-                console.error('API Error:', error);
-                return { error: error.message };
+                console.error('API Error:', endpoint, error.name, error.message);
+                return { error: error.name === 'AbortError' ? 'Timeout' : error.message };
+            } finally {
+                clearTimeout(timer);
             }
         }
         
@@ -1593,7 +1600,8 @@
             }
         }
         
-        async function loadApp() {
+        async function loadApp(retryCount) {
+            retryCount = retryCount || 0;
             const app = document.getElementById('app');
             const user = getUser();
             
@@ -1626,16 +1634,47 @@
                 appData.topModels = topModelsData.models || [];
                 appData.topCategories = topModelsData.categories || [];
                 
+                // Show UI even if some data is missing
+                const hasModels = appData.models.length > 0;
+                if (hasModels || retryCount > 0) {
+                    document.getElementById('bottomNav').style.display = 'flex';
+                    goHome();
+                    return;
+                }
+                
+                // No models loaded — maybe server is still booting, auto-retry once
+                if (retryCount < 2) {
+                    app.innerHTML = `
+                        <div style="text-align:center;padding:60px 20px;">
+                            <div style="font-size:40px;margin-bottom:16px;" class="animate-spin">⏳</div>
+                            <div style="font-size:16px;color:var(--tg-hint);">Сервер запускается... Попытка ${retryCount + 2}</div>
+                        </div>
+                    `;
+                    setTimeout(() => loadApp(retryCount + 1), 3000);
+                    return;
+                }
+                
                 document.getElementById('bottomNav').style.display = 'flex';
                 goHome();
                 
             } catch (e) {
                 console.error('Load error:', e);
+                if (retryCount < 2) {
+                    app.innerHTML = `
+                        <div style="text-align:center;padding:60px 20px;">
+                            <div style="font-size:40px;margin-bottom:16px;" class="animate-spin">⏳</div>
+                            <div style="font-size:16px;color:var(--tg-hint);">Подключение... Попытка ${retryCount + 2}</div>
+                        </div>
+                    `;
+                    setTimeout(() => loadApp(retryCount + 1), 3000);
+                    return;
+                }
                 app.innerHTML = `
                     <div class="error-card" style="margin-top: 40px;">
                         <div class="error-icon">❌</div>
                         <div class="error-title">Ошибка загрузки</div>
-                        <div class="error-text">${e.message}</div>
+                        <div class="error-text">${e.message || 'Сервер временно недоступен'}</div>
+                        <button onclick="loadApp(0)" style="margin-top:16px;padding:12px 24px;background:var(--accent-primary);color:var(--tg-btn-text);border:none;border-radius:var(--radius-md);font-size:15px;font-weight:600;cursor:pointer;">🔄 Повторить</button>
                     </div>
                 `;
             }

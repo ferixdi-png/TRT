@@ -157,27 +157,22 @@ async def webapp_user_balance(request: web.Request) -> web.Response:
 
 
 async def webapp_models(request: web.Request) -> web.Response:
-    """Get list of available models with pricing info."""
+    """Get list of available models with pricing info (fast, no per-model DB calls)."""
     try:
         from app.kie_catalog import get_model_map
-        from app.pricing.price_ssot import model_has_free_sku
+        from app.pricing.price_ssot import model_has_free_sku, get_min_price
         catalog = get_model_map()
         
         models = []
         for model_id, spec in catalog.items():
-            # Get price info
+            is_free = model_has_free_sku(model_id)
+            # Use fast SSOT price lookup instead of expensive resolve_price per model
             price = 0
-            is_free = model_has_free_sku(model_id)  # Check directly from SSOT
             try:
-                from app.pricing.price_resolver import resolve_price
-                price_info = await resolve_price(model_id, {})
-                if price_info:
-                    price = price_info.get('price_rub', 0)
-                    # Also check from resolve_price
-                    if price_info.get('free_sku', False):
-                        is_free = True
-            except Exception as e:
-                logger.debug("Failed to resolve price for model %s: %s", model_id, e)
+                min_p = get_min_price(model_id)
+                price = float(min_p) if min_p is not None else 0
+            except Exception:
+                pass
             
             models.append({
                 "id": model_id,
