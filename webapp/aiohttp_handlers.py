@@ -119,7 +119,11 @@ async def webapp_user_balance(request: web.Request) -> web.Response:
         })
     except Exception as e:
         logger.error("Failed to get balance for user %s: %s", user_id, e)
-        return web.json_response({"user_id": user_id, "balance": 0, "free_remaining": 0, "error": str(e)})
+        # User-friendly error message instead of technical details
+        user_error = "Сервис временно недоступен. Попробуйте через минуту."
+        if "circuit open" in str(e).lower() or "connection" in str(e).lower():
+            user_error = "Сервис временно недоступен. Подождите минуту и попробуйте снова."
+        return web.json_response({"user_id": user_id, "balance": 0, "free_remaining": 0, "error": user_error, "_debug": str(e) if os.getenv("DEBUG") else None})
 
 
 async def webapp_models(request: web.Request) -> web.Response:
@@ -809,7 +813,13 @@ async def webapp_generate(request: web.Request) -> web.Response:
         
     except Exception as e:
         logger.error("Failed to start generation: %s", e)
-        return web.json_response({"error": str(e)}, status=500)
+        # User-friendly error message instead of technical details
+        user_error = "Не удалось запустить генерацию. Попробуйте позже."
+        if "circuit open" in str(e).lower() or "connection" in str(e).lower():
+            user_error = "Сервис временно недоступен. Подождите минуту и попробуйте снова."
+        elif "balance" in str(e).lower() or "insufficient" in str(e).lower():
+            user_error = "Недостаточно средств на балансе."
+        return web.json_response({"error": user_error, "_debug": str(e) if os.getenv("DEBUG") else None}, status=500)
 
 
 async def webapp_job_status(request: web.Request) -> web.Response:
