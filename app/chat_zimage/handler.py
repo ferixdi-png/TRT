@@ -44,7 +44,27 @@ logger = logging.getLogger(__name__)
 # ═══════════════════════════════════════════════════════════════════════
 
 CHAT_ZIMAGE_CHAT: str = os.getenv("CHAT_ZIMAGE_CHAT", "").strip()
-_TARGET_USERNAME: str = CHAT_ZIMAGE_CHAT.lstrip("@").lower() if CHAT_ZIMAGE_CHAT else ""
+
+
+def _parse_chat_username(raw: str) -> str:
+    """Extract bare lowercase username from any format:
+    - https://t.me/FERIXDI_FREE  → ferixdi_free
+    - @FERIXDI_FREE              → ferixdi_free
+    - FERIXDI_FREE               → ferixdi_free
+    """
+    if not raw:
+        return ""
+    val = raw.strip()
+    # Strip t.me URL prefix (http/https, with or without trailing slash)
+    for prefix in ("https://t.me/", "http://t.me/", "t.me/"):
+        if val.lower().startswith(prefix):
+            val = val[len(prefix):]
+            break
+    val = val.strip("/").lstrip("@")
+    return val.lower()
+
+
+_TARGET_USERNAME: str = _parse_chat_username(CHAT_ZIMAGE_CHAT)
 CHAT_ZIMAGE_MODEL: str = "z-image"
 CHAT_ZIMAGE_COOLDOWN: int = int(os.getenv("CHAT_ZIMAGE_COOLDOWN", "300"))
 CHAT_ZIMAGE_MAX_CONCURRENCY: int = int(os.getenv("CHAT_ZIMAGE_MAX_CONCURRENCY", "1"))
@@ -362,9 +382,10 @@ def register_chat_zimage_handler(application: Any) -> bool:
     application.add_handler(handler, group=-50)
 
     logger.info(
-        "CHAT_ZIMAGE_REGISTERED chat=%s model=%s cooldown=%ds "
+        "CHAT_ZIMAGE_REGISTERED chat=%s resolved_username=%s model=%s cooldown=%ds "
         "concurrency=%d queue=%d aspect=%s timeout=%ds group=-50",
         CHAT_ZIMAGE_CHAT,
+        _TARGET_USERNAME,
         CHAT_ZIMAGE_MODEL,
         CHAT_ZIMAGE_COOLDOWN,
         CHAT_ZIMAGE_MAX_CONCURRENCY,

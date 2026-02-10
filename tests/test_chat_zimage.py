@@ -21,6 +21,7 @@ from app.chat_zimage.handler import (
     _check_cooldown,
     _cooldowns,
     _load_placeholder,
+    _parse_chat_username,
     _set_cooldown,
     _TARGET_USERNAME,
 )
@@ -158,10 +159,32 @@ def test_register_enabled():
 
 def test_gate_blocks_non_target_chat_passthrough():
     """Gate handler should NOT block updates from other chats."""
-    # _TARGET_USERNAME is empty when CHAT_ZIMAGE_CHAT is not set,
-    # so the gate function would return normally (not raise).
-    # This test verifies the username comparison logic.
     assert _TARGET_USERNAME == ""  # disabled in test env
+
+
+def test_parse_chat_username_tme_url():
+    """Must extract username from https://t.me/... URL."""
+    assert _parse_chat_username("https://t.me/FERIXDI_FREE") == "ferixdi_free"
+    assert _parse_chat_username("https://t.me/FERIXDI_FREE/") == "ferixdi_free"
+    assert _parse_chat_username("http://t.me/MyChat") == "mychat"
+    assert _parse_chat_username("t.me/SomeChat") == "somechat"
+
+
+def test_parse_chat_username_at_prefix():
+    """Must strip @ prefix."""
+    assert _parse_chat_username("@FERIXDI_FREE") == "ferixdi_free"
+    assert _parse_chat_username("@MyChat") == "mychat"
+
+
+def test_parse_chat_username_bare():
+    """Must handle bare username."""
+    assert _parse_chat_username("FERIXDI_FREE") == "ferixdi_free"
+
+
+def test_parse_chat_username_empty():
+    """Must return empty string for empty input."""
+    assert _parse_chat_username("") == ""
+    assert _parse_chat_username("  ") == ""
 
 
 # ── No interference with main bot ────────────────────────────────────────
