@@ -892,10 +892,16 @@ async def deliver_job_result(
         result_urls=job_result.urls,
     )
     if delivered:
+        # ✅ CRITICAL LOG: Result delivered to user
+        logger.info(
+            "✅ RECONCILER_DELIVERED task_id=%s job_id=%s user_id=%s urls_count=%s",
+            task_id, job_id, user_id, len(job_result.urls) if job_result.urls else 0
+        )
         try:
             await storage.update_job_status(job_id, "delivered", result_urls=job_result.urls)
+            logger.info("✅ RECONCILER_JOB_DELIVERED job_id=%s status=delivered", job_id)
         except Exception as storage_exc:
-            logger.warning("Failed to update delivered status: %s", storage_exc)
+            logger.error("❌ RECONCILER_DELIVERED_UPDATE_FAILED job_id=%s error=%s", job_id, storage_exc)
         await register_correlation_ids(
             correlation_id=correlation_id,
             request_id=request_id,
@@ -1019,12 +1025,18 @@ async def reconcile_pending_results(
         status["state"] = status_state
         status["taskId"] = task_id
         if status_state in SUCCESS_STATES:
+            # ✅ CRITICAL LOG: KIE reports success, starting delivery
+            logger.info(
+                "✅ RECONCILER_SUCCESS task_id=%s job_id=%s user_id=%s model=%s raw_state=%s",
+                task_id, job_id_value, job.get("user_id"), job.get("model_id"), raw_state
+            )
             if age_s is not None:
                 record_wait_latency(int(age_s * 1000))
             try:
                 await storage.update_job_status(job_id_value, "success")
+                logger.info("✅ RECONCILER_STATUS_UPDATED job_id=%s new_status=success", job_id_value)
             except Exception as storage_exc:
-                logger.warning("Failed to update job success status: %s", storage_exc)
+                logger.error("❌ RECONCILER_STATUS_UPDATE_FAILED job_id=%s error=%s", job_id_value, storage_exc)
             await deliver_job_result(
                 bot,
                 storage,
