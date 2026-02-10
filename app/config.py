@@ -118,7 +118,7 @@ class Settings:
         self.telegram_http_write_timeout_seconds = float(os.getenv("TELEGRAM_HTTP_WRITE_TIMEOUT_SECONDS", "15.0"))
         self.telegram_http_pool_timeout_seconds = float(os.getenv("TELEGRAM_HTTP_POOL_TIMEOUT_SECONDS", "5.0"))
         self.telegram_http_connection_pool_size = int(os.getenv("TELEGRAM_HTTP_POOL_SIZE", "20"))
-        self.webhook_process_timeout_seconds = float(os.getenv("WEBHOOK_PROCESS_TIMEOUT_SECONDS", "8.0"))
+        self.webhook_process_timeout_seconds = float(os.getenv("WEBHOOK_PROCESS_TIMEOUT_SECONDS", "25.0"))
         
         # Port for healthcheck
         port_str = os.getenv('PORT', '0')
