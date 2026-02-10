@@ -364,7 +364,7 @@ async def webapp_upload_image(request: web.Request) -> web.Response:
                 "actual_size_mb": len(file_data) // (1024 * 1024),
             }, status=413)
         
-        # Save to uploads
+        # Save to uploads (also keep file URL for backwards compatibility)
         file_path = WEBAPP_UPLOADS_DIR / filename
         file_path.write_bytes(file_data)
         
@@ -372,12 +372,21 @@ async def webapp_upload_image(request: web.Request) -> web.Response:
         file_url = f"/webapp/uploads/{filename}"
         media_type = _get_media_type(filename)
         
-        logger.info("Media uploaded: %s (%d bytes, type=%s)", filename, len(file_data), media_type)
+        # CRITICAL: Also return base64 data URL for ephemeral filesystem compatibility
+        # Render's filesystem is ephemeral, so we return base64 to ensure data survives
+        ext = Path(filename).suffix.lower()
+        mime_type = CONTENT_TYPE_MAP.get(ext, "application/octet-stream")
+        base64_encoded = base64.b64encode(file_data).decode()
+        data_url = f"data:{mime_type};base64,{base64_encoded}"
+        
+        logger.info("WEBAPP_UPLOAD_SUCCESS user_id=%s filename=%s size=%d type=%s data_url_len=%d", 
+                   user_id, filename, len(file_data), media_type, len(data_url))
         
         return web.json_response({
             "ok": True,
             "filename": filename,
             "url": file_url,
+            "data_url": data_url,  # Base64 data URL for direct use
             "size": len(file_data),
             "type": media_type,
             "original_filename": original_filename,
@@ -590,13 +599,20 @@ async def webapp_generate(request: web.Request) -> web.Response:
         # Merge prompt into params
         session_params = {**params, "prompt": prompt}
         
-        # Handle image_input from params (frontend sends arrays like ['url'])
+        # Handle image_input from params (frontend sends arrays like ['url'] or ['data:...'])
         if "image_input" in session_params and isinstance(session_params["image_input"], list):
-            logger.info("WEBAPP_IMAGE_INPUT_FOUND raw=%s", session_params["image_input"])
+            logger.info("WEBAPP_IMAGE_INPUT_FOUND raw_len=%s first_50=%s", 
+                       len(session_params["image_input"]), 
+                       session_params["image_input"][0][:50] if session_params["image_input"] else "empty")
             # Convert list to single URL or data for processing
             if session_params["image_input"]:
                 first_url = session_params["image_input"][0]
-                if first_url.startswith("/webapp/uploads/"):
+                # Already base64 data URL - use as is
+                if first_url.startswith("data:"):
+                    logger.info("WEBAPP_IMAGE_INPUT_DATA_URL len=%s", len(first_url))
+                    # Keep as list with data URL
+                    session_params["image_input"] = [first_url]
+                elif first_url.startswith("/webapp/uploads/"):
                     fname = first_url.replace("/webapp/uploads/", "")
                     fpath = WEBAPP_UPLOADS_DIR / fname
                     logger.info("WEBAPP_IMAGE_INPUT_FILE fname=%s exists=%s", fname, fpath.exists())
@@ -612,7 +628,7 @@ async def webapp_generate(request: web.Request) -> web.Response:
                         session_params["image_input"] = [first_url]
                 else:
                     session_params["image_input"] = [first_url]
-                    logger.info("WEBAPP_IMAGE_INPUT_EXTERNAL url=%s", first_url[:100])
+                    logger.info("WEBAPP_IMAGE_INPUT_EXTERNAL url=%s", first_url[:100] if len(first_url) > 100 else first_url)
         
         # Helper to process media URL (image, video, audio)
         def _process_media_url(url: str, param_name: str, mime_prefix: str) -> None:

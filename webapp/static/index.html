@@ -2366,9 +2366,10 @@
                 
                 if (result.error) throw new Error(result.error);
                 
-                // Store URL
+                // Store data_url (base64) for ephemeral filesystem compatibility
+                // Fallback to url if data_url not available
                 if (!appData.uploadedFields) appData.uploadedFields = {};
-                appData.uploadedFields[fieldName] = result.url;
+                appData.uploadedFields[fieldName] = result.data_url || result.url;
                 
                 preview.src = base64;
                 preview.style.display = 'block';
@@ -2379,6 +2380,8 @@
                 // Clear error
                 const errorEl = document.getElementById(`fieldError_${fieldName}`);
                 if (errorEl) errorEl.style.display = 'none';
+                
+                console.log('Image uploaded for field:', fieldName, 'data_url_len:', (result.data_url || '').length);
                 
             } catch (e) {
                 tg.showAlert('Ошибка загрузки: ' + e.message);
@@ -2416,9 +2419,9 @@
                 
                 if (result.error) throw new Error(result.error);
                 
-                // Store URL
+                // Store data_url (base64) for ephemeral filesystem compatibility
                 if (!appData.uploadedFields) appData.uploadedFields = {};
-                appData.uploadedFields[fieldName] = result.url;
+                appData.uploadedFields[fieldName] = result.data_url || result.url;
                 
                 preview.src = URL.createObjectURL(file);
                 preview.style.display = 'block';
@@ -2429,6 +2432,8 @@
                 // Clear error
                 const errorEl = document.getElementById(`fieldError_${fieldName}`);
                 if (errorEl) errorEl.style.display = 'none';
+                
+                console.log('Video uploaded for field:', fieldName);
                 
             } catch (e) {
                 tg.showAlert('Ошибка загрузки видео: ' + e.message);
@@ -2466,14 +2471,16 @@
                 
                 if (result.error) throw new Error(result.error);
                 
-                // Store URL
+                // Store data_url (base64) for ephemeral filesystem compatibility
                 if (!appData.uploadedFields) appData.uploadedFields = {};
-                appData.uploadedFields[fieldName] = result.url;
+                appData.uploadedFields[fieldName] = result.data_url || result.url;
                 
                 preview.src = URL.createObjectURL(file);
                 preview.style.display = 'block';
                 placeholder.style.display = 'none';
                 uploadArea.style.padding = '12px';
+                
+                console.log('Audio uploaded for field:', fieldName);
                 
                 // Clear error
                 const errorEl = document.getElementById(`fieldError_${fieldName}`);
