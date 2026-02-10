@@ -160,9 +160,9 @@ class PostgresStorage(BaseStorage):
         self._command_timeout = int(os.getenv("DB_COMMAND_TIMEOUT", "25"))
         self._max_inactive_lifetime = int(os.getenv("DB_MAX_INACTIVE_LIFETIME", "90"))
         
-        # Pool state (per event loop)
+        # Pool state (per event loop) - locks created lazily to avoid event loop binding issues
         self._pool: Optional[asyncpg.Pool] = None
-        self._pool_lock = asyncio.Lock()
+        self._pool_locks: Dict[int, asyncio.Lock] = {}  # Per-loop locks
         self._schema_ready = False
         
         # Legacy compatibility
@@ -239,6 +239,15 @@ class PostgresStorage(BaseStorage):
         # await conn.execute("SET statement_timeout = '30s'")
         # await conn.execute("SET idle_in_transaction_session_timeout = '60s'")
 
+    def _get_pool_lock(self) -> asyncio.Lock:
+        """Get or create pool lock for current event loop (avoids 'bound to different loop' errors)."""
+        loop_id = id(asyncio.get_running_loop())
+        lock = self._pool_locks.get(loop_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._pool_locks[loop_id] = lock
+        return lock
+
     async def _ensure_pool(self) -> asyncpg.Pool:
         """Get or create the connection pool with lazy initialization."""
         if self._is_circuit_open():
@@ -247,7 +256,7 @@ class PostgresStorage(BaseStorage):
         if self._pool is not None:
             return self._pool
         
-        async with self._pool_lock:
+        async with self._get_pool_lock():
             # Double-check after acquiring lock
             if self._pool is not None:
                 return self._pool
@@ -276,7 +285,7 @@ class PostgresStorage(BaseStorage):
 
     async def _recreate_pool(self) -> asyncpg.Pool:
         """Close old pool and create a fresh one."""
-        async with self._pool_lock:
+        async with self._get_pool_lock():
             old_pool = self._pool
             self._pool = None
             self._schema_ready = False
