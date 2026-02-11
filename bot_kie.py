@@ -440,15 +440,54 @@ def _truncate_log_value(value: Optional[str], limit: int = 160) -> Optional[str]
 
 
 def _resolve_update_type(update: Update) -> str:
+    if update.callback_query:
+        return "callback"
     if update.message:
         if update.message.text:
             return "text"
         if update.message.photo:
             return "photo"
+        if update.message.video:
+            return "video"
         if update.message.audio or update.message.voice:
             return "audio"
         if update.message.document:
             return "document"
+        if update.message.sticker:
+            return "sticker"
+        if getattr(update.message, "successful_payment", None):
+            return "successful_payment"
+        return "message"
+    if update.edited_message:
+        return "edited_message"
+    if update.inline_query:
+        return "inline_query"
+    if update.chosen_inline_result:
+        return "chosen_inline_result"
+    if update.channel_post:
+        return "channel_post"
+    if update.pre_checkout_query:
+        return "pre_checkout_query"
+    if update.shipping_query:
+        return "shipping_query"
+    if update.my_chat_member:
+        return "my_chat_member"
+    if update.chat_member:
+        return "chat_member"
+    if update.chat_join_request:
+        return "chat_join_request"
+    if getattr(update, "message_reaction", None):
+        return "message_reaction"
+    if getattr(update, "message_reaction_count", None):
+        return "message_reaction_count"
+    if getattr(update, "chat_boost", None):
+        return "chat_boost"
+    if getattr(update, "removed_chat_boost", None):
+        return "removed_chat_boost"
+    if update.poll:
+        return "poll"
+    if update.poll_answer:
+        return "poll_answer"
     return "unknown"
 
 
@@ -459,12 +498,18 @@ def _resolve_message_type(message: Optional[Any]) -> str:
         return "text"
     if getattr(message, "photo", None):
         return "photo"
+    if getattr(message, "video", None):
+        return "video"
     if getattr(message, "audio", None) or getattr(message, "voice", None):
         return "audio"
     if getattr(message, "document", None):
         return "document"
-    if getattr(message, "video", None):
-        return "video"
+    if getattr(message, "sticker", None):
+        return "sticker"
+    if getattr(message, "animation", None):
+        return "animation"
+    if getattr(message, "successful_payment", None):
+        return "successful_payment"
     return "unknown"
 
 
@@ -4343,7 +4388,7 @@ FREE_SKU_ID = FREE_TOOL_SKU_IDS[0] if FREE_TOOL_SKU_IDS else ""
 
 def is_video_model(model_id: str) -> bool:
     """Check if model is a video generation model"""
-    video_keywords = ['video', 'animate', 'avatar', 'speech-to-video']
+    video_keywords = ['video', 'animate', 'avatar', 'speech-to-video', 'sora', 'infinitalk']
     return any(keyword in model_id.lower() for keyword in video_keywords)
 
 def is_audio_model(model_id: str) -> bool:
@@ -25960,7 +26005,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         logger.info("🚀 CONFIRM_GEN_SUBMIT user_id=%s model_id=%s job_id=%s price=%.2f is_free=%s timeout=%ss params_keys=%s", user_id, model_id, job_id, price, is_free, timeout_seconds, list(params.keys()))
         dry_run = is_dry_run() or not allow_real_generation()
         if dry_run:
-            is_video = any(kw in model_id.lower() for kw in ['video', 'sora', 'kling', 'wan', 'hailuo'])
+            is_video = is_video_model(model_id)
             ext = '.mp4' if is_video else '.png'
             task_id = f"dry_run_{uuid.uuid4().hex[:12]}"
             mock_url = f"https://example.com/mock/{model_id.replace('/', '_')}/{task_id}{ext}"
@@ -29966,6 +30011,34 @@ async def create_webhook_handler():
             return "edited_message"
         if update.inline_query:
             return "inline_query"
+        if update.chosen_inline_result:
+            return "chosen_inline_result"
+        if update.channel_post:
+            return "channel_post"
+        if update.edited_channel_post:
+            return "edited_channel_post"
+        if update.pre_checkout_query:
+            return "pre_checkout_query"
+        if update.shipping_query:
+            return "shipping_query"
+        if update.poll:
+            return "poll"
+        if update.poll_answer:
+            return "poll_answer"
+        if update.my_chat_member:
+            return "my_chat_member"
+        if update.chat_member:
+            return "chat_member"
+        if update.chat_join_request:
+            return "chat_join_request"
+        if getattr(update, "message_reaction", None):
+            return "message_reaction"
+        if getattr(update, "message_reaction_count", None):
+            return "message_reaction_count"
+        if getattr(update, "chat_boost", None):
+            return "chat_boost"
+        if getattr(update, "removed_chat_boost", None):
+            return "removed_chat_boost"
         return "unknown"
 
     async def _watchdog_handler_stall(

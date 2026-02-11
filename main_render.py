@@ -149,6 +149,34 @@ def build_webhook_handler(
             return "edited_message"
         if update.inline_query:
             return "inline_query"
+        if update.chosen_inline_result:
+            return "chosen_inline_result"
+        if update.channel_post:
+            return "channel_post"
+        if update.edited_channel_post:
+            return "edited_channel_post"
+        if update.pre_checkout_query:
+            return "pre_checkout_query"
+        if update.shipping_query:
+            return "shipping_query"
+        if update.poll:
+            return "poll"
+        if update.poll_answer:
+            return "poll_answer"
+        if update.my_chat_member:
+            return "my_chat_member"
+        if update.chat_member:
+            return "chat_member"
+        if update.chat_join_request:
+            return "chat_join_request"
+        if getattr(update, "message_reaction", None):
+            return "message_reaction"
+        if getattr(update, "message_reaction_count", None):
+            return "message_reaction_count"
+        if getattr(update, "chat_boost", None):
+            return "chat_boost"
+        if getattr(update, "removed_chat_boost", None):
+            return "removed_chat_boost"
         return "unknown"
 
     async def _watchdog_handler_stall(

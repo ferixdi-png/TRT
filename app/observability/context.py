@@ -31,6 +31,34 @@ def _resolve_update_type(update: Any) -> Optional[str]:
         return "edited_message"
     if getattr(update, "inline_query", None):
         return "inline_query"
+    if getattr(update, "chosen_inline_result", None):
+        return "chosen_inline_result"
+    if getattr(update, "channel_post", None):
+        return "channel_post"
+    if getattr(update, "edited_channel_post", None):
+        return "edited_channel_post"
+    if getattr(update, "pre_checkout_query", None):
+        return "pre_checkout_query"
+    if getattr(update, "shipping_query", None):
+        return "shipping_query"
+    if getattr(update, "poll", None):
+        return "poll"
+    if getattr(update, "poll_answer", None):
+        return "poll_answer"
+    if getattr(update, "my_chat_member", None):
+        return "my_chat_member"
+    if getattr(update, "chat_member", None):
+        return "chat_member"
+    if getattr(update, "chat_join_request", None):
+        return "chat_join_request"
+    if getattr(update, "message_reaction", None):
+        return "message_reaction"
+    if getattr(update, "message_reaction_count", None):
+        return "message_reaction_count"
+    if getattr(update, "chat_boost", None):
+        return "chat_boost"
+    if getattr(update, "removed_chat_boost", None):
+        return "removed_chat_boost"
     return "unknown"
 
 

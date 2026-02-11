@@ -407,15 +407,48 @@ async def _chat_zimage_gate(
 
     user = update.effective_user
     user_id = user.id if user else 0
+
+    # Detect actual content type for better logging
+    message = update.effective_message
+    if message:
+        if message.text:
+            _content_type = "text"
+        elif message.photo:
+            _content_type = "photo"
+        elif message.video:
+            _content_type = "video"
+        elif message.sticker:
+            _content_type = "sticker"
+        elif message.animation:
+            _content_type = "animation"
+        elif message.voice:
+            _content_type = "voice"
+        elif message.document:
+            _content_type = "document"
+        elif getattr(message, "successful_payment", None):
+            _content_type = "successful_payment"
+        elif message.new_chat_members:
+            _content_type = "new_chat_members"
+        elif message.left_chat_member:
+            _content_type = "left_chat_member"
+        else:
+            _content_type = "other_message"
+    elif getattr(update, "message_reaction", None):
+        _content_type = "message_reaction"
+    elif update.my_chat_member or update.chat_member:
+        _content_type = "chat_member_update"
+    elif update.callback_query:
+        _content_type = "callback"
+    else:
+        _content_type = "unknown_update"
+
     logger.info(
-        "[CHAT_ZIMAGE] GATE_HIT chat=%s user_id=%s username=%s update_type=%s has_text=%s",
+        "[CHAT_ZIMAGE] GATE_HIT chat=%s user_id=%s username=%s content_type=%s text_preview=%s",
         chat_username, user_id,
         (user.username or "?") if user else "none",
-        update.effective_message.text[:30] if update.effective_message and update.effective_message.text else "no_text",
-        bool(update.effective_message and update.effective_message.text),
+        _content_type,
+        message.text[:30] if message and message.text else None,
     )
-
-    message = update.effective_message
     if message and message.text and not message.text.startswith("/"):
         prompt = message.text.strip()
 
