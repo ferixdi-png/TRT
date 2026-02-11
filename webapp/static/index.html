@@ -2975,7 +2975,7 @@
                 }
             }
             
-            if (result.status === 'completed' || result.status === 'success' || result.status === 'delivered') {
+            if (['completed', 'success', 'delivered', 'result_validated'].includes(result.status)) {
                 if (pollInterval) clearInterval(pollInterval);
                 renderResult(result);
             } else if (result.status === 'failed') {
@@ -3012,7 +3012,32 @@
         
         function renderResult(job) {
             const app = document.getElementById('app');
-            const isVideo = job.result_url && (job.result_url.includes('.mp4') || job.result_url.includes('video'));
+            // Support both result_url (single) and result_urls (array)
+            const urls = job.result_urls && job.result_urls.length > 0 ? job.result_urls : (job.result_url ? [job.result_url] : []);
+            const mainUrl = urls[0] || '';
+            const isVideo = mainUrl && (mainUrl.includes('.mp4') || mainUrl.includes('video'));
+            const isAudio = mainUrl && (mainUrl.includes('.mp3') || mainUrl.includes('.wav') || mainUrl.includes('audio'));
+            
+            let mediaHtml = '';
+            if (urls.length > 1) {
+                // Multiple results - show grid
+                mediaHtml = `<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px;">`;
+                urls.forEach((url, i) => {
+                    const urlIsVideo = url.includes('.mp4') || url.includes('video');
+                    mediaHtml += urlIsVideo 
+                        ? `<video class="result-video" src="${url}" controls style="width:100%;border-radius:12px;"></video>`
+                        : `<img class="result-image" src="${url}" alt="Result ${i+1}" style="width:100%;border-radius:12px;" />`;
+                });
+                mediaHtml += `</div>`;
+            } else if (isVideo) {
+                mediaHtml = `<video class="result-video" src="${mainUrl}" controls autoplay loop></video>`;
+            } else if (isAudio) {
+                mediaHtml = `<audio src="${mainUrl}" controls autoplay style="width:100%;"></audio>`;
+            } else if (mainUrl) {
+                mediaHtml = `<img class="result-image" src="${mainUrl}" alt="Result" />`;
+            } else {
+                mediaHtml = `<div style="text-align:center;padding:32px;color:var(--tg-hint);">Результат обработан, но медиа-файл не найден</div>`;
+            }
             
             app.innerHTML = `
                 <div class="page-header">
@@ -3021,16 +3046,12 @@
                 </div>
                 
                 <div class="result-card">
-                    ${isVideo ? `
-                        <video class="result-video" src="${job.result_url}" controls autoplay loop></video>
-                    ` : `
-                        <img class="result-image" src="${job.result_url}" alt="Result" />
-                    `}
+                    ${mediaHtml}
                 </div>
                 
-                <button class="btn" onclick="window.open('${job.result_url}', '_blank')">
+                ${mainUrl ? `<button class="btn" onclick="window.open('${mainUrl}', '_blank')">
                     📥 Скачать
-                </button>
+                </button>` : ''}
                 <button class="btn btn-secondary" onclick="goHome()">
                     🏠 Новая генерация
                 </button>

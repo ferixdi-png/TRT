@@ -56,6 +56,7 @@ def _get_job_status_info(status: str) -> dict:
     STATUS_MAP = {
         "pending": {"state": "pending", "progress": 0, "action_hint": "Ожидание в очереди..."},
         "queued": {"state": "queued", "progress": 10, "action_hint": "В очереди на обработку"},
+        "processing": {"state": "processing", "progress": 40, "action_hint": "Генерация в процессе..."},
         "waiting": {"state": "processing", "progress": 30, "action_hint": "Генерация в процессе..."},
         "success": {"state": "ready", "progress": 90, "action_hint": "Результат готов"},
         "result_validated": {"state": "ready", "progress": 95, "action_hint": "Результат проверен"},
@@ -787,28 +788,33 @@ async def webapp_generate(request: web.Request) -> web.Response:
                 gen_duration_ms = int((time.monotonic() - gen_start_ts) * 1000)
                 # Update job status in unified storage
                 if result:
+                    # JobResult has .urls (list), .task_id, .state, .media_type, .text
+                    result_url = result.urls[0] if result.urls else None
+                    result_urls = list(result.urls) if result.urls else []
+                    # Normalize state to 'success' for frontend compatibility
+                    final_status = "success" if result.state in ("success", "result_validated", "completed") else (result.state or "success")
                     logger.info(
-                        "WEBAPP_GEN_SUCCESS user_id=%s model_id=%s job_id=%s correlation_id=%s duration_ms=%s result_url=%s",
+                        "WEBAPP_GEN_SUCCESS user_id=%s model_id=%s job_id=%s correlation_id=%s duration_ms=%s result_url=%s urls_count=%s",
                         user_id, model_id, job_id, correlation_id, gen_duration_ms,
-                        (result.result_url or "")[:80] if result.result_url else "none"
+                        (result_url or "")[:80], len(result_urls)
                     )
                     try:
                         await storage.update_job_status(
                             job_id=job_id,
-                            status=result.state if result.state else "success",
-                            result_url=result.result_url,
-                            result_urls=result.result_urls if hasattr(result, 'result_urls') else [],
+                            status=final_status,
+                            result_url=result_url,
+                            result_urls=result_urls,
                         )
                     except Exception as upd_err:
                         logger.warning("WEBAPP_JOB_STATUS_UPDATE_FAILED job_id=%s error=%s", job_id, upd_err)
                     # Update in-memory fallback too
                     if job_id in _inmemory_jobs:
-                        _inmemory_jobs[job_id]["status"] = result.state if result.state else "success"
-                        _inmemory_jobs[job_id]["result_url"] = result.result_url
-                        _inmemory_jobs[job_id]["result_urls"] = result.result_urls if hasattr(result, 'result_urls') else []
+                        _inmemory_jobs[job_id]["status"] = final_status
+                        _inmemory_jobs[job_id]["result_url"] = result_url
+                        _inmemory_jobs[job_id]["result_urls"] = result_urls
                     
                     # CRITICAL: Charge balance or consume free generation AFTER successful result
-                    task_id = result.task_id if hasattr(result, 'task_id') else job_id
+                    task_id = result.task_id or job_id
                     if is_free_generation:
                         # Consume free generation
                         try:
@@ -1054,15 +1060,18 @@ async def webapp_job_retry(request: web.Request) -> web.Response:
                 )
                 # Update job status
                 if result:
+                    result_url = result.urls[0] if result.urls else None
+                    result_urls = list(result.urls) if result.urls else []
+                    final_status = "success" if result.state in ("success", "result_validated", "completed") else (result.state or "success")
                     await storage.update_job_status(
                         job_id=new_job_id,
-                        status=result.state if result.state else "success",
-                        result_url=result.result_url,
-                        result_urls=result.result_urls if hasattr(result, 'result_urls') else [],
+                        status=final_status,
+                        result_url=result_url,
+                        result_urls=result_urls,
                     )
                     
                     # CRITICAL: Charge balance for retry
-                    task_id = result.task_id if hasattr(result, 'task_id') else new_job_id
+                    task_id = result.task_id or new_job_id
                     if is_free:
                         try:
                             if hasattr(storage, 'consume_free_generation_once'):
@@ -1088,6 +1097,8 @@ async def webapp_job_retry(request: web.Request) -> web.Response:
                 )
         
         task = asyncio.create_task(run_gen(), name=f"webapp_retry_{new_job_id}")
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
         logger.info("Retry task created: %s for job %s", task.get_name(), new_job_id)
         
         return web.json_response({

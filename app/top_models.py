@@ -3,26 +3,36 @@ Top Models - Single Source of Truth for Bot and Mini App
 Provides access to curated list of 24 top models with SKU selection
 """
 
+import logging
 import os
 from typing import Any, Dict, List, Optional
-from functools import lru_cache
 
 import yaml
 
+logger = logging.getLogger(__name__)
 
 _TOP_MODELS_PATH = os.path.join(
     os.path.dirname(os.path.dirname(__file__)), "data", "top_models.yaml"
 )
 
+_top_models_cache: Optional[Dict[str, Any]] = None
 
-@lru_cache(maxsize=1)
+
 def _load_top_models() -> Dict[str, Any]:
-    """Load top models catalog from YAML file."""
+    """Load top models catalog from YAML file. Only caches successful loads."""
+    global _top_models_cache
+    if _top_models_cache is not None:
+        return _top_models_cache
     try:
         with open(_TOP_MODELS_PATH, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
+        model_count = len(data.get("models", []))
+        logger.info("Top models loaded: %d models from %s", model_count, _TOP_MODELS_PATH)
+        if model_count > 0:
+            _top_models_cache = data
         return data
-    except Exception:
+    except Exception as e:
+        logger.error("Failed to load top_models.yaml: %s (path=%s)", e, _TOP_MODELS_PATH)
         return {"categories": [], "models": []}
 
 
