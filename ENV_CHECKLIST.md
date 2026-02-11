@@ -20,7 +20,7 @@
 |----------|----------|---------|-------------|
 | `WEBAPP_URL` | Optional | "" | Mini App URL. If not set, webapp button hidden |
 | `ADMIN_ID` | Optional | - | Admin user ID for admin commands |
-| `REDIS_URL` | Optional | "" | Redis URL for distributed locks |
+| `REDIS_URL` | Auto | "" | Redis URL (configured by author automatically) |
 
 ---
 
@@ -60,7 +60,7 @@
 
 ---
 
-## Redis (Optional, for scaling)
+## Redis (Auto-configured by author)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -89,8 +89,7 @@
 
 ### If REDIS_URL not set:
 - ✅ Bot works (single instance)
-- ⚠️ No distributed locks
-- ⚠️ Watchdog uses storage only
+- ⚠️ No distributed locks (Redis is configured by the author automatically)
 
 ### If DATABASE_URL not set:
 - ❌ Bot fails to start
@@ -118,7 +117,7 @@ BOT_INSTANCE_ID=my-partner-id
 # Optional
 WEBAPP_URL=https://your-webapp.example.com
 ADMIN_ID=123456789
-REDIS_URL=redis://localhost:6379
+# REDIS_URL is configured by the author automatically
 
 # Timeouts
 KIE_TIMEOUT_VIDEO=600

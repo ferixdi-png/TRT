@@ -16,7 +16,7 @@ WEBHOOK_BASE_URL=https://your-service.onrender.com
 KIE_API_KEY=your-kie-api-key
 ```
 
-> Всё остальное (`DATABASE_URL`, `REDIS_URL`, `PORT`, `DB_MAX_CONN`, `BOT_MODE` и т.д.) уже задаётся владельцем/платформой или имеет безопасные дефолты.
+> Всё остальное (`DATABASE_URL`, `PORT`, `DB_MAX_CONN`, `BOT_MODE` и т.д.) уже задаётся владельцем/платформой или имеет безопасные дефолты. Redis настраивается автоматически.
 
 ## 2) Как проверить, что всё работает
 
@@ -24,7 +24,7 @@ KIE_API_KEY=your-kie-api-key
 2. Выполните команду `/admin`.
 3. Вверху будут показаны:
    - `BOT_INSTANCE_ID`
-   - состояние DB/Redis
+   - состояние DB
    - нормализованный `WEBHOOK_BASE_URL`
    - статусы `SET/NOT SET` по ключевым ENV
 

@@ -2248,15 +2248,6 @@ class PostgresStorage(BaseStorage):
                 # --- Optional features ---
                 optional_features: Dict[str, str] = {}
 
-                # Redis
-                redis_st = summary.get("REDIS", {}).get("status", "")
-                if redis_st == "OK":
-                    optional_features["Redis"] = "✅"
-                elif redis_st == "DEGRADED":
-                    optional_features["Redis"] = "⚠️"
-                elif redis_st == "FAIL":
-                    optional_features["Redis"] = "❌"
-
                 # Payment/Support
                 pay_check = config_checks.get("PAYMENT_SUPPORT", {})
                 pay_st = pay_check.get("status", "")

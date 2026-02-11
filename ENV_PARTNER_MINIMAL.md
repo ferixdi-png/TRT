@@ -22,9 +22,10 @@ KIE_API_KEY=<ваш персональный API-ключ для AI>
 
 ```env
 DATABASE_URL=<общий Postgres владельца>
-REDIS_URL=<общий Redis владельца>
 STORAGE_MODE=db
 ```
+
+> Redis настраивается автором автоматически, партнёру ничего делать не нужно.
 
 ## Опциональные переменные (партнёр может переопределить)
 
@@ -72,7 +73,6 @@ SUPPORT_TEXT=<текст информации о поддержке>
 - BOT_INSTANCE_ID
 - STORAGE_MODE
 - Database status
-- Redis status
 - Lock mode
 
 ## Поддержка
