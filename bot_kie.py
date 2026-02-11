@@ -29193,8 +29193,6 @@ async def _register_all_handlers_internal(application: Application):
     # Базовые command handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("reset", reset_wizard_command))
-    application.add_handler(CommandHandler("reset", reset_wizard_command))
-    application.add_handler(CommandHandler("reset", reset_wizard_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("balance", check_balance))
     application.add_handler(CommandHandler("status", status_command))
