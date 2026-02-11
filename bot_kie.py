@@ -80,6 +80,8 @@ KNOWN_CALLBACK_PREFIXES = (
     "admin_search:",
     "admin_add:",
     "admin_payments_back",
+    "apay:",
+    "rpay:",
     "payment_screenshot_nav:",
     "admin_promocodes",
     "admin_broadcast",
@@ -15980,8 +15982,8 @@ async def _button_callback_impl(
                     lines.append(f"{ds} {label}  🕐 {p['last_updated_ago']}")
 
                     if not p.get("has_boot"):
-                        # No boot report — partner hasn't redeployed
-                        lines.append("   ❓ <i>Нет boot-отчёта — нужен редеплой</i>")
+                        # No boot report yet — will appear after next auto-deploy
+                        lines.append("   ⏳ <i>Отчёт появится после обновления</i>")
                         lines.append("")
                         continue
 
@@ -15996,17 +15998,31 @@ async def _button_callback_impl(
                         if missing:
                             lines.append(f"   ❌ <b>Нет: {', '.join(missing)}</b>")
 
-                    # Line 3: Optional features
+                    # Line 3+: Optional features by category
                     opt = p.get("optional_features", {})
                     if opt:
-                        opt_parts = [f"{v}{k}" for k, v in opt.items()]
-                        lines.append(f"   📦 Доп: {' | '.join(opt_parts)}")
+                        # Group: Payment
+                        pay_keys = ["Банк", "Держатель", "Телефон"]
+                        pay_parts = [f"{opt[k]}{k}" for k in pay_keys if k in opt]
+                        if pay_parts:
+                            lines.append(f"   💳 Оплата: {' '.join(pay_parts)}")
 
-                    # Lines 4+: deeper problems (max 2 per partner)
+                        # Group: Support
+                        sup_keys = ["Поддержка TG", "Текст поддержки"]
+                        sup_parts = [f"{opt[k]}{k}" for k in sup_keys if k in opt]
+                        if sup_parts:
+                            lines.append(f"   💬 Поддержка: {' '.join(sup_parts)}")
+
+                        # Group: Branding & Extensions
+                        ext_keys = ["Имя бота", "Username", "WebApp", "ZImage чат", "ZImage админы"]
+                        ext_parts = [f"{opt[k]}{k}" for k in ext_keys if k in opt]
+                        if ext_parts:
+                            lines.append(f"   🎨 Доп: {' '.join(ext_parts)}")
+
+                    # Lines: deeper problems (max 2 per partner)
                     probs = p.get("problems", [])
                     if probs:
                         for prob in probs[:2]:
-                            # Truncate long hints
                             if len(prob) > 80:
                                 prob = prob[:77] + "..."
                             lines.append(f"   ⚠️ <i>{prob}</i>")
@@ -16029,6 +16045,124 @@ async def _button_callback_impl(
                     parse_mode="HTML",
                     reply_markup=InlineKeyboardMarkup(keyboard),
                 )
+                return ConversationHandler.END
+
+            # Handle admin approve payment (apay:{pay_id}:{user_id}:{amount})
+            if data.startswith("apay:"):
+                if not is_admin_or_owner(user_id):
+                    await query.answer("❌ Только для администратора.", show_alert=True)
+                    return ConversationHandler.END
+                try:
+                    await query.answer("✅ Начисляю...")
+                except Exception:
+                    pass
+                parts = data.split(":")
+                if len(parts) < 4:
+                    await query.edit_message_caption("❌ Неверный формат.")
+                    return ConversationHandler.END
+                pay_id_str, target_uid_str, amt_str = parts[1], parts[2], parts[3]
+                try:
+                    target_uid = int(target_uid_str)
+                    pay_amount = float(amt_str)
+                except (ValueError, TypeError):
+                    await query.edit_message_caption("❌ Ошибка парсинга данных.")
+                    return ConversationHandler.END
+
+                # Credit balance
+                await add_user_balance_async(target_uid, pay_amount)
+
+                # Update payment status to completed
+                def _mark_completed(payload: dict) -> dict:
+                    updated = dict(payload or {})
+                    if pay_id_str in updated:
+                        updated[pay_id_str]["status"] = "completed"
+                        updated[pay_id_str]["balance_charged"] = True
+                        updated[pay_id_str]["approved_by"] = user_id
+                    return updated
+
+                from app.storage.factory import get_storage as _gs_apay
+                _apay_storage = _gs_apay()
+                await _apay_storage.update_json_file(os.path.basename(PAYMENTS_FILE), _mark_completed)
+
+                new_balance = await get_user_balance_async(target_uid)
+                logger.info(
+                    "ADMIN_APPROVE_PAYMENT admin=%s payment_id=%s user=%s amount=%.2f new_balance=%.2f",
+                    user_id, pay_id_str, target_uid, pay_amount, new_balance,
+                )
+
+                await query.edit_message_caption(
+                    f"✅ <b>ПЛАТЁЖ #{pay_id_str} ПОДТВЕРЖДЁН</b>\n\n"
+                    f"👤 Пользователь: <code>{target_uid}</code>\n"
+                    f"💰 Начислено: <b>{format_rub_amount(pay_amount)}</b>\n"
+                    f"💳 Новый баланс: <b>{format_rub_amount(new_balance)}</b>\n"
+                    f"👑 Подтвердил: <code>{user_id}</code>",
+                    parse_mode="HTML",
+                )
+
+                # Notify the user
+                try:
+                    await context.bot.send_message(
+                        chat_id=target_uid,
+                        text=(
+                            f"✅ <b>Ваш платёж подтверждён!</b>\n\n"
+                            f"💰 Начислено: <b>{format_rub_amount(pay_amount)}</b>\n"
+                            f"💳 Баланс: <b>{format_rub_amount(new_balance)}</b>\n\n"
+                            f"🎉 Спасибо! Можете начинать генерацию."
+                        ),
+                        parse_mode="HTML",
+                    )
+                except Exception as notify_err:
+                    logger.warning("PAYMENT_NOTIFY_USER_FAILED user=%s error=%s", target_uid, notify_err)
+
+                return ConversationHandler.END
+
+            # Handle admin reject payment (rpay:{pay_id}:{user_id})
+            if data.startswith("rpay:"):
+                if not is_admin_or_owner(user_id):
+                    await query.answer("❌ Только для администратора.", show_alert=True)
+                    return ConversationHandler.END
+                try:
+                    await query.answer("❌ Отклонено")
+                except Exception:
+                    pass
+                parts = data.split(":")
+                pay_id_str = parts[1] if len(parts) > 1 else "?"
+                target_uid_str = parts[2] if len(parts) > 2 else "0"
+
+                # Update payment status to rejected
+                def _mark_rejected(payload: dict) -> dict:
+                    updated = dict(payload or {})
+                    if pay_id_str in updated:
+                        updated[pay_id_str]["status"] = "rejected"
+                        updated[pay_id_str]["rejected_by"] = user_id
+                    return updated
+
+                from app.storage.factory import get_storage as _gs_rpay
+                _rpay_storage = _gs_rpay()
+                await _rpay_storage.update_json_file(os.path.basename(PAYMENTS_FILE), _mark_rejected)
+                logger.info("ADMIN_REJECT_PAYMENT admin=%s payment_id=%s user=%s", user_id, pay_id_str, target_uid_str)
+
+                await query.edit_message_caption(
+                    f"❌ <b>ПЛАТЁЖ #{pay_id_str} ОТКЛОНЁН</b>\n\n"
+                    f"👤 Пользователь: <code>{target_uid_str}</code>\n"
+                    f"👑 Отклонил: <code>{user_id}</code>",
+                    parse_mode="HTML",
+                )
+
+                # Notify the user
+                try:
+                    await context.bot.send_message(
+                        chat_id=int(target_uid_str),
+                        text=(
+                            f"❌ <b>Ваш платёж #{pay_id_str} отклонён</b>\n\n"
+                            f"Скриншот не прошёл проверку.\n"
+                            f"Пожалуйста, отправьте корректный скриншот через 💳 Пополнить баланс.\n\n"
+                            f"Если у вас есть вопросы — напишите в поддержку."
+                        ),
+                        parse_mode="HTML",
+                    )
+                except Exception:
+                    pass
                 return ConversationHandler.END
 
             # Handle payment screenshots viewing
@@ -22087,30 +22221,78 @@ async def _input_parameters_impl(update: Update, context: ContextTypes.DEFAULT_T
                 is_valid_payment = analysis.get('valid', False)
                 
                 if not is_valid_payment:
-                    # Payment validation FAILED - reject and show error
-                    support_info = get_support_contact()
-                    
-                    error_message = (
-                        f"❌ <b>ПЛАТЕЖ НЕ ПОДТВЕРЖДЕН</b>\n\n"
-                        f"{analysis.get('message', 'Скриншот не соответствует требованиям')}\n\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"💡 <b>Что делать:</b>\n"
-                        f"1️⃣ Убедитесь, что скриншот четкий и видно:\n"
-                        f"   • Сумму перевода ({format_rub_amount(amount)})\n"
-                        f"   • Номер телефона получателя\n"
-                        f"   • Статус платежа (\"успешно\", \"переведено\", \"отправлено\")\n\n"
-                        f"2️⃣ Отправьте новый скриншот через 🔄 <b>Пополнить баланс</b>\n\n"
-                        f"3️⃣ Если проблема сохраняется, напишите @ferixdiii для ручной верификации\n\n"
-                        f"{support_info}"
-                    )
-                    
+                    # Payment validation FAILED — save as pending and forward to admin
+                    logger.info("PAYMENT_PENDING_REVIEW user_id=%s amount=%.2f ocr=%s", user_id, amount, OCR_AVAILABLE)
+
+                    # Save payment as pending_review
+                    import time as _time_mod
+                    pending_payment = {
+                        "user_id": user_id,
+                        "amount": amount,
+                        "timestamp": _time_mod.time(),
+                        "screenshot_file_id": screenshot_file_id,
+                        "status": "pending_review",
+                        "balance_charged": False,
+                    }
+
+                    def _add_pending(payload: dict) -> dict:
+                        updated = dict(payload or {})
+                        pid = len(updated) + 1
+                        while str(pid) in updated:
+                            pid += 1
+                        pending_payment["id"] = pid
+                        updated[str(pid)] = pending_payment
+                        return updated
+
+                    from app.storage.factory import get_storage as _gs_pay
+                    _pay_storage = _gs_pay()
+                    await _pay_storage.update_json_file(os.path.basename(PAYMENTS_FILE), _add_pending)
+                    pay_id = pending_payment.get("id", "?")
+                    logger.info("PAYMENT_PENDING_SAVED payment_id=%s user_id=%s amount=%.2f", pay_id, user_id, amount)
+
+                    # Forward screenshot to admin for approval
+                    try:
+                        admin_id = ADMIN_ID
+                        user_obj = update.effective_user
+                        username = f"@{user_obj.username}" if user_obj.username else f"id:{user_id}"
+                        admin_keyboard = InlineKeyboardMarkup([
+                            [
+                                InlineKeyboardButton("✅ Подтвердить", callback_data=f"apay:{pay_id}:{user_id}:{int(amount)}"),
+                                InlineKeyboardButton("❌ Отклонить", callback_data=f"rpay:{pay_id}:{user_id}"),
+                            ]
+                        ])
+                        await context.bot.send_photo(
+                            chat_id=admin_id,
+                            photo=screenshot_file_id,
+                            caption=(
+                                f"💳 <b>НОВЫЙ ПЛАТЁЖ — ОЖИДАЕТ ПРОВЕРКИ</b>\n\n"
+                                f"👤 Пользователь: {username} (<code>{user_id}</code>)\n"
+                                f"💰 Сумма: <b>{format_rub_amount(amount)}</b>\n"
+                                f"🔢 ID платежа: #{pay_id}\n\n"
+                                f"Нажмите ✅ чтобы начислить баланс."
+                            ),
+                            parse_mode="HTML",
+                            reply_markup=admin_keyboard,
+                        )
+                        logger.info("PAYMENT_FORWARDED_TO_ADMIN payment_id=%s admin_id=%s", pay_id, admin_id)
+                    except Exception as fwd_err:
+                        logger.error("PAYMENT_FORWARD_FAILED payment_id=%s error=%s", pay_id, fwd_err)
+
+                    # Tell user their payment is being reviewed
                     await update.message.reply_text(
-                        error_message,
-                        parse_mode='HTML'
+                        f"📸 <b>Скриншот получен!</b>\n\n"
+                        f"💰 Сумма: <b>{format_rub_amount(amount)}</b>\n"
+                        f"🔢 Номер платежа: #{pay_id}\n\n"
+                        f"⏳ Ваш платёж отправлен <b>администратору на проверку</b>.\n"
+                        f"После подтверждения баланс будет начислен автоматически.\n\n"
+                        f"⏱ Обычно проверка занимает несколько минут.",
+                        parse_mode="HTML",
                     )
-                    
-                    # Keep session for retry
-                    return WAITING_PAYMENT_SCREENSHOT
+
+                    # Clean up session
+                    if user_id in user_sessions:
+                        del user_sessions[user_id]
+                    return ConversationHandler.END
                 
                 # PAYMENT PASSED VALIDATION - Add balance and credit user
                 # SECURITY FIX: Use found_amount from screenshot, NOT amount from session
@@ -29104,6 +29286,8 @@ async def _register_all_handlers_internal(application: Application):
             CallbackQueryHandler(button_callback, block=True, pattern='^view_payment_screenshots$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^payment_screenshot_nav:'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_payments_back$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^apay:'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^rpay:'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_promocodes$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_create_broadcast$'),

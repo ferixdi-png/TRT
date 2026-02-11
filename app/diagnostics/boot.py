@@ -452,6 +452,22 @@ async def run_boot_diagnostics(config: Any, storage: Any, redis_client: Any = No
     if not payment_support_set:
         degraded_notes["PAYMENT_SUPPORT"] = "Owner defaults in use"
 
+    # Individual optional env var checks (for detailed admin diagnostics)
+    OPTIONAL_VARS = [
+        "PAYMENT_BANK", "PAYMENT_CARD_HOLDER", "PAYMENT_PHONE",
+        "SUPPORT_TELEGRAM", "SUPPORT_TEXT",
+        "BOT_NAME", "BOT_USERNAME", "WEBAPP_URL",
+        "CHAT_ZIMAGE_CHAT", "CHAT_ZIMAGE_ADMIN_IDS",
+    ]
+    optional_vars_status: dict = {}
+    for var_name in OPTIONAL_VARS:
+        val = _env_value(config, var_name, "")
+        optional_vars_status[var_name] = "SET" if val else "NOT_SET"
+    config_checks["OPTIONAL_VARS"] = _status_entry(
+        STATUS_OK,
+        details=optional_vars_status,
+    )
+
     config_section = {
         "status": _section_status(config_checks),
         "checks": config_checks,

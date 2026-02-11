@@ -786,18 +786,34 @@ async def _initialize_application(settings):
     # CRITICAL: Initialize PostgreSQL storage BEFORE bot application
     # Without this, pool is created lazily on first request and may fail
     # if Render internal networking isn't fully ready yet
+    storage_instance = None
     try:
         from app.storage import get_storage
-        storage = get_storage()
-        if hasattr(storage, "initialize") and asyncio.iscoroutinefunction(storage.initialize):
-            db_ok = await storage.initialize()
+        storage_instance = get_storage()
+        if hasattr(storage_instance, "initialize") and asyncio.iscoroutinefunction(storage_instance.initialize):
+            db_ok = await storage_instance.initialize()
             if db_ok:
                 logger.info("[RENDER] ✅ DB_INITIALIZED=true")
             else:
                 logger.warning("[RENDER] ⚠️ DB_INITIALIZED=false — will retry on first use")
     except Exception as db_err:
         logger.warning("[RENDER] ⚠️ DB_INIT_FAILED error=%s — will retry on first use", db_err)
-    
+
+    # Run boot diagnostics and persist report (same as run_bot.py)
+    try:
+        from app.diagnostics.boot import run_boot_diagnostics, log_boot_report
+        boot_timeout = float(os.getenv("BOOT_DIAGNOSTICS_TIMEOUT_SECONDS", "5.0"))
+        boot_report = await asyncio.wait_for(
+            run_boot_diagnostics(os.environ, storage=storage_instance, redis_client=None),
+            timeout=boot_timeout,
+        )
+        log_boot_report(boot_report)
+        logger.info("[RENDER] ✅ BOOT_DIAGNOSTICS_DONE result=%s", boot_report.get("result", "?"))
+    except asyncio.TimeoutError:
+        logger.warning("[RENDER] ⚠️ BOOT_DIAGNOSTICS_TIMEOUT timeout_s=%.1f", boot_timeout)
+    except Exception as boot_err:
+        logger.warning("[RENDER] ⚠️ BOOT_DIAGNOSTICS_FAILED error=%s", boot_err)
+
     # Используем create_bot_application из bot_kie.py который регистрирует все хендлеры
     # вместо create_application из app/bootstrap.py
     application = await create_bot_application(settings)

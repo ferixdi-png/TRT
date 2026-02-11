@@ -2245,16 +2245,40 @@ class PostgresStorage(BaseStorage):
 
                 all_required_ok = len(required_missing) == 0 and has_boot
 
-                # --- Optional features ---
+                # --- Optional features (individual vars) ---
                 optional_features: Dict[str, str] = {}
 
-                # Payment/Support
-                pay_check = config_checks.get("PAYMENT_SUPPORT", {})
-                pay_st = pay_check.get("status", "")
-                if pay_st == "OK":
-                    optional_features["Оплата"] = "✅"
-                elif pay_st == "DEGRADED":
-                    optional_features["Оплата"] = "⚠️"
+                # Read individual optional vars from OPTIONAL_VARS check
+                opt_vars_check = config_checks.get("OPTIONAL_VARS", {})
+                opt_vars_details = opt_vars_check.get("details", {})
+                if isinstance(opt_vars_details, dict) and opt_vars_details:
+                    # Boot report has individual var statuses
+                    OPTIONAL_DISPLAY = {
+                        "PAYMENT_BANK": "Банк",
+                        "PAYMENT_CARD_HOLDER": "Держатель",
+                        "PAYMENT_PHONE": "Телефон",
+                        "SUPPORT_TELEGRAM": "Поддержка TG",
+                        "SUPPORT_TEXT": "Текст поддержки",
+                        "BOT_NAME": "Имя бота",
+                        "BOT_USERNAME": "Username",
+                        "WEBAPP_URL": "WebApp",
+                        "CHAT_ZIMAGE_CHAT": "ZImage чат",
+                        "CHAT_ZIMAGE_ADMIN_IDS": "ZImage админы",
+                    }
+                    for var_key, display_name in OPTIONAL_DISPLAY.items():
+                        var_status = opt_vars_details.get(var_key, "NOT_SET")
+                        if var_status == "SET":
+                            optional_features[display_name] = "✅"
+                        else:
+                            optional_features[display_name] = "➖"
+                else:
+                    # Fallback: use grouped PAYMENT_SUPPORT check
+                    pay_check = config_checks.get("PAYMENT_SUPPORT", {})
+                    pay_st = pay_check.get("status", "")
+                    if pay_st == "OK":
+                        optional_features["Оплата"] = "✅"
+                    elif pay_st == "DEGRADED":
+                        optional_features["Оплата"] = "⚠️"
 
                 # --- Service problems (deeper diagnostics) ---
                 problems: List[str] = []
