@@ -57,7 +57,7 @@ if _flush_interval_ms_raw:
         _flush_interval_seconds = max(0.01, float(_flush_interval_ms_raw) / 1000)
     except ValueError:
         logger.warning("OBS_FLUSH_INTERVAL_MS invalid: %s", _flush_interval_ms_raw)
-_persist_timeout_seconds = float(os.getenv("CORRELATION_STORE_PERSIST_TIMEOUT_SECONDS", "8.0"))
+_persist_timeout_seconds = float(os.getenv("CORRELATION_STORE_PERSIST_TIMEOUT_SECONDS", "3.0"))
 _flush_timeout_log_interval_seconds = float(
     os.getenv("CORRELATION_STORE_FLUSH_TIMEOUT_LOG_INTERVAL_SECONDS", "30.0")
 )

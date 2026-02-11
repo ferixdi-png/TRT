@@ -9541,8 +9541,11 @@ async def _telegram_idempotency_store_hit(key: Optional[str]) -> bool:
         return False
     now_s = time.time()
     try:
-        payload = await storage_instance.read_json_file(TELEGRAM_IDEMPOTENCY_STORAGE_FILE, default={})
-    except Exception:
+        payload = await asyncio.wait_for(
+            storage_instance.read_json_file(TELEGRAM_IDEMPOTENCY_STORAGE_FILE, default={}),
+            timeout=2.0,
+        )
+    except (asyncio.TimeoutError, Exception):
         return False
     pruned = _prune_idempotency_payload(payload, now_s=now_s)
     return key in pruned
@@ -9566,12 +9569,15 @@ async def _telegram_idempotency_store_mark(key: Optional[str]) -> None:
         return payload
 
     try:
-        await storage_instance.update_json_file(
-            TELEGRAM_IDEMPOTENCY_STORAGE_FILE,
-            _updater,
-            lock_mode="redis",
+        await asyncio.wait_for(
+            storage_instance.update_json_file(
+                TELEGRAM_IDEMPOTENCY_STORAGE_FILE,
+                _updater,
+                lock_mode="redis",
+            ),
+            timeout=2.0,
         )
-    except Exception:
+    except (asyncio.TimeoutError, Exception):
         return
 
 
