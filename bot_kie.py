@@ -15991,15 +15991,30 @@ async def _button_callback_impl(
                     gens_n = ds_info.get("generations", 0)
 
                     if not p.get("has_boot"):
-                        # No boot report — show verdict from DB data
+                        # No boot report — verdict based on deploy status + data
                         if users_n > 0 and pays_n > 0:
-                            verdict = f"📊 Активен ({users_n} юз., {pays_n} плат.)"
+                            verdict = f"✅ Активен ({users_n} юз., {pays_n} плат.)"
                         elif users_n > 0:
-                            verdict = f"📊 Есть юзеры ({users_n}), нет платежей"
-                        else:
-                            verdict = "⏳ Нет пользователей — бот ещё не использовался"
+                            verdict = f"📊 Есть юзеры ({users_n}), платежей нет"
+                        elif ds == "🟢":
+                            verdict = "⏳ Бот запущен, но никто не писал /start"
+                            lines.append(f"   {verdict}")
+                            lines.append("   <i>Отправь ссылку на бота клиентам</i>")
+                            lines.append("")
+                            continue
+                        elif ds == "🟡":
+                            verdict = "😴 Бот давно без сообщений"
+                            lines.append(f"   {verdict}")
+                            lines.append("   <i>Нет трафика или бот засыпает</i>")
+                            lines.append("")
+                            continue
+                        else:  # 🔴
+                            verdict = "🛑 Бот неактивен"
+                            lines.append(f"   {verdict}")
+                            lines.append("   <i>Проверь деплой на Render</i>")
+                            lines.append("")
+                            continue
                         lines.append(f"   {verdict}")
-                        lines.append(f"   <i>Подробная диагностика после перезапуска бота</i>")
                         lines.append("")
                         continue
 
