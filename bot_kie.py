@@ -15982,8 +15982,16 @@ async def _button_callback_impl(
                     lines.append(f"{ds} {label}  🕐 {p['last_updated_ago']}")
 
                     if not p.get("has_boot"):
-                        # No boot report yet — will appear after next auto-deploy
-                        lines.append("   ⏳ <i>Отчёт появится после обновления</i>")
+                        # No boot report — show real data from DB instead
+                        ds_info = p.get("data_summary", {})
+                        users_n = ds_info.get("users", 0)
+                        pays_n = ds_info.get("payments", 0)
+                        gens_n = ds_info.get("generations", 0)
+                        files_list = ds_info.get("files", [])
+                        lines.append(f"   👥 Юзеры: <b>{users_n}</b> | 💳 Платежи: <b>{pays_n}</b> | 🎨 Генерации: <b>{gens_n}</b>")
+                        lines.append(f"   📁 Файлов: {len(files_list)}")
+                        if users_n == 0 and pays_n == 0:
+                            lines.append("   ⚠️ <i>Бот пустой — нет активности</i>")
                         lines.append("")
                         continue
 
@@ -16018,6 +16026,13 @@ async def _button_callback_impl(
                         ext_parts = [f"{opt[k]}{k}" for k in ext_keys if k in opt]
                         if ext_parts:
                             lines.append(f"   🎨 Доп: {' '.join(ext_parts)}")
+
+                    # Data summary line
+                    ds_info = p.get("data_summary", {})
+                    users_n = ds_info.get("users", 0)
+                    pays_n = ds_info.get("payments", 0)
+                    gens_n = ds_info.get("generations", 0)
+                    lines.append(f"   👥 {users_n} юз. | 💳 {pays_n} плат. | 🎨 {gens_n} ген.")
 
                     # Lines: deeper problems (max 2 per partner)
                     probs = p.get("problems", [])

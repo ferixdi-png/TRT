@@ -2152,6 +2152,40 @@ class PostgresStorage(BaseStorage):
                         payload = {}
                 boot_reports[br["partner_id"]] = payload or {}
 
+            # Fetch filenames per partner (for no-boot-report fallback)
+            file_rows = await conn.fetch(
+                """
+                SELECT partner_id, filename
+                FROM storage_json
+                ORDER BY partner_id
+                """
+            )
+            partner_files: Dict[str, List[str]] = {}
+            for fr in file_rows:
+                partner_files.setdefault(fr["partner_id"], []).append(fr["filename"])
+
+            # Fetch key file sizes (user count, payment count) for data summary
+            data_rows = await conn.fetch(
+                """
+                SELECT partner_id, filename, payload
+                FROM storage_json
+                WHERE filename IN ('user_balances.json', 'payments.json', 'generations_history.json')
+                """
+            )
+            partner_data_counts: Dict[str, Dict[str, int]] = {}
+            for dr in data_rows:
+                pid = dr["partner_id"]
+                fname = dr["filename"]
+                payload = dr["payload"]
+                if isinstance(payload, str):
+                    try:
+                        import json as _json2
+                        payload = _json2.loads(payload)
+                    except Exception:
+                        payload = {}
+                count = len(payload) if isinstance(payload, dict) else 0
+                partner_data_counts.setdefault(pid, {})[fname] = count
+
             result: List[Dict[str, Any]] = []
             from datetime import datetime, timezone, timedelta
             now = datetime.now(timezone.utc)
@@ -2300,6 +2334,16 @@ class PostgresStorage(BaseStorage):
                                     msg += f" — {hint}"
                                 problems.append(msg)
 
+                # --- Data summary (from actual DB files) ---
+                p_files = partner_files.get(pid, [])
+                p_data = partner_data_counts.get(pid, {})
+                data_summary = {
+                    "users": p_data.get("user_balances.json", 0),
+                    "payments": p_data.get("payments.json", 0),
+                    "generations": p_data.get("generations_history.json", 0),
+                    "files": [f for f in p_files if not f.startswith("_diagnostics/")],
+                }
+
                 result.append({
                     "partner_id": pid,
                     "file_count": file_count,
@@ -2312,6 +2356,7 @@ class PostgresStorage(BaseStorage):
                     "all_required_ok": all_required_ok,
                     "optional_features": optional_features,
                     "problems": problems,
+                    "data_summary": data_summary,
                 })
 
             return result
