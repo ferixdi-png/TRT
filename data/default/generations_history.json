@@ -1005,24 +1005,6 @@
   "9911": [
     {
       "id": "task-123",
-      "model_id": "flux-2/flex-image-to-image",
-      "model_name": "Flux 2 Flex Image to Image",
-      "params": {
-        "prompt": "test",
-        "image_input": [
-          "https://example.com/file"
-        ],
-        "aspect_ratio": "1:1",
-        "resolution": "1K"
-      },
-      "result_urls": [
-        "https://example.com/result.png"
-      ],
-      "price": 12.0,
-      "timestamp": "2026-01-28T21:01:32.334260"
-    },
-    {
-      "id": "task-123",
       "model_id": "test-model",
       "model_name": "Test Model",
       "params": {},
@@ -2410,6 +2392,24 @@
       ],
       "price": 0.0,
       "timestamp": "2026-02-11T17:06:17.676535"
+    },
+    {
+      "id": "task-123",
+      "model_id": "flux-2/flex-image-to-image",
+      "model_name": "✨ Flux 2 Flex Image to Image",
+      "params": {
+        "prompt": "test",
+        "image_input": [
+          "https://example.com/file"
+        ],
+        "aspect_ratio": "1:1",
+        "resolution": "1K"
+      },
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 12.0,
+      "timestamp": "2026-02-11T17:07:22.165857"
     }
   ],
   "7777": [

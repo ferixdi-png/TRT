@@ -374,11 +374,11 @@ async def run_boot_diagnostics(config: Any, storage: Any, redis_client: Any = No
         else:
             config_checks["ADMIN_ID"] = _status_entry(STATUS_OK, details="valid")
 
-    normalized_instance = bot_instance_id.lower()
+    normalized_instance = bot_instance_id.lower() if bot_instance_id else ""
     if not bot_instance_id:
         config_checks["BOT_INSTANCE_ID"] = _status_entry(STATUS_FAIL, details="missing", hint="Set BOT_INSTANCE_ID")
         critical_failures["BOT_INSTANCE_ID"] = "Set BOT_INSTANCE_ID to lowercase identifier"
-    elif not _is_valid_instance(bot_instance_id):
+    elif not _is_valid_instance(normalized_instance):
         config_checks["BOT_INSTANCE_ID"] = _status_entry(
             STATUS_FAIL,
             details="invalid format",

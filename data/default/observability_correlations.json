@@ -210,7 +210,7 @@
     "job_id": null,
     "user_id": 111,
     "model_id": null,
-    "updated_at_ms": 1770815460150,
+    "updated_at_ms": 1770818894465,
     "missing_actions": [],
     "source": "structured_logs"
   },
@@ -219,7 +219,7 @@
     "request_id": "corr-1",
     "task_id": null,
     "job_id": null,
-    "updated_at_ms": 1770815460150
+    "updated_at_ms": 1770818894465
   },
   "ef2dd7a4-730f-489c-8583-3be829124000": {
     "correlation_id": "ef2dd7a4-730f-489c-8583-3be829124000",
@@ -5318,5 +5318,23 @@
     "task_id": null,
     "job_id": null,
     "updated_at_ms": 1770818777517
+  },
+  "corr-1-5201-88217845": {
+    "correlation_id": "corr-1-5201-88217845",
+    "request_id": "corr-1-5201-88217845",
+    "task_id": null,
+    "job_id": null,
+    "user_id": 5201,
+    "model_id": "z-image",
+    "updated_at_ms": 1770818894381,
+    "missing_actions": [],
+    "source": "structured_logs"
+  },
+  "request:corr-1-5201-88217845": {
+    "correlation_id": "corr-1-5201-88217845",
+    "request_id": "corr-1-5201-88217845",
+    "task_id": null,
+    "job_id": null,
+    "updated_at_ms": 1770818894381
   }
 }

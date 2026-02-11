@@ -130,11 +130,13 @@
     "request_id": "corr-1-777-d3b48a15",
     "prompt": null,
     "prompt_hash": "a7d766d8d25f",
-    "state": "queued",
+    "state": "timed_out",
     "start_ts_ms": 1770818774850,
     "updated_ts_ms": 1770818774945,
     "task_id": "task-send-fail",
-    "external_task_id": "task-send-fail"
+    "external_task_id": "task-send-fail",
+    "timed_out_ts_ms": 1770818780618,
+    "recovered_ts_ms": 1770818780618
   },
   "job-4ec9745a0df0": {
     "job_id": "job-4ec9745a0df0",
@@ -184,5 +186,22 @@
     "task_id": "task-123",
     "external_task_id": "task-123",
     "finished_ts_ms": 1770818777901
+  },
+  "job-566d5c074bf7": {
+    "job_id": "job-566d5c074bf7",
+    "user_id": 9911,
+    "chat_id": 12345,
+    "message_id": 1,
+    "model_id": "flux-2/flex-image-to-image",
+    "correlation_id": "corr-203-9911-9378929b",
+    "request_id": "corr-203-9911-9378929b",
+    "prompt": "test",
+    "prompt_hash": "9f86d081884c",
+    "state": "finished",
+    "start_ts_ms": 1770818841075,
+    "updated_ts_ms": 1770818842188,
+    "task_id": "task-123",
+    "external_task_id": "task-123",
+    "finished_ts_ms": 1770818842188
   }
 }

@@ -4337,7 +4337,7 @@ _user_registry_flush_event: Optional[asyncio.Event] = None
 
 # Storage paths - storage backend handles persistence (DB only).
 DATA_DIR = os.getenv("DATA_DIR", "").strip()
-BOT_INSTANCE_ID = os.getenv("BOT_INSTANCE_ID", "").strip()
+BOT_INSTANCE_ID = os.getenv("BOT_INSTANCE_ID", "").strip().lower()
 _data_dir_warning_logged = False
 
 

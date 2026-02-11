@@ -42,21 +42,21 @@
   "9911:task-123": {
     "user_id": 9911,
     "task_id": "task-123",
-    "job_id": "job-0381cd1e8302",
-    "model_id": "test-model",
-    "request_id": "corr-1-9911-98f32714",
-    "correlation_id": "corr-1-9911-98f32714",
-    "prompt_hash": "a7d766d8d25f",
+    "job_id": "job-566d5c074bf7",
+    "model_id": "flux-2/flex-image-to-image",
+    "request_id": "corr-203-9911-9378929b",
+    "correlation_id": "corr-203-9911-9378929b",
+    "prompt_hash": "9f86d081884c",
     "chat_id": 12345,
     "message_id": 1,
-    "sku_id": "z-image::aspect_ratio=1:1",
-    "price": 0.0,
-    "is_free": true,
+    "sku_id": "flux-2/flex-image-to-image::test",
+    "price": 12.0,
+    "is_free": false,
     "is_admin_user": false,
     "status": "delivered",
     "created_at": "2026-01-27T16:52:03.657569",
-    "updated_at": "2026-02-11T17:06:17.640336",
-    "delivered_at": "2026-02-11T17:06:17.640342",
+    "updated_at": "2026-02-11T17:07:22.145593",
+    "delivered_at": "2026-02-11T17:07:22.145604",
     "result_urls": [
       "https://example.com/result.png"
     ]
@@ -86,7 +86,7 @@
   "42:task-123": {
     "user_id": 42,
     "task_id": "task-123",
-    "job_id": "job-98e0dc7e171f",
+    "job_id": "job-fc3e9c19b729",
     "model_id": "sora-2-text-to-video",
     "request_id": "corr-test",
     "prompt_hash": "2cf24dba5fb0",
@@ -98,7 +98,7 @@
     "is_admin_user": false,
     "status": "pending",
     "created_at": "2026-01-27T16:53:48.209806",
-    "updated_at": "2026-02-11T17:03:33.483511"
+    "updated_at": "2026-02-11T17:08:37.194207"
   },
   "1:1d16481e-0f9b-4d43-a4d4-635ce6652b0f": {
     "user_id": 1,
@@ -779,5 +779,22 @@
     "status": "pending",
     "created_at": "2026-02-11T17:03:47.935475",
     "updated_at": "2026-02-11T17:03:47.935475"
+  },
+  "1:6c8dc545-4e87-4d53-ae47-333e5ea625b8": {
+    "user_id": 1,
+    "task_id": "6c8dc545-4e87-4d53-ae47-333e5ea625b8",
+    "job_id": "job-e12d1fd6d5ff",
+    "model_id": "flux-2/flex-image-to-image",
+    "request_id": "7a9a09cd-ea94-49aa-a18b-06e99b9b15ca",
+    "prompt_hash": "9f86d081884c",
+    "chat_id": 1,
+    "message_id": null,
+    "sku_id": null,
+    "price": 0.0,
+    "is_free": false,
+    "is_admin_user": false,
+    "status": "pending",
+    "created_at": "2026-02-11T17:08:53.080591",
+    "updated_at": "2026-02-11T17:08:53.080591"
   }
 }

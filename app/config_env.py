@@ -205,6 +205,8 @@ def validate_config(strict: bool = True) -> ConfigValidationResult:
 
     admin_id = require("ADMIN_ID")
     bot_instance_id = require("BOT_INSTANCE_ID")
+    if bot_instance_id:
+        bot_instance_id = bot_instance_id.lower()
     telegram_bot_token = require("TELEGRAM_BOT_TOKEN")
     webhook_base_url_raw = os.getenv("WEBHOOK_BASE_URL", "").strip()
     if not webhook_base_url_raw:
