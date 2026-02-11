@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import json
 import logging
 import os
 import random
@@ -229,8 +230,37 @@ async def _run_zimage(user_id: int, prompt: str) -> tuple:
         )
         return None, task_id
 
-    result_urls = poll_resp.get("resultUrls") or []
-    logger.info("[CHAT_ZIMAGE] RUN_ZIMAGE_DONE user_id=%s task_id=%s urls=%d", user_id, task_id, len(result_urls))
+    # Extract URLs: check both resultUrls and resultJson (KIE stores URLs in resultJson for most models)
+    result_urls = list(poll_resp.get("resultUrls") or [])
+    result_json_raw = poll_resp.get("resultJson")
+    if result_json_raw and not result_urls:
+        rj = result_json_raw
+        if isinstance(rj, str):
+            try:
+                rj = json.loads(rj)
+            except (json.JSONDecodeError, TypeError):
+                rj = None
+        if isinstance(rj, dict):
+            for key in ("resultUrls", "resultUrl", "urls", "output", "files", "results"):
+                val = rj.get(key)
+                if isinstance(val, list):
+                    result_urls.extend([u for u in val if u and isinstance(u, str)])
+                elif isinstance(val, str) and val.startswith("http"):
+                    result_urls.append(val)
+                if result_urls:
+                    break
+        elif isinstance(rj, list):
+            for item in rj:
+                if isinstance(item, str) and item.startswith("http"):
+                    result_urls.append(item)
+    logger.info("[CHAT_ZIMAGE] RUN_ZIMAGE_DONE user_id=%s task_id=%s urls=%d has_resultJson=%s resultUrls_raw=%s",
+               user_id, task_id, len(result_urls), bool(result_json_raw),
+               str(poll_resp.get('resultUrls', []))[:100])
+    if not result_urls:
+        logger.warning("[CHAT_ZIMAGE] NO_URLS_EXTRACTED user_id=%s task_id=%s poll_keys=%s resultJson_type=%s resultJson_preview=%s",
+                      user_id, task_id, list(poll_resp.keys()),
+                      type(result_json_raw).__name__ if result_json_raw else 'None',
+                      str(result_json_raw)[:300] if result_json_raw else 'None')
     return result_urls, task_id
 
 
