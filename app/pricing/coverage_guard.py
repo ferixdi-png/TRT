@@ -116,13 +116,12 @@ def _evaluate_model_pricing(model_id: str) -> Optional[DisabledModelInfo]:
         sku_param_keys.update(sku.params.keys())
     missing_required = [name for name in required_params if name not in sku_param_keys]
     if missing_required:
-        return DisabledModelInfo(
-            model_id=canonical_id,
-            reason=DISABLED_REASON_NO_PRICE,
-            issues=[
-                "Нет SKU маппинга для обязательных параметров: "
-                + ", ".join(sorted(missing_required))
-            ],
+        # Warning only — some required params (e.g. aspect_ratio) don't affect pricing.
+        # The real check is _resolve_mode_price below which uses backfill/fallback.
+        logger.info(
+            "PRICING_PREFLIGHT_PARAM_GAP model_id=%s missing_sku_params=%s (non-blocking)",
+            canonical_id,
+            missing_required,
         )
 
     modes = catalog_model.modes or []
