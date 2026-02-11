@@ -16022,7 +16022,7 @@ async def _button_callback_impl(
                         else:
                             verdict = "❓ Нет данных — бот ещё не запускался?"
                         lines.append(f"   <b>{verdict}</b>")
-                        lines.append("   <i>→ Перезапусти бота для полной диагностики ключей</i>")
+                        lines.append("   <i>→ Render Dashboard → Manual Deploy → отчёт появится сам</i>")
                         lines.append("")
                         continue
 

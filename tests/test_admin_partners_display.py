@@ -241,8 +241,8 @@ class TestNoBootVerdicts:
         assert "keep-alive" in self.source.lower() or "keep_alive" in self.source.lower() or "zhivoj" in self.source
 
     def test_restart_hint(self):
-        """Подсказка перезапустить бота для диагностики."""
-        assert "Перезапусти бота" in self.source
+        """Подсказка Manual Deploy на Render."""
+        assert "Manual Deploy" in self.source
 
 
 # ---------------------------------------------------------------------------
@@ -409,7 +409,7 @@ def _render_partner_lines(partner, current_instance="self-01"):
         else:
             verdict = "❓ Нет данных — бот ещё не запускался?"
         lines.append(f"   <b>{verdict}</b>")
-        lines.append("   <i>→ Перезапусти бота для полной диагностики ключей</i>")
+        lines.append("   <i>→ Render Dashboard → Manual Deploy → отчёт появится сам</i>")
         lines.append("")
         return lines
 
@@ -542,12 +542,12 @@ class TestNoBootDisplay:
         assert "❓DATABASE" in text
 
     def test_restart_hint_always_present(self):
-        """Подсказка перезапуска всегда есть для no-boot."""
+        """Подсказка Manual Deploy всегда есть для no-boot."""
         for ds in ["🟢", "🟡", "🔴"]:
             p = _build_partner(has_boot=False, deploy_status=ds)
             lines = _render_partner_lines(p)
             text = "\n".join(lines)
-            assert "Перезапусти бота" in text
+            assert "Manual Deploy" in text
 
     def test_unknown_marker_explanation(self):
         """❓ = нет boot-отчёта объяснение всегда есть."""
