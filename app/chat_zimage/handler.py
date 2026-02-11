@@ -337,11 +337,19 @@ async def _chat_zimage_gate(
 
     # ═══ This IS the target chat — block ALL main handlers ═══
 
+    user = update.effective_user
+    user_id = user.id if user else 0
+    logger.info(
+        "[CHAT_ZIMAGE] GATE_HIT chat=%s user_id=%s username=%s update_type=%s has_text=%s",
+        chat_username, user_id,
+        (user.username or "?") if user else "none",
+        update.effective_message.text[:30] if update.effective_message and update.effective_message.text else "no_text",
+        bool(update.effective_message and update.effective_message.text),
+    )
+
     message = update.effective_message
     if message and message.text and not message.text.startswith("/"):
         prompt = message.text.strip()
-        user = update.effective_user
-        user_id = user.id if user else 0
 
         if prompt and user_id:
             # Queue — silent skip if full
