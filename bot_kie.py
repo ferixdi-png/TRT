@@ -15986,12 +15986,71 @@ async def _button_callback_impl(
 
                 keyboard = [
                     [InlineKeyboardButton("🔄 Обновить", callback_data="admin_partners")],
+                    [InlineKeyboardButton("🔧 Инициализировать файлы", callback_data="admin_init_partners")],
                     [InlineKeyboardButton("◀️ Назад", callback_data="admin_stats")],
                 ]
                 await query.edit_message_text(
                     text,
                     parse_mode="HTML",
                     reply_markup=InlineKeyboardMarkup(keyboard),
+                )
+                return ConversationHandler.END
+
+            if data == "admin_init_partners":
+                logger.info("ADMIN_INIT_PARTNERS user_id=%s", user_id)
+                if not is_admin_or_owner(user_id):
+                    await query.answer("❌ Только для администратора.", show_alert=True)
+                    return ConversationHandler.END
+                try:
+                    await query.answer("⏳ Создаю файлы...")
+                except Exception:
+                    pass
+
+                from app.storage.factory import get_storage
+                storage = get_storage()
+
+                if not hasattr(storage, "ensure_partner_defaults"):
+                    await query.edit_message_text(
+                        "⚠️ Функция доступна только с PostgreSQL.",
+                        parse_mode="HTML",
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton("◀️ Назад", callback_data="admin_partners")]
+                        ]),
+                    )
+                    return ConversationHandler.END
+
+                try:
+                    created = await storage.ensure_partner_defaults()
+                except Exception as exc:
+                    logger.error("ADMIN_INIT_PARTNERS_FAILED error=%s", exc, exc_info=True)
+                    await query.edit_message_text(
+                        f"⚠️ <b>Ошибка</b>\n<code>{str(exc)[:200]}</code>",
+                        parse_mode="HTML",
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton("◀️ Назад", callback_data="admin_partners")]
+                        ]),
+                    )
+                    return ConversationHandler.END
+
+                if not created:
+                    text = "✅ <b>Все файлы на месте</b>\n\nУ всех партнёров есть все критические файлы."
+                else:
+                    lines = ["🔧 <b>Инициализация завершена</b>\n"]
+                    total = 0
+                    for pid, fnames in created.items():
+                        short = [f.replace('.json', '') for f in fnames]
+                        lines.append(f"✅ <b>{pid}</b>: +{len(fnames)} ({', '.join(short)})")
+                        total += len(fnames)
+                    lines.append(f"\nСоздано файлов: <b>{total}</b>")
+                    text = "\n".join(lines)
+
+                await query.edit_message_text(
+                    text,
+                    parse_mode="HTML",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔄 Проверить", callback_data="admin_partners")],
+                        [InlineKeyboardButton("◀️ Назад", callback_data="admin_stats")],
+                    ]),
                 )
                 return ConversationHandler.END
 
@@ -29074,6 +29133,7 @@ async def _register_all_handlers_internal(application: Application):
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast_stats$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_test_ocr$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_partners$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_init_partners$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_users$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_payments$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_add_balance$'),

@@ -2210,6 +2210,50 @@ class PostgresStorage(BaseStorage):
 
             return result
 
+    @_retry_transient
+    async def ensure_partner_defaults(self) -> Dict[str, List[str]]:
+        """Create missing critical files with empty {} for all partners.
+
+        Returns dict: {partner_id: [list of created filenames]}
+        """
+        CRITICAL_FILES = {
+            "user_balances.json",
+            "generations_history.json",
+            "generation_jobs.json",
+            "daily_free_generations.json",
+        }
+
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT partner_id, array_agg(DISTINCT filename) AS filenames
+                FROM storage_json
+                GROUP BY partner_id
+                """
+            )
+
+            created: Dict[str, List[str]] = {}
+            for row in rows:
+                pid = row["partner_id"]
+                existing = set(row["filenames"] or [])
+                missing = CRITICAL_FILES - existing
+                if not missing:
+                    continue
+                created[pid] = []
+                for fname in sorted(missing):
+                    await conn.execute(
+                        """
+                        INSERT INTO storage_json (partner_id, filename, payload, updated_at)
+                        VALUES ($1, $2, $3::jsonb, now())
+                        ON CONFLICT (partner_id, filename) DO NOTHING
+                        """,
+                        pid, fname, "{}",
+                    )
+                    created[pid].append(fname)
+
+            return created
+
     async def migrate_from_github(self, github_storage: BaseStorage) -> None:
         """Migrate data from GitHub storage to PostgreSQL.
         
