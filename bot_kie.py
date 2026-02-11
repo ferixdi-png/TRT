@@ -15994,9 +15994,23 @@ async def _button_callback_impl(
                         # No boot report — verdict based on deploy status + data
                         lines.append("   🔑 Ключи: <i>нет отчёта — бот не присылал диагностику</i>")
                         if users_n > 0 and pays_n > 0:
-                            lines.append(f"   ✅ Активен: {users_n} юз., {pays_n} плат., {gens_n} ген.")
+                            lines.append(f"   📊 {users_n} юз., {pays_n} плат., {gens_n} ген.")
+                            if ds == "🔴":
+                                lines.append("   🛑 Был активен, сейчас не отвечает")
+                                lines.append("   <i>→ Открой Render Dashboard → проверь логи</i>")
+                            elif ds == "🟡":
+                                lines.append('   😴 Был активен, сейчас спит')
+                                lines.append('   <i>→ <a href="https://telegra.ph/Render-Free-zasypaet-kak-sdelat-chtoby-servis-vsegda-byl-zhivoj-za-2-minuty-02-06">Настрой keep-alive</a> или тариф $5</i>')
+                            else:
+                                lines.append("   ✅ Активен")
                         elif users_n > 0:
                             lines.append(f"   📊 {users_n} юз., {gens_n} ген., платежей нет")
+                            if ds == "🔴":
+                                lines.append("   🛑 Есть юзеры, но бот не отвечает")
+                                lines.append("   <i>→ Открой Render Dashboard → проверь логи</i>")
+                            elif ds == "🟡":
+                                lines.append('   😴 Есть юзеры, но бот уснул')
+                                lines.append('   <i>→ <a href="https://telegra.ph/Render-Free-zasypaet-kak-sdelat-chtoby-servis-vsegda-byl-zhivoj-za-2-minuty-02-06">Настрой keep-alive</a> или тариф $5</i>')
                         elif ds == "🟢":
                             lines.append("   ⏳ Бот онлайн, юзеров нет")
                         elif ds == "🟡":
