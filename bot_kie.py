@@ -16001,7 +16001,7 @@ async def _button_callback_impl(
                             lines.append("   <i>→ Отправь ссылку t.me/бот клиентам</i>")
                         elif ds == "🟡":
                             lines.append("   😴 Render усыпил бота (нет трафика)")
-                            lines.append("   <i>→ Напиши /start боту чтобы разбудить</i>")
+                            lines.append('   <i>→ <a href="https://telegra.ph/Render-Free-zasypaet-kak-sdelat-chtoby-servis-vsegda-byl-zhivoj-za-2-minuty-02-06">Настрой бесплатный keep-alive</a> или возьми тариф $5</i>')
                         else:  # 🔴
                             lines.append("   🛑 Бот не отвечает давно")
                             lines.append("   <i>→ Открой Render Dashboard → проверь логи</i>")
