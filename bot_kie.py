@@ -7783,6 +7783,7 @@ async def render_admin_panel(update_or_query, context: ContextTypes.DEFAULT_TYPE
         [InlineKeyboardButton("⚙️ Настройки", callback_data="admin_settings")],
         [InlineKeyboardButton("🔍 Поиск", callback_data="admin_search")],
         [InlineKeyboardButton("📝 Добавить", callback_data="admin_add")],
+        [InlineKeyboardButton("🤝 Проверить партнёров", callback_data="admin_partners")],
         [InlineKeyboardButton("🧪 Тест OCR", callback_data="admin_test_ocr")],
         [InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_menu")],
     ]
@@ -15904,7 +15905,110 @@ async def _button_callback_impl(
                     pass
                 await render_admin_panel(query, context, is_callback=True)
                 return ConversationHandler.END
-            
+
+            if data == "admin_partners":
+                logger.info("ADMIN_PARTNERS_CLICKED user_id=%s", user_id)
+                if not is_admin_or_owner(user_id):
+                    await query.answer("❌ Только для администратора.", show_alert=True)
+                    return ConversationHandler.END
+                try:
+                    await query.answer()
+                except Exception:
+                    pass
+
+                from app.storage.factory import get_storage
+                storage = get_storage()
+
+                # Check if storage supports list_all_partners (PostgresStorage only)
+                if not hasattr(storage, "list_all_partners"):
+                    await query.edit_message_text(
+                        "⚠️ <b>Проверка партнёров</b>\n\n"
+                        "Функция доступна только при подключении к PostgreSQL.\n"
+                        "Текущий бэкенд: <code>{}</code>".format(type(storage).__name__),
+                        parse_mode="HTML",
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton("◀️ Назад", callback_data="admin_stats")]
+                        ]),
+                    )
+                    return ConversationHandler.END
+
+                try:
+                    partners = await storage.list_all_partners()
+                except Exception as exc:
+                    logger.error("ADMIN_PARTNERS_FAILED error=%s", exc, exc_info=True)
+                    await query.edit_message_text(
+                        "⚠️ <b>Ошибка при загрузке партнёров</b>\n\n"
+                        f"<code>{str(exc)[:200]}</code>",
+                        parse_mode="HTML",
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton("◀️ Назад", callback_data="admin_stats")]
+                        ]),
+                    )
+                    return ConversationHandler.END
+
+                if not partners:
+                    await query.edit_message_text(
+                        "🤝 <b>Партнёры</b>\n\nНет подключённых инстансов.",
+                        parse_mode="HTML",
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton("◀️ Назад", callback_data="admin_stats")]
+                        ]),
+                    )
+                    return ConversationHandler.END
+
+                current_instance = BOT_INSTANCE_ID or "default"
+                total = len(partners)
+                ok_count = sum(1 for p in partners if not p["problems"])
+                problem_count = total - ok_count
+
+                lines = [
+                    f"🤝 <b>ПАРТНЁРЫ И ИНСТАНСЫ</b>\n",
+                    f"Всего: <b>{total}</b> | ✅ <b>{ok_count}</b> | ⚠️ <b>{problem_count}</b>\n",
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n",
+                ]
+
+                for p in partners:
+                    pid = p["partner_id"]
+                    is_self = pid == current_instance
+
+                    if p["problems"]:
+                        status_icon = "🔴"
+                    elif p["has_recent_activity"]:
+                        status_icon = "🟢"
+                    else:
+                        status_icon = "🟡"
+
+                    label = f"<b>{pid}</b>"
+                    if is_self:
+                        label += " 👑 (ты)"
+
+                    lines.append(f"\n{status_icon} {label}")
+                    lines.append(f"   👥 Юзеров: <b>{p['users_count']}</b>")
+                    lines.append(f"   🎨 Генераций: <b>{p['generations_count']}</b>")
+                    lines.append(f"   💳 Платежей: <b>{p['payments_count']}</b>")
+                    lines.append(f"   📁 Файлов: <b>{p['file_count']}</b>")
+                    lines.append(f"   🕐 Обновлено: <b>{p['last_updated_ago']}</b> назад")
+
+                    if p["problems"]:
+                        for prob in p["problems"]:
+                            lines.append(f"   ⚠️ <i>{prob}</i>")
+
+                text = "\n".join(lines)
+                # Telegram message limit is 4096 chars
+                if len(text) > 4000:
+                    text = text[:3990] + "\n\n<i>...обрезано</i>"
+
+                keyboard = [
+                    [InlineKeyboardButton("🔄 Обновить", callback_data="admin_partners")],
+                    [InlineKeyboardButton("◀️ Назад", callback_data="admin_stats")],
+                ]
+                await query.edit_message_text(
+                    text,
+                    parse_mode="HTML",
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                )
+                return ConversationHandler.END
+
             # Handle payment screenshots viewing
             if data == "view_payment_screenshots":
                 await query.answer()
@@ -28983,6 +29087,7 @@ async def _register_all_handlers_internal(application: Application):
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_create_broadcast$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast_stats$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_test_ocr$'),
+            CallbackQueryHandler(button_callback, block=True, pattern='^admin_partners$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_users$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_payments$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_add_balance$'),
@@ -29065,6 +29170,7 @@ async def _register_all_handlers_internal(application: Application):
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_create_broadcast$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast_stats$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_test_ocr$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_partners$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_users$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_payments$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_add_balance$'),
@@ -29125,6 +29231,7 @@ async def _register_all_handlers_internal(application: Application):
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_create_broadcast$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast_stats$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_test_ocr$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_partners$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_users$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_payments$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_add_balance$'),
@@ -29194,6 +29301,7 @@ async def _register_all_handlers_internal(application: Application):
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_create_broadcast$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast_stats$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_test_ocr$'),
+                CallbackQueryHandler(button_callback, block=True, pattern='^admin_partners$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_users$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_payments$'),
                 CallbackQueryHandler(button_callback, block=True, pattern='^admin_add_balance$'),

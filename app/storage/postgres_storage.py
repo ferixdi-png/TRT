@@ -2113,6 +2113,104 @@ class PostgresStorage(BaseStorage):
             row = await conn.fetchrow("SELECT count(*) AS c FROM storage_json WHERE partner_id=$1", self.partner_id)
             return not row or row[0] == 0
 
+    @_retry_transient
+    async def list_all_partners(self) -> List[Dict[str, Any]]:
+        """List all partner instances with health/status info.
+
+        Returns a list of dicts with keys:
+            partner_id, file_count, last_updated, users_count,
+            generations_count, payments_count, has_recent_activity, problems
+        """
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            # Step 1: Get basic partner info
+            rows = await conn.fetch(
+                """
+                SELECT
+                    partner_id,
+                    count(*)        AS file_count,
+                    max(updated_at) AS last_updated
+                FROM storage_json
+                GROUP BY partner_id
+                ORDER BY last_updated DESC
+                """
+            )
+
+            result: List[Dict[str, Any]] = []
+            from datetime import datetime, timezone, timedelta
+            now = datetime.now(timezone.utc)
+
+            for row in rows:
+                pid = row["partner_id"]
+                last_upd = row["last_updated"]
+                file_count = row["file_count"]
+
+                # Step 2: Load key counts per partner from well-known files
+                def _count_keys(payload: Any) -> int:
+                    if isinstance(payload, dict):
+                        return len(payload)
+                    return 0
+
+                users_count = 0
+                gens_count = 0
+                payments_count = 0
+                try:
+                    ur = await conn.fetchval(
+                        "SELECT payload FROM storage_json WHERE partner_id=$1 AND filename=$2",
+                        pid, "user_registry.json",
+                    )
+                    users_count = _count_keys(ur)
+                except Exception:
+                    pass
+                try:
+                    gh = await conn.fetchval(
+                        "SELECT payload FROM storage_json WHERE partner_id=$1 AND filename=$2",
+                        pid, "generations_history.json",
+                    )
+                    gens_count = _count_keys(gh)
+                except Exception:
+                    pass
+                try:
+                    ph = await conn.fetchval(
+                        "SELECT payload FROM storage_json WHERE partner_id=$1 AND filename=$2",
+                        pid, "payments.json",
+                    )
+                    payments_count = _count_keys(ph)
+                except Exception:
+                    pass
+
+                # Step 3: Detect problems
+                problems: List[str] = []
+                has_recent = False
+                if last_upd:
+                    age = now - last_upd
+                    has_recent = age < timedelta(hours=1)
+                    if age > timedelta(days=1):
+                        problems.append("нет активности >24ч")
+                    elif age > timedelta(hours=6):
+                        problems.append("нет активности >6ч")
+                else:
+                    problems.append("нет данных updated_at")
+
+                if file_count < 3:
+                    problems.append(f"мало файлов ({file_count})")
+                if users_count == 0:
+                    problems.append("0 пользователей")
+
+                result.append({
+                    "partner_id": pid,
+                    "file_count": file_count,
+                    "last_updated": last_upd.isoformat() if last_upd else None,
+                    "last_updated_ago": str(now - last_upd).split(".")[0] if last_upd else "N/A",
+                    "users_count": users_count,
+                    "generations_count": gens_count,
+                    "payments_count": payments_count,
+                    "has_recent_activity": has_recent,
+                    "problems": problems,
+                })
+
+            return result
+
     async def migrate_from_github(self, github_storage: BaseStorage) -> None:
         """Migrate data from GitHub storage to PostgreSQL.
         
