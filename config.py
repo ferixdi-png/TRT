@@ -34,7 +34,7 @@ class Settings:
         
         # Константы (не из ENV)
         self.CREDIT_TO_USD = 0.005
-        self.USD_TO_RUB = 77.2222
+        self.USD_TO_RUB = 77.83
         self.FREE_GENERATIONS_PER_DAY = 5
         self.REFERRAL_BONUS_GENERATIONS = 5
         self.FREE_MODEL_ID = "z-image"

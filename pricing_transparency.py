@@ -10,7 +10,7 @@ from decimal import Decimal
 logger = logging.getLogger(__name__)
 
 # Курс валют (можно получать из API)
-USD_TO_RUB_RATE = 100.0  # Примерный курс, должен обновляться
+USD_TO_RUB_RATE = 77.83  # Из pricing/config.yaml (SSOT)
 
 
 def calculate_detailed_price(

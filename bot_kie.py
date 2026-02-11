@@ -4390,12 +4390,13 @@ FREE_SKU_ID = FREE_TOOL_SKU_IDS[0] if FREE_TOOL_SKU_IDS else ""
 
 def is_video_model(model_id: str) -> bool:
     """Check if model is a video generation model"""
-    video_keywords = ['video', 'animate', 'avatar', 'speech-to-video', 'sora', 'infinitalk']
-    return any(keyword in model_id.lower() for keyword in video_keywords)
+    video_keywords = ['video', 'animate', 'avatar', 'speech-to-video', 'sora', 'infinitalk', 'veo', 'runway']
+    _VIDEO_MODEL_IDS = {'grok/imagine'}
+    return model_id in _VIDEO_MODEL_IDS or any(keyword in model_id.lower() for keyword in video_keywords)
 
 def is_audio_model(model_id: str) -> bool:
     """Check if model is an audio processing model"""
-    audio_keywords = ['speech-to-text', 'audio', 'transcribe']
+    audio_keywords = ['speech-to-text', 'audio', 'transcribe', 'elevenlabs', 'suno', 'tts', 'music', 'sound-effect', 'dialogue']
     return any(keyword in model_id.lower() for keyword in audio_keywords)
 
 

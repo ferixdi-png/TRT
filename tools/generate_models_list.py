@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Константы для расчета цен
 CREDIT_TO_USD = 0.005  # 1 credit = $0.005
-USD_TO_RUB = 6.95 / 0.09  # 1 USD = 77.2222... RUB
+USD_TO_RUB = 77.83  # Из pricing/config.yaml (SSOT)
 
 # Импортируем модели
 from kie_models import KIE_MODELS, get_generation_types, get_models_by_generation_type
