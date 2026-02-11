@@ -15991,35 +15991,38 @@ async def _button_callback_impl(
                     gens_n = ds_info.get("generations", 0)
 
                     if not p.get("has_boot"):
-                        # No boot report — verdict based on deploy status + data
-                        lines.append("   🔑 Ключи: <i>нет отчёта — бот не присылал диагностику</i>")
-                        if users_n > 0 and pays_n > 0:
-                            lines.append(f"   📊 {users_n} юз., {pays_n} плат., {gens_n} ген.")
-                            if ds == "🔴":
-                                lines.append("   🛑 Был активен, сейчас не отвечает")
-                                lines.append("   <i>→ Открой Render Dashboard → проверь логи</i>")
-                            elif ds == "🟡":
-                                lines.append('   😴 Был активен, сейчас спит')
-                                lines.append('   <i>→ <a href="https://telegra.ph/Render-Free-zasypaet-kak-sdelat-chtoby-servis-vsegda-byl-zhivoj-za-2-minuty-02-06">Настрой keep-alive</a> или тариф $5</i>')
-                            else:
-                                lines.append("   ✅ Активен")
-                        elif users_n > 0:
-                            lines.append(f"   📊 {users_n} юз., {gens_n} ген., платежей нет")
-                            if ds == "🔴":
-                                lines.append("   🛑 Есть юзеры, но бот не отвечает")
-                                lines.append("   <i>→ Открой Render Dashboard → проверь логи</i>")
-                            elif ds == "🟡":
-                                lines.append('   😴 Есть юзеры, но бот уснул')
-                                lines.append('   <i>→ <a href="https://telegra.ph/Render-Free-zasypaet-kak-sdelat-chtoby-servis-vsegda-byl-zhivoj-za-2-minuty-02-06">Настрой keep-alive</a> или тариф $5</i>')
-                        elif ds == "🟢":
-                            lines.append("   ⏳ Бот онлайн, юзеров нет")
-                        elif ds == "🟡":
-                            lines.append("   😴 Render усыпил бота (нет трафика)")
-                            lines.append('   <i>→ <a href="https://telegra.ph/Render-Free-zasypaet-kak-sdelat-chtoby-servis-vsegda-byl-zhivoj-za-2-minuty-02-06">Настрой бесплатный keep-alive</a> или возьми тариф $5</i>')
-                        else:  # 🔴
+                        # No boot report — infer key status from DB data
+                        files_list = ds_info.get("files", [])
+                        has_files = len(files_list) > 0
+                        # Infer keys from what we can observe
+                        k_db = "✅" if has_files else "❓"
+                        k_inst = "✅"  # always known — it's the partner_id
+                        k_token = "✅" if users_n > 0 else ("✅" if has_files and ds == "🟢" else "❓")
+                        k_kie = "✅" if gens_n > 0 else "❓"
+                        k_wh = "✅" if ds == "🟢" else "❓"
+                        k_admin = "❓"
+                        lines.append(f"   🔑 {k_admin}ADMIN {k_inst}INSTANCE {k_wh}WEBHOOK {k_kie}KIE {k_token}TG_TOKEN {k_db}DATABASE")
+                        lines.append("   <i>❓ = нет boot-отчёта, точно неизвестно</i>")
+                        # Status-specific verdict
+                        if ds == "🟡":
+                            lines.append('   😴 Render усыпил бота')
+                            lines.append('   <i>→ <a href="https://telegra.ph/Render-Free-zasypaet-kak-sdelat-chtoby-servis-vsegda-byl-zhivoj-za-2-minuty-02-06">Настрой бесплатный keep-alive</a> или тариф $5</i>')
+                        elif ds == "🔴":
                             lines.append("   🛑 Бот не отвечает давно")
                             lines.append("   <i>→ Открой Render Dashboard → проверь логи</i>")
-                        lines.append("   <i>→ Перезапусти бота на Render для полной диагностики</i>")
+                        # Final verdict
+                        if users_n > 0 and pays_n > 0:
+                            verdict = f"✅ Активен: {users_n} юз., {pays_n} плат., {gens_n} ген."
+                        elif users_n > 0:
+                            verdict = f"📊 Есть юзеры ({users_n}), платежей нет"
+                        elif has_files and ds == "🟢":
+                            verdict = "⏳ Настроен, ожидает пользователей"
+                        elif has_files:
+                            verdict = "⏳ Данные есть, бот неактивен"
+                        else:
+                            verdict = "❓ Нет данных — бот ещё не запускался?"
+                        lines.append(f"   <b>{verdict}</b>")
+                        lines.append("   <i>→ Перезапусти бота для полной диагностики ключей</i>")
                         lines.append("")
                         continue
 
