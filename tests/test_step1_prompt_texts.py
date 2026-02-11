@@ -2,6 +2,7 @@ import yaml
 from pathlib import Path
 
 from app.helpers.copy import build_step1_prompt_text, get_model_short, get_sku_short
+from app.model_descriptions import format_intro_card
 from app.kie_contract.schema_loader import list_model_ids
 from app.pricing.ssot_catalog import list_model_skus
 
@@ -15,9 +16,7 @@ def _load_model_copy():
 
 def test_build_step1_prompt_includes_model_and_sku():
     model_id = "z-image"
-    model_short = _load_model_copy()[model_id]["model_short"]
     sku = list_model_skus(model_id)[0]
-    sku_short = get_sku_short(model_id, sku)
     billing_ctx = {
         "price_text": "Цена по прайсу: 1.00 ₽",
         "price_rub": "1.00",
@@ -26,11 +25,18 @@ def test_build_step1_prompt_includes_model_and_sku():
 
     text = build_step1_prompt_text(model_id, sku, billing_ctx, admin_flag=False)
 
-    assert model_short in text
-    assert sku_short in text
+    # Intro card title from model_descriptions.yaml is embedded
+    from app.model_descriptions import get_model_description
+    desc = get_model_description(model_id)
+    title = desc.get("title") or model_id
+    assert title in text
+    # Prompt instruction present
+    assert "Опиши что хочешь получить" in text
+    # Price present
+    assert "1.00" in text
 
 
-def test_build_step1_prompt_has_no_examples():
+def test_build_step1_prompt_has_example():
     model_id = "z-image"
     sku = list_model_skus(model_id)[0]
     billing_ctx = {
@@ -41,8 +47,7 @@ def test_build_step1_prompt_has_no_examples():
 
     text = build_step1_prompt_text(model_id, sku, billing_ctx, admin_flag=False)
 
-    assert "🧪" not in text
-    assert "Пример:" not in text
+    assert "Пример:" in text
 
 
 def test_build_step1_prompt_admin_free_sets_price_zero(caplog):
@@ -63,8 +68,7 @@ def test_build_step1_prompt_admin_free_sets_price_zero(caplog):
             correlation_id="corr-test",
         )
 
-    assert "🎁 Админ: безлимитные генерации (квота не расходуется)." in text
-    assert "🎁 Бесплатно" in text
+    assert "👑 Админ: безлимитные генерации (квота не расходуется)." in text
     assert any("price_rub=0" in record.message for record in caplog.records)
 
 

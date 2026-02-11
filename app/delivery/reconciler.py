@@ -43,6 +43,7 @@ SUCCESS_STATES = {"success"}
 FAILED_STATES = {"failed", "canceled"}
 DELIVERED_STATES = {"delivered"}
 DELIVERY_POLL_TIMEOUT_SECONDS = int(os.getenv("DELIVERY_POLL_TIMEOUT_SECONDS", "300"))
+DELIVERY_MAX_JOB_AGE_SECONDS = int(os.getenv("DELIVERY_MAX_JOB_AGE_SECONDS", "3600"))
 DELIVERY_RECONCILER_MAX_BACKOFF_SECONDS = int(os.getenv("DELIVERY_RECONCILER_MAX_BACKOFF_SECONDS", "60"))
 
 
@@ -1023,6 +1024,35 @@ async def reconcile_pending_results(
                     logger.warning("Failed to clean orphan job %s: %s", job_id_orphan, e)
             continue
         age_s = _job_age_seconds(job, now_ts=now_ts)
+        # Expire stale jobs that have been pending longer than max age
+        if age_s is not None and age_s > DELIVERY_MAX_JOB_AGE_SECONDS:
+            stale_job_id = job.get("job_id") or task_id
+            logger.warning(
+                "🗑️ RECONCILER_STALE_JOB_EXPIRED job_id=%s task_id=%s user_id=%s model=%s age_s=%d max_age_s=%d",
+                stale_job_id, task_id, job.get("user_id"), job.get("model_id"),
+                int(age_s), DELIVERY_MAX_JOB_AGE_SECONDS,
+            )
+            try:
+                await storage.update_job_status(
+                    stale_job_id, "failed",
+                    error_message=f"Job expired after {int(age_s)}s (max {DELIVERY_MAX_JOB_AGE_SECONDS}s)",
+                    error_code="ERR_JOB_EXPIRED",
+                )
+            except Exception as e:
+                logger.warning("Failed to expire stale job %s: %s", stale_job_id, e)
+            log_structured_event(
+                correlation_id=job.get("correlation_id") or job.get("request_id"),
+                user_id=job.get("user_id"),
+                action="STALE_JOB_EXPIRED",
+                action_path="delivery_reconciler",
+                model_id=job.get("model_id"),
+                task_id=task_id,
+                job_id=stale_job_id,
+                stage="DELIVERY_MONITOR",
+                outcome="expired",
+                param={"age_s": int(age_s), "max_age_s": DELIVERY_MAX_JOB_AGE_SECONDS},
+            )
+            continue
         await _maybe_notify_timeout(
             bot,
             storage,

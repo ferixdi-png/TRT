@@ -19938,7 +19938,7 @@ async def prompt_for_specific_param(
         logger.error("Cannot determine chat_id in prompt_for_specific_param")
         return None
 
-    if param_name in {"prompt", "text"} and user_lang == "ru":
+    if param_name in {"prompt", "text"}:
         from app.helpers.copy import build_step1_prompt_text
         from app.pricing.ssot_catalog import get_sku_by_id, resolve_sku_for_params
 
@@ -19966,6 +19966,7 @@ async def prompt_for_specific_param(
             get_is_admin(user_id),
             correlation_id=correlation_id,
             step_info=step_info,
+            user_lang=user_lang,
         )
         keyboard = [
             [
@@ -20953,7 +20954,7 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
         ])
         keyboard.append([InlineKeyboardButton(t('btn_cancel', lang=user_lang), callback_data="cancel")])
 
-        if param_name in {"prompt", "text"} and user_lang == "ru":
+        if param_name in {"prompt", "text"}:
             from app.helpers.copy import build_step1_prompt_text
             from app.pricing.ssot_catalog import get_sku_by_id, resolve_sku_for_params
 
@@ -20980,6 +20981,7 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 get_is_admin(user_id),
                 correlation_id=correlation_id,
                 step_info=_get_step_info(session, param_name, user_lang),
+                user_lang=user_lang,
             )
         else:
             default_info = f"\n\nПо умолчанию: {default_value}" if default_value and is_optional else ""

@@ -62,11 +62,14 @@ async def test_step1_prompt_flow_snapshot(harness):
         "is_free": is_free,
     }
 
+    step_info = bot_kie._get_step_info(session, "prompt", user_lang)
     expected = build_step1_prompt_text(
         model_id,
         sku,
         billing_ctx,
         admin_flag=bot_kie.get_is_admin(user_id),
+        step_info=step_info,
+        user_lang=user_lang,
     )
 
     assert message["text"] == expected

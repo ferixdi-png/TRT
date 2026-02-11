@@ -509,3 +509,39 @@ z-image:
     default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
       • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
     by_sku_key: {}
+
+runway/aleph:
+  model_short: 'Runway Aleph: продвинутая модель генерации видео от Runway.'
+  sku_templates:
+    default: 'Длительность: {duration} • Разрешение: {resolution}'
+    by_sku_key: {}
+
+elevenlabs/tts-turbo-2-5:
+  model_short: 'ElevenLabs TTS Turbo 2.5: быстрый синтез речи с высоким качеством.'
+  sku_templates:
+    default: 'Формат: {format}'
+    by_sku_key: {}
+
+elevenlabs/tts-multilingual-v2:
+  model_short: 'ElevenLabs TTS Multilingual v2: многоязычный синтез речи.'
+  sku_templates:
+    default: 'Формат: {format}'
+    by_sku_key: {}
+
+elevenlabs/sound-effect-v2:
+  model_short: 'ElevenLabs Sound Effect v2: генерация звуковых эффектов.'
+  sku_templates:
+    default: 'Длительность: {duration}'
+    by_sku_key: {}
+
+gpt-image/1.5-text-to-image:
+  model_short: 'GPT Image 1.5: генерация изображений по текстовому описанию от OpenAI.'
+  sku_templates:
+    default: 'Разрешение: {resolution}'
+    by_sku_key: {}
+
+gpt-image/1.5-image-to-image:
+  model_short: 'GPT Image 1.5 Edit: редактирование изображений с помощью OpenAI.'
+  sku_templates:
+    default: 'Разрешение: {resolution}'
+    by_sku_key: {}
