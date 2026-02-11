@@ -621,6 +621,19 @@ async def wait_job_result(
         storage=storage,
         source="wait_job_result.start",
     )
+    logger.info(
+        "\n" + "=" * 60 + "\n"
+        "🟡 WAIT_JOB_START\n"
+        "  task_id=%s\n"
+        "  model_id=%s\n"
+        "  job_id=%s\n"
+        "  timeout=%s\n"
+        "  max_attempts=%s\n"
+        "  base_delay=%s\n"
+        "  corr=%s\n"
+        + "=" * 60,
+        task_id, model_id, job_id, timeout, max_attempts, base_delay, correlation_id,
+    )
     while True:
         elapsed = time.monotonic() - start
         if elapsed >= timeout or attempt >= max_attempts:
@@ -645,6 +658,8 @@ async def wait_job_result(
                     error_message="timeout",
                     error_code="ERR_KIE_TIMEOUT",
                 )
+            logger.error("🔴 WAIT_JOB_TIMEOUT task_id=%s model_id=%s job_id=%s elapsed=%.1fs attempts=%d corr=%s",
+                        task_id, model_id, job_id, elapsed, attempt, correlation_id)
             if on_timeout:
                 await on_timeout()
             raise TimeoutError("ERR_KIE_TIMEOUT")
@@ -667,6 +682,8 @@ async def wait_job_result(
             else:
                 record = await client.get_task_status(task_id)
         except Exception as exc:
+            logger.warning("🟠 WAIT_JOB_POLL_ERROR task_id=%s attempt=%d exc_type=%s msg=%s elapsed=%.1fs corr=%s",
+                          task_id, attempt, type(exc).__name__, str(exc)[:200], elapsed, correlation_id)
             log_request_event(
                 request_id=request_id,
                 user_id=user_id,
@@ -694,6 +711,9 @@ async def wait_job_result(
         raw_state_norm = resolution.raw_state or (raw_state or "")
         record["_raw_state"] = raw_state_norm
         record["state"] = state
+        if attempt <= 3 or attempt % 10 == 0:
+            logger.info("🟡 WAIT_JOB_POLL task_id=%s attempt=%d state=%s raw=%s poll_ms=%d elapsed=%.1fs corr=%s",
+                       task_id, attempt, state, raw_state_norm, poll_latency_ms, elapsed, correlation_id)
         log_request_event(
             request_id=request_id,
             user_id=user_id,
@@ -861,11 +881,25 @@ async def wait_job_result(
                 source="universal_engine.wait_job_result",
             )
             record["result_validated"] = True
+            logger.info("✅ WAIT_JOB_SUCCESS task_id=%s model_id=%s job_id=%s urls=%d elapsed=%.1fs attempts=%d corr=%s",
+                       task_id, model_id, job_id, len(urls), elapsed, attempt, correlation_id)
             return record
 
         if state == "failed":
             fail_code = record.get("failCode")
             fail_msg = record.get("failMsg") or record.get("errorMessage")
+            logger.error(
+                "\n" + "=" * 60 + "\n"
+                "🔴 KIE_TASK_FAILED\n"
+                "  task_id=%s\n"
+                "  model_id=%s\n"
+                "  fail_code=%s\n"
+                "  fail_msg=%s\n"
+                "  elapsed_s=%.1f\n"
+                "  poll_attempt=%d\n"
+                + "=" * 60,
+                task_id, model_id, fail_code, fail_msg, elapsed, attempt,
+            )
             if storage and job_id:
                 await storage.update_job_status(
                     job_id,
@@ -1044,12 +1078,29 @@ async def run_generation(
             stage="KIE_CREATE",
             outcome="start",
         )
+        logger.info(
+            "\n" + "=" * 60 + "\n"
+            "🔵 KIE_API_CALL_START\n"
+            "  user_id=%s\n"
+            "  model_id=%s\n"
+            "  kie_model=%s\n"
+            "  job_id=%s\n"
+            "  corr=%s\n"
+            "  payload_keys=%s\n"
+            "  payload_summary=%s\n"
+            + "=" * 60,
+            user_id, model_id, spec.kie_model, job_id, correlation_id,
+            list(payload.get('input', {}).keys()),
+            {k: (f'[{len(v)} items]' if isinstance(v, list) else f'[{len(str(v))} chars]' if isinstance(v, str) else type(v).__name__) for k, v in (payload.get('input') or {}).items()},
+        )
         create_fn = getattr(client, "create_task", None)
         if create_fn and "correlation_id" in inspect.signature(create_fn).parameters:
             created = await client.create_task(spec.kie_model, payload["input"], correlation_id=correlation_id)
         else:
             created = await client.create_task(spec.kie_model, payload["input"])
         create_duration_ms = int((time.monotonic() - create_start) * 1000)
+        logger.info("🔵 KIE_API_CALL_RESULT ok=%s task_id=%s status=%s error=%s latency_ms=%s",
+                    created.get('ok'), created.get('taskId'), created.get('status'), created.get('error', '')[:100] if created.get('error') else None, create_duration_ms)
         if not created.get("ok"):
             log_request_event(
                 request_id=request_id,

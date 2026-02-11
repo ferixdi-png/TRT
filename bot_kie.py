@@ -24307,7 +24307,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         user_lang=user_lang,
         callback_data=query.data if query else None,
     )
-    logger.debug(f"🔥🔥🔥 CONFIRM_GENERATION ENTRY: user_id={user_id}, query_id={query.id if query else 'None'}, data={query.data if query else 'None'}")
+    logger.info(f"🔥 CONFIRM_GEN_ENTRY user_id={user_id} data={query.data if query else 'None'}")
     
     # Простой читаемый лог для быстрого анализа
     session = user_sessions.get(user_id, {}) if user_id else {}
@@ -24476,7 +24476,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             return ConversationHandler.END
     
     session = user_sessions[user_id]
-    logger.info(f"✅✅✅ Session found in confirm_generation: user_id={user_id}, model_id={session.get('model_id')}, params_keys={list(session.get('params', {}).keys())}")
+    logger.info(f"✅ CONFIRM_GEN_SESSION user_id={user_id} model_id={session.get('model_id')} sku_id={session.get('sku_id')} params_keys={list(session.get('params', {}).keys())} gen_type={session.get('gen_type')}")
 
     job_id = session.get("job_id")
     
@@ -24585,6 +24585,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await prompt_for_specific_param(update, context, user_id, missing_param, source="missing_media")
         return INPUTTING_PARAMS
 
+    logger.info("📋 CONFIRM_GEN_CHECKS user_id=%s model_id=%s is_admin=%s missing_media=%s", user_id, model_id, is_admin_user, missing_media[:3] if missing_media else None)
     kie_ready, kie_state = _kie_readiness_state()
     if not kie_ready:
         user_lang = get_user_language(user_id) if user_id else "ru"
@@ -24858,6 +24859,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         chat_id=chat_id,
         is_admin=is_admin_user,
     )
+    logger.info("💰 CONFIRM_GEN_PRICE user_id=%s model_id=%s is_free=%s sku_id=%s price_quote=%s", user_id, model_id, is_free, sku_id, price_quote.get('price_rub') if price_quote else 'NONE')
     if not price_quote and is_test_mode():
         price_quote = {
             "price_rub": "0.00",
@@ -25946,6 +25948,7 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         timeout_seconds = get_generation_timeout_seconds(model_spec)
         poll_interval = int(os.getenv("KIE_POLL_INTERVAL", "3"))
 
+        logger.info("🚀 CONFIRM_GEN_SUBMIT user_id=%s model_id=%s job_id=%s price=%.2f is_free=%s timeout=%ss params_keys=%s", user_id, model_id, job_id, price, is_free, timeout_seconds, list(params.keys()))
         dry_run = is_dry_run() or not allow_real_generation()
         if dry_run:
             is_video = any(kw in model_id.lower() for kw in ['video', 'sora', 'kling', 'wan', 'hailuo'])
@@ -26039,6 +26042,8 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             ),
         )
         task_id = job_result.task_id
+        logger.info("✅ CONFIRM_GEN_RESULT user_id=%s model_id=%s task_id=%s state=%s media=%s urls=%d text=%s",
+                    user_id, model_id, task_id, job_result.state, job_result.media_type, len(job_result.urls), bool(job_result.text))
         session["task_id"] = task_id
         if not is_free and not is_admin_user and price > 0:
             charge_result = await _charge_balance_once(
@@ -26778,6 +26783,8 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         return ConversationHandler.END
     except KIERequestFailed as exc:
+        logger.error("🔴 CONFIRM_GEN_KIE_REQUEST_FAILED user_id=%s model_id=%s error_code=%s status=%s msg=%s corr=%s",
+                    user_id, model_id, exc.error_code, getattr(exc, 'status', None), str(exc)[:200], correlation_id)
         if prompt_hash:
             await update_dedupe_entry(
                 user_id,
@@ -27063,6 +27070,8 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except KIEJobFailed as exc:
         from app.observability.redaction import redact_payload
 
+        logger.error("🔴 CONFIRM_GEN_KIE_JOB_FAILED user_id=%s model_id=%s task_id=%s fail_code=%s msg=%s corr=%s",
+                    user_id, model_id, getattr(exc, 'task_id', None), getattr(exc, 'fail_code', None), str(exc)[:200], correlation_id)
         logger.error(f"❌ Generation failed: {exc}", exc_info=True)
         if prompt_hash:
             await update_dedupe_entry(
@@ -27384,6 +27393,8 @@ async def confirm_generation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             logger.error("Failed to notify user about network error: %s", notify_exc)
         return ConversationHandler.END
     except Exception as e:
+        logger.error("🔴 CONFIRM_GEN_UNEXPECTED user_id=%s model_id=%s exc_type=%s msg=%s corr=%s",
+                    user_id, model_id, type(e).__name__, str(e)[:300], correlation_id)
         logger.error(f"❌ Generation failed: {e}", exc_info=True)
         if prompt_hash:
             await update_dedupe_entry(
