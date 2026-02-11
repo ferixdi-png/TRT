@@ -7,8 +7,8 @@ import json
 from pathlib import Path
 from typing import Dict, List, Any
 
-# Курс: 1 USD = 100 RUB (примерно)
-USD_TO_RUB = 100
+# Курс: 1 USD = 77.83 RUB (из pricing/config.yaml — SSOT)
+USD_TO_RUB = 77.83  # Из pricing/config.yaml (SSOT)
 
 # Все модели с их режимами и ценами
 ALL_MODELS_DATA = [

@@ -12,7 +12,7 @@ from kie_models import KIE_MODELS, get_model_by_id
 
 # Упрощенная функция расчета цены без зависимостей
 CREDIT_TO_USD = 0.005  # 1 credit = $0.005
-USD_TO_RUB = 100.0  # Примерный курс (будет обновляться)
+USD_TO_RUB = 77.83  # Из pricing/config.yaml (SSOT)
 
 def calculate_price_credits(model_id: str, params: dict = None) -> float:
     """Упрощенная функция расчета цены в кредитах (без конвертации в рубли)"""

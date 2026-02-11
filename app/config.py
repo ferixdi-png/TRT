@@ -150,12 +150,12 @@ class Settings:
         
         # Currency conversion
         pricing_settings = get_settings_source_info().get("settings", {})
-        usd_to_rub_str = str(pricing_settings.get("usd_to_rub", "100.0"))
+        usd_to_rub_str = str(pricing_settings.get("usd_to_rub", "77.83"))
         try:
             self.usd_to_rub = float(usd_to_rub_str)
         except ValueError:
-            self.usd_to_rub = 100.0
-            logger.warning(f"Invalid USD_TO_RUB: {usd_to_rub_str}, using 100.0")
+            self.usd_to_rub = 77.83
+            logger.warning(f"Invalid USD_TO_RUB: {usd_to_rub_str}, using 77.83")
         
         # Price multiplier (×2 для пользовательских цен)
         price_multiplier_env = os.getenv('PRICE_MULTIPLIER', '').strip()

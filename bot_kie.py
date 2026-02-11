@@ -4390,7 +4390,7 @@ FREE_SKU_ID = FREE_TOOL_SKU_IDS[0] if FREE_TOOL_SKU_IDS else ""
 
 def is_video_model(model_id: str) -> bool:
     """Check if model is a video generation model"""
-    video_keywords = ['video', 'animate', 'avatar', 'speech-to-video', 'sora', 'infinitalk', 'veo', 'runway']
+    video_keywords = ['video', 'animate', 'avatar', 'speech-to-video', 'sora', 'infinitalk', 'veo', 'runway', 'motion-control', 'hailuo', 'kling']
     _VIDEO_MODEL_IDS = {'grok/imagine'}
     return model_id in _VIDEO_MODEL_IDS or any(keyword in model_id.lower() for keyword in video_keywords)
 
