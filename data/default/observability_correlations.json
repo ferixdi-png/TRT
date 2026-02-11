@@ -79,19 +79,19 @@
     "correlation_id": "corr-test",
     "request_id": "corr-test",
     "task_id": null,
-    "job_id": null,
-    "user_id": 101,
-    "model_id": null,
-    "updated_at_ms": 1770707294576,
+    "job_id": "job-a729011872d8",
+    "user_id": 42,
+    "model_id": "sora-2-text-to-video",
+    "updated_at_ms": 1770789433573,
     "missing_actions": [],
-    "source": "structured_logs"
+    "source": "run_generation.start"
   },
   "request:corr-test": {
     "correlation_id": "corr-test",
     "request_id": "corr-test",
     "task_id": null,
-    "job_id": null,
-    "updated_at_ms": 1770707294576
+    "job_id": "job-a729011872d8",
+    "updated_at_ms": 1770789433573
   },
   "1fc88320-e38e-444e-9774-b5268137a1be": {
     "correlation_id": "1fc88320-e38e-444e-9774-b5268137a1be",
@@ -4284,5 +4284,743 @@
     "task_id": "task-123",
     "job_id": "job-f80ee6ae8b7b",
     "updated_at_ms": 1770707152861
+  },
+  "corr-1-9911-fd583df6": {
+    "correlation_id": "corr-1-9911-fd583df6",
+    "request_id": "corr-1-9911-fd583df6",
+    "task_id": null,
+    "job_id": null,
+    "user_id": 9911,
+    "model_id": "test-model",
+    "updated_at_ms": 1770782912314,
+    "missing_actions": [],
+    "source": "confirm_generate.start"
+  },
+  "request:corr-1-9911-fd583df6": {
+    "correlation_id": "corr-1-9911-fd583df6",
+    "request_id": "corr-1-9911-fd583df6",
+    "task_id": null,
+    "job_id": null,
+    "updated_at_ms": 1770782912314
+  },
+  "corr-1-7777-cb515846": {
+    "correlation_id": "corr-1-7777-cb515846",
+    "request_id": "corr-1-7777-cb515846",
+    "task_id": "task-123",
+    "job_id": "job-a7b76b12be97",
+    "user_id": 7777,
+    "model_id": "test-model",
+    "updated_at_ms": 1770782912641,
+    "missing_actions": [],
+    "source": "confirm_generate.delivery_tracking"
+  },
+  "request:corr-1-7777-cb515846": {
+    "correlation_id": "corr-1-7777-cb515846",
+    "request_id": "corr-1-7777-cb515846",
+    "task_id": "task-123",
+    "job_id": "job-a7b76b12be97",
+    "updated_at_ms": 1770782912641
+  },
+  "corr-1-6913446846-72e8e99e": {
+    "correlation_id": "corr-1-6913446846-72e8e99e",
+    "request_id": "corr-1-6913446846-72e8e99e",
+    "task_id": null,
+    "job_id": null,
+    "user_id": 6913446846,
+    "model_id": "bytedance/v1-pro-fast-image-to-video",
+    "updated_at_ms": 1770782931633,
+    "missing_actions": [],
+    "source": "structured_logs"
+  },
+  "request:corr-1-6913446846-72e8e99e": {
+    "correlation_id": "corr-1-6913446846-72e8e99e",
+    "request_id": "corr-1-6913446846-72e8e99e",
+    "task_id": null,
+    "job_id": null,
+    "updated_at_ms": 1770782931633
+  },
+  "corr-1-9911-e79aebad": {
+    "correlation_id": "corr-1-9911-e79aebad",
+    "request_id": "corr-1-9911-e79aebad",
+    "task_id": "task-123",
+    "job_id": "job-82247f5d5f2c",
+    "user_id": 9911,
+    "model_id": "test-model",
+    "updated_at_ms": 1770783560754,
+    "missing_actions": [],
+    "source": "confirm_generate.delivery_tracking"
+  },
+  "request:corr-1-9911-e79aebad": {
+    "correlation_id": "corr-1-9911-e79aebad",
+    "request_id": "corr-1-9911-e79aebad",
+    "task_id": "task-123",
+    "job_id": "job-82247f5d5f2c",
+    "updated_at_ms": 1770783560754
+  },
+  "corr-1-6913446846-f85aad2b": {
+    "correlation_id": "corr-1-6913446846-f85aad2b",
+    "request_id": "corr-1-6913446846-f85aad2b",
+    "task_id": null,
+    "job_id": null,
+    "user_id": 6913446846,
+    "model_id": null,
+    "updated_at_ms": 1770783574945,
+    "missing_actions": [],
+    "source": "structured_logs"
+  },
+  "request:corr-1-6913446846-f85aad2b": {
+    "correlation_id": "corr-1-6913446846-f85aad2b",
+    "request_id": "corr-1-6913446846-f85aad2b",
+    "task_id": null,
+    "job_id": null,
+    "updated_at_ms": 1770783574945
+  },
+  "corr-1-9911-b4653284": {
+    "correlation_id": "corr-1-9911-b4653284",
+    "request_id": "corr-1-9911-b4653284",
+    "task_id": "task-123",
+    "job_id": "job-e8fd5a63cc22",
+    "user_id": 9911,
+    "model_id": "test-model",
+    "updated_at_ms": 1770783862245,
+    "missing_actions": [],
+    "source": "missing_ids"
+  },
+  "request:corr-1-9911-b4653284": {
+    "correlation_id": "corr-1-9911-b4653284",
+    "request_id": "corr-1-9911-b4653284",
+    "task_id": "task-123",
+    "job_id": "job-e8fd5a63cc22",
+    "updated_at_ms": 1770783862245
+  },
+  "corr-1-7777-e20ccb92": {
+    "correlation_id": "corr-1-7777-e20ccb92",
+    "request_id": "corr-1-7777-e20ccb92",
+    "task_id": "task-123",
+    "job_id": "job-93d774323ce7",
+    "user_id": 7777,
+    "model_id": "test-model",
+    "updated_at_ms": 1770783862448,
+    "missing_actions": [],
+    "source": "confirm_generate.delivery_tracking"
+  },
+  "request:corr-1-7777-e20ccb92": {
+    "correlation_id": "corr-1-7777-e20ccb92",
+    "request_id": "corr-1-7777-e20ccb92",
+    "task_id": "task-123",
+    "job_id": "job-93d774323ce7",
+    "updated_at_ms": 1770783862448
+  },
+  "corr-1-6913446846-5fa88582": {
+    "correlation_id": "corr-1-6913446846-5fa88582",
+    "request_id": "corr-1-6913446846-5fa88582",
+    "task_id": null,
+    "job_id": null,
+    "user_id": 6913446846,
+    "model_id": "bytedance/v1-pro-fast-image-to-video",
+    "updated_at_ms": 1770783875314,
+    "missing_actions": [],
+    "source": "structured_logs"
+  },
+  "request:corr-1-6913446846-5fa88582": {
+    "correlation_id": "corr-1-6913446846-5fa88582",
+    "request_id": "corr-1-6913446846-5fa88582",
+    "task_id": null,
+    "job_id": null,
+    "updated_at_ms": 1770783875314
+  },
+  "corr-1-9911-10cab247": {
+    "correlation_id": "corr-1-9911-10cab247",
+    "request_id": "corr-1-9911-10cab247",
+    "task_id": "task-123",
+    "job_id": "job-6590ba5f4eb0",
+    "user_id": 9911,
+    "model_id": "test-model",
+    "updated_at_ms": 1770784028707,
+    "missing_actions": [],
+    "source": "confirm_generate.delivery_tracking"
+  },
+  "request:corr-1-9911-10cab247": {
+    "correlation_id": "corr-1-9911-10cab247",
+    "request_id": "corr-1-9911-10cab247",
+    "task_id": "task-123",
+    "job_id": "job-6590ba5f4eb0",
+    "updated_at_ms": 1770784028707
+  },
+  "corr-1-9911-a5c0284d": {
+    "correlation_id": "corr-1-9911-a5c0284d",
+    "request_id": "corr-1-9911-a5c0284d",
+    "task_id": null,
+    "job_id": null,
+    "user_id": 9911,
+    "model_id": "test-model",
+    "updated_at_ms": 1770784212712,
+    "missing_actions": [],
+    "source": "confirm_generate.start"
+  },
+  "request:corr-1-9911-a5c0284d": {
+    "correlation_id": "corr-1-9911-a5c0284d",
+    "request_id": "corr-1-9911-a5c0284d",
+    "task_id": null,
+    "job_id": null,
+    "updated_at_ms": 1770784212712
+  },
+  "corr-1-7777-74275f43": {
+    "correlation_id": "corr-1-7777-74275f43",
+    "request_id": "corr-1-7777-74275f43",
+    "task_id": "task-123",
+    "job_id": "job-5ac0ff53ae7b",
+    "user_id": 7777,
+    "model_id": "test-model",
+    "updated_at_ms": 1770784212970,
+    "missing_actions": [],
+    "source": "confirm_generate.delivery_tracking"
+  },
+  "request:corr-1-7777-74275f43": {
+    "correlation_id": "corr-1-7777-74275f43",
+    "request_id": "corr-1-7777-74275f43",
+    "task_id": "task-123",
+    "job_id": "job-5ac0ff53ae7b",
+    "updated_at_ms": 1770784212970
+  },
+  "corr-1-9911-0fb72161": {
+    "correlation_id": "corr-1-9911-0fb72161",
+    "request_id": "corr-1-9911-0fb72161",
+    "task_id": "task-123",
+    "job_id": "job-d4381d029370",
+    "user_id": 9911,
+    "model_id": "test-model",
+    "updated_at_ms": 1770784517578,
+    "missing_actions": [],
+    "source": "confirm_generate.delivery_tracking"
+  },
+  "request:corr-1-9911-0fb72161": {
+    "correlation_id": "corr-1-9911-0fb72161",
+    "request_id": "corr-1-9911-0fb72161",
+    "task_id": "task-123",
+    "job_id": "job-d4381d029370",
+    "updated_at_ms": 1770784517578
+  },
+  "corr-1-9911-1d33fab2": {
+    "correlation_id": "corr-1-9911-1d33fab2",
+    "request_id": "corr-1-9911-1d33fab2",
+    "task_id": "task-123",
+    "job_id": "job-9ce6758eb201",
+    "user_id": 9911,
+    "model_id": "test-model",
+    "updated_at_ms": 1770784686967,
+    "missing_actions": [],
+    "source": "confirm_generate.delivery_tracking"
+  },
+  "request:corr-1-9911-1d33fab2": {
+    "correlation_id": "corr-1-9911-1d33fab2",
+    "request_id": "corr-1-9911-1d33fab2",
+    "task_id": "task-123",
+    "job_id": "job-9ce6758eb201",
+    "updated_at_ms": 1770784686967
+  },
+  "corr-1-9911-86fe9638": {
+    "correlation_id": "corr-1-9911-86fe9638",
+    "request_id": "corr-1-9911-86fe9638",
+    "task_id": "task-123",
+    "job_id": "job-12eda38bd4c5",
+    "user_id": 9911,
+    "model_id": "test-model",
+    "updated_at_ms": 1770784953846,
+    "missing_actions": [],
+    "source": "confirm_generate.delivery_tracking"
+  },
+  "request:corr-1-9911-86fe9638": {
+    "correlation_id": "corr-1-9911-86fe9638",
+    "request_id": "corr-1-9911-86fe9638",
+    "task_id": "task-123",
+    "job_id": "job-12eda38bd4c5",
+    "updated_at_ms": 1770784953846
+  },
+  "corr-203-9911-2b6e3b3f": {
+    "correlation_id": "corr-203-9911-2b6e3b3f",
+    "request_id": "corr-203-9911-2b6e3b3f",
+    "task_id": null,
+    "job_id": "job-9a696218582b",
+    "user_id": 9911,
+    "model_id": "flux-2/flex-image-to-image",
+    "updated_at_ms": 1770785026281,
+    "missing_actions": [
+      "TASK_LIFECYCLE:TASK_LIFECYCLE:task_id:missing_required_ids_after_create"
+    ],
+    "source": "confirm_generate.job_created"
+  },
+  "request:corr-203-9911-2b6e3b3f": {
+    "correlation_id": "corr-203-9911-2b6e3b3f",
+    "request_id": "corr-203-9911-2b6e3b3f",
+    "task_id": null,
+    "job_id": "job-9a696218582b",
+    "updated_at_ms": 1770785026281
+  },
+  "corr-1-9911-f9545952": {
+    "correlation_id": "corr-1-9911-f9545952",
+    "request_id": "corr-1-9911-f9545952",
+    "task_id": "task-123",
+    "job_id": "job-c1daacb536ee",
+    "user_id": 9911,
+    "model_id": "test-model",
+    "updated_at_ms": 1770785233820,
+    "missing_actions": [],
+    "source": "confirm_generate.delivery_tracking"
+  },
+  "request:corr-1-9911-f9545952": {
+    "correlation_id": "corr-1-9911-f9545952",
+    "request_id": "corr-1-9911-f9545952",
+    "task_id": "task-123",
+    "job_id": "job-c1daacb536ee",
+    "updated_at_ms": 1770785233820
+  },
+  "corr-1-9911-3ea3004f": {
+    "correlation_id": "corr-1-9911-3ea3004f",
+    "request_id": "corr-1-9911-3ea3004f",
+    "task_id": "task-123",
+    "job_id": "job-88c71eb14510",
+    "user_id": 9911,
+    "model_id": "test-model",
+    "updated_at_ms": 1770785447331,
+    "missing_actions": [],
+    "source": "confirm_generate.delivery_tracking"
+  },
+  "request:corr-1-9911-3ea3004f": {
+    "correlation_id": "corr-1-9911-3ea3004f",
+    "request_id": "corr-1-9911-3ea3004f",
+    "task_id": "task-123",
+    "job_id": "job-88c71eb14510",
+    "updated_at_ms": 1770785447331
+  },
+  "corr-203-9911-21a90c5b": {
+    "correlation_id": "corr-203-9911-21a90c5b",
+    "request_id": "corr-203-9911-21a90c5b",
+    "task_id": null,
+    "job_id": "job-ab40e834d972",
+    "user_id": 9911,
+    "model_id": "flux-2/flex-image-to-image",
+    "updated_at_ms": 1770785518563,
+    "missing_actions": [
+      "TASK_LIFECYCLE:TASK_LIFECYCLE:task_id:missing_required_ids_after_create"
+    ],
+    "source": "missing_ids"
+  },
+  "request:corr-203-9911-21a90c5b": {
+    "correlation_id": "corr-203-9911-21a90c5b",
+    "request_id": "corr-203-9911-21a90c5b",
+    "task_id": null,
+    "job_id": "job-ab40e834d972",
+    "updated_at_ms": 1770785518563
+  },
+  "corr-1-9911-84cb6ca0": {
+    "correlation_id": "corr-1-9911-84cb6ca0",
+    "request_id": "corr-1-9911-84cb6ca0",
+    "task_id": null,
+    "job_id": null,
+    "user_id": 9911,
+    "model_id": "test-model",
+    "updated_at_ms": 1770785847199,
+    "missing_actions": [],
+    "source": "confirm_generate.start"
+  },
+  "request:corr-1-9911-84cb6ca0": {
+    "correlation_id": "corr-1-9911-84cb6ca0",
+    "request_id": "corr-1-9911-84cb6ca0",
+    "task_id": null,
+    "job_id": null,
+    "updated_at_ms": 1770785847199
+  },
+  "corr-1-9911-e8c5f09b": {
+    "correlation_id": "corr-1-9911-e8c5f09b",
+    "request_id": "corr-1-9911-e8c5f09b",
+    "task_id": "task-123",
+    "job_id": "job-9eb632835b45",
+    "user_id": 9911,
+    "model_id": "test-model",
+    "updated_at_ms": 1770786041554,
+    "missing_actions": [],
+    "source": "confirm_generate.delivery_tracking"
+  },
+  "request:corr-1-9911-e8c5f09b": {
+    "correlation_id": "corr-1-9911-e8c5f09b",
+    "request_id": "corr-1-9911-e8c5f09b",
+    "task_id": "task-123",
+    "job_id": "job-9eb632835b45",
+    "updated_at_ms": 1770786041554
+  },
+  "corr-203-9911-7fc08e0f": {
+    "correlation_id": "corr-203-9911-7fc08e0f",
+    "request_id": "corr-203-9911-7fc08e0f",
+    "task_id": "task-123",
+    "job_id": "job-66fde086f055",
+    "user_id": 9911,
+    "model_id": "flux-2/flex-image-to-image",
+    "updated_at_ms": 1770786112379,
+    "missing_actions": [],
+    "source": "confirm_generate.delivery_tracking"
+  },
+  "request:corr-203-9911-7fc08e0f": {
+    "correlation_id": "corr-203-9911-7fc08e0f",
+    "request_id": "corr-203-9911-7fc08e0f",
+    "task_id": "task-123",
+    "job_id": "job-66fde086f055",
+    "updated_at_ms": 1770786112379
+  },
+  "corr-1-778-a835f4f3": {
+    "correlation_id": "corr-1-778-a835f4f3",
+    "request_id": "corr-1-778-a835f4f3",
+    "task_id": null,
+    "job_id": "job-dae557c54a9d",
+    "user_id": 778,
+    "model_id": "test-model",
+    "updated_at_ms": 1770786180136,
+    "missing_actions": [],
+    "source": "confirm_generate.job_created"
+  },
+  "request:corr-1-778-a835f4f3": {
+    "correlation_id": "corr-1-778-a835f4f3",
+    "request_id": "corr-1-778-a835f4f3",
+    "task_id": null,
+    "job_id": "job-dae557c54a9d",
+    "updated_at_ms": 1770786180136
+  },
+  "corr-1-6913446846-683ca35a": {
+    "correlation_id": "corr-1-6913446846-683ca35a",
+    "request_id": "corr-1-6913446846-683ca35a",
+    "task_id": null,
+    "job_id": null,
+    "user_id": 6913446846,
+    "model_id": "bytedance/v1-pro-fast-image-to-video",
+    "updated_at_ms": 1770786373004,
+    "missing_actions": [],
+    "source": "structured_logs"
+  },
+  "request:corr-1-6913446846-683ca35a": {
+    "correlation_id": "corr-1-6913446846-683ca35a",
+    "request_id": "corr-1-6913446846-683ca35a",
+    "task_id": null,
+    "job_id": null,
+    "updated_at_ms": 1770786373004
+  },
+  "corr-1-9911-a73e2dda": {
+    "correlation_id": "corr-1-9911-a73e2dda",
+    "request_id": "corr-1-9911-a73e2dda",
+    "task_id": "task-123",
+    "job_id": "job-f3be9deb1715",
+    "user_id": 9911,
+    "model_id": "test-model",
+    "updated_at_ms": 1770786504122,
+    "missing_actions": [],
+    "source": "confirm_generate.delivery_tracking"
+  },
+  "request:corr-1-9911-a73e2dda": {
+    "correlation_id": "corr-1-9911-a73e2dda",
+    "request_id": "corr-1-9911-a73e2dda",
+    "task_id": "task-123",
+    "job_id": "job-f3be9deb1715",
+    "updated_at_ms": 1770786504122
+  },
+  "corr-1-6913446846-59888c78": {
+    "correlation_id": "corr-1-6913446846-59888c78",
+    "request_id": "corr-1-6913446846-59888c78",
+    "task_id": null,
+    "job_id": null,
+    "user_id": 6913446846,
+    "model_id": null,
+    "updated_at_ms": 1770786520135,
+    "missing_actions": [],
+    "source": "structured_logs"
+  },
+  "request:corr-1-6913446846-59888c78": {
+    "correlation_id": "corr-1-6913446846-59888c78",
+    "request_id": "corr-1-6913446846-59888c78",
+    "task_id": null,
+    "job_id": null,
+    "updated_at_ms": 1770786520135
+  },
+  "corr-1-6913446846-0d95376a": {
+    "correlation_id": "corr-1-6913446846-0d95376a",
+    "request_id": "corr-1-6913446846-0d95376a",
+    "task_id": null,
+    "job_id": null,
+    "user_id": 6913446846,
+    "model_id": "bytedance/v1-pro-fast-image-to-video",
+    "updated_at_ms": 1770786520313,
+    "missing_actions": [],
+    "source": "structured_logs"
+  },
+  "request:corr-1-6913446846-0d95376a": {
+    "correlation_id": "corr-1-6913446846-0d95376a",
+    "request_id": "corr-1-6913446846-0d95376a",
+    "task_id": null,
+    "job_id": null,
+    "updated_at_ms": 1770786520313
+  },
+  "corr-203-9911-65f423a0": {
+    "correlation_id": "corr-203-9911-65f423a0",
+    "request_id": "corr-203-9911-65f423a0",
+    "task_id": null,
+    "job_id": "job-3c5912a0af20",
+    "user_id": 9911,
+    "model_id": "flux-2/flex-image-to-image",
+    "updated_at_ms": 1770786571168,
+    "missing_actions": [
+      "TASK_LIFECYCLE:TASK_LIFECYCLE:task_id:missing_required_ids_after_create"
+    ],
+    "source": "missing_ids"
+  },
+  "request:corr-203-9911-65f423a0": {
+    "correlation_id": "corr-203-9911-65f423a0",
+    "request_id": "corr-203-9911-65f423a0",
+    "task_id": null,
+    "job_id": "job-3c5912a0af20",
+    "updated_at_ms": 1770786571168
+  },
+  "corr-1-9911-701b8628": {
+    "correlation_id": "corr-1-9911-701b8628",
+    "request_id": "corr-1-9911-701b8628",
+    "task_id": null,
+    "job_id": null,
+    "user_id": 9911,
+    "model_id": "test-model",
+    "updated_at_ms": 1770786700582,
+    "missing_actions": [],
+    "source": "confirm_generate.start"
+  },
+  "request:corr-1-9911-701b8628": {
+    "correlation_id": "corr-1-9911-701b8628",
+    "request_id": "corr-1-9911-701b8628",
+    "task_id": null,
+    "job_id": null,
+    "updated_at_ms": 1770786700582
+  },
+  "corr-1-9911-46cbcf11": {
+    "correlation_id": "corr-1-9911-46cbcf11",
+    "request_id": "corr-1-9911-46cbcf11",
+    "task_id": "task-123",
+    "job_id": "job-876c069a1a7d",
+    "user_id": 9911,
+    "model_id": "test-model",
+    "updated_at_ms": 1770786884961,
+    "missing_actions": [],
+    "source": "confirm_generate.delivery_tracking"
+  },
+  "request:corr-1-9911-46cbcf11": {
+    "correlation_id": "corr-1-9911-46cbcf11",
+    "request_id": "corr-1-9911-46cbcf11",
+    "task_id": "task-123",
+    "job_id": "job-876c069a1a7d",
+    "updated_at_ms": 1770786884961
+  },
+  "corr-2-6913446846-435dffdb": {
+    "correlation_id": "corr-2-6913446846-435dffdb",
+    "request_id": "corr-2-6913446846-435dffdb",
+    "task_id": null,
+    "job_id": null,
+    "user_id": 6913446846,
+    "model_id": "flux-2/flex-image-to-image",
+    "updated_at_ms": 1770787073517,
+    "missing_actions": [],
+    "source": "confirm_generate.start"
+  },
+  "request:corr-2-6913446846-435dffdb": {
+    "correlation_id": "corr-2-6913446846-435dffdb",
+    "request_id": "corr-2-6913446846-435dffdb",
+    "task_id": null,
+    "job_id": null,
+    "updated_at_ms": 1770787073517
+  },
+  "corr-1-778-c4152593": {
+    "correlation_id": "corr-1-778-c4152593",
+    "request_id": "corr-1-778-c4152593",
+    "task_id": null,
+    "job_id": "job-1d0527e204e8",
+    "user_id": 778,
+    "model_id": "test-model",
+    "updated_at_ms": 1770787374246,
+    "missing_actions": [
+      "TASK_LIFECYCLE:TASK_LIFECYCLE:task_id:missing_required_ids_after_create"
+    ],
+    "source": "missing_ids"
+  },
+  "request:corr-1-778-c4152593": {
+    "correlation_id": "corr-1-778-c4152593",
+    "request_id": "corr-1-778-c4152593",
+    "task_id": null,
+    "job_id": "job-1d0527e204e8",
+    "updated_at_ms": 1770787374246
+  },
+  "corr-1-9911-878a0418": {
+    "correlation_id": "corr-1-9911-878a0418",
+    "request_id": "corr-1-9911-878a0418",
+    "task_id": "task-123",
+    "job_id": "job-51b18d460fa6",
+    "user_id": 9911,
+    "model_id": "test-model",
+    "updated_at_ms": 1770787376567,
+    "missing_actions": [],
+    "source": "confirm_generate.delivery_tracking"
+  },
+  "request:corr-1-9911-878a0418": {
+    "correlation_id": "corr-1-9911-878a0418",
+    "request_id": "corr-1-9911-878a0418",
+    "task_id": "task-123",
+    "job_id": "job-51b18d460fa6",
+    "updated_at_ms": 1770787376567
+  },
+  "corr-1-7777-403a7281": {
+    "correlation_id": "corr-1-7777-403a7281",
+    "request_id": "corr-1-7777-403a7281",
+    "task_id": null,
+    "job_id": "job-44b9a37b7baa",
+    "user_id": 7777,
+    "model_id": "test-model",
+    "updated_at_ms": 1770787376682,
+    "missing_actions": [
+      "TASK_LIFECYCLE:TASK_LIFECYCLE:task_id:missing_required_ids_after_create"
+    ],
+    "source": "missing_ids"
+  },
+  "request:corr-1-7777-403a7281": {
+    "correlation_id": "corr-1-7777-403a7281",
+    "request_id": "corr-1-7777-403a7281",
+    "task_id": null,
+    "job_id": "job-44b9a37b7baa",
+    "updated_at_ms": 1770787376682
+  },
+  "corr-1-9911-4b7a074c": {
+    "correlation_id": "corr-1-9911-4b7a074c",
+    "request_id": "corr-1-9911-4b7a074c",
+    "task_id": "task-123",
+    "job_id": "job-c906cb6eceef",
+    "user_id": 9911,
+    "model_id": "test-model",
+    "updated_at_ms": 1770787585669,
+    "missing_actions": [],
+    "source": "confirm_generate.delivery_tracking"
+  },
+  "request:corr-1-9911-4b7a074c": {
+    "correlation_id": "corr-1-9911-4b7a074c",
+    "request_id": "corr-1-9911-4b7a074c",
+    "task_id": "task-123",
+    "job_id": "job-c906cb6eceef",
+    "updated_at_ms": 1770787585669
+  },
+  "corr-203-9911-445339c5": {
+    "correlation_id": "corr-203-9911-445339c5",
+    "request_id": "corr-203-9911-445339c5",
+    "task_id": null,
+    "job_id": "job-163f1d6986b4",
+    "user_id": 9911,
+    "model_id": "flux-2/flex-image-to-image",
+    "updated_at_ms": 1770787959313,
+    "missing_actions": [
+      "TASK_LIFECYCLE:TASK_LIFECYCLE:task_id:missing_required_ids_after_create"
+    ],
+    "source": "missing_ids"
+  },
+  "request:corr-203-9911-445339c5": {
+    "correlation_id": "corr-203-9911-445339c5",
+    "request_id": "corr-203-9911-445339c5",
+    "task_id": null,
+    "job_id": "job-163f1d6986b4",
+    "updated_at_ms": 1770787959313
+  },
+  "corr-1-9911-767d1b7f": {
+    "correlation_id": "corr-1-9911-767d1b7f",
+    "request_id": "corr-1-9911-767d1b7f",
+    "task_id": "task-123",
+    "job_id": "job-6cea3aa798d0",
+    "user_id": 9911,
+    "model_id": "test-model",
+    "updated_at_ms": 1770788197293,
+    "missing_actions": [],
+    "source": "confirm_generate.delivery_tracking"
+  },
+  "request:corr-1-9911-767d1b7f": {
+    "correlation_id": "corr-1-9911-767d1b7f",
+    "request_id": "corr-1-9911-767d1b7f",
+    "task_id": "task-123",
+    "job_id": "job-6cea3aa798d0",
+    "updated_at_ms": 1770788197293
+  },
+  "corr-203-9911-c31adea1": {
+    "correlation_id": "corr-203-9911-c31adea1",
+    "request_id": "corr-203-9911-c31adea1",
+    "task_id": null,
+    "job_id": "job-cc398b57b71f",
+    "user_id": 9911,
+    "model_id": "flux-2/flex-image-to-image",
+    "updated_at_ms": 1770788272589,
+    "missing_actions": [
+      "TASK_LIFECYCLE:TASK_LIFECYCLE:task_id:missing_required_ids_after_create"
+    ],
+    "source": "missing_ids"
+  },
+  "request:corr-203-9911-c31adea1": {
+    "correlation_id": "corr-203-9911-c31adea1",
+    "request_id": "corr-203-9911-c31adea1",
+    "task_id": null,
+    "job_id": "job-cc398b57b71f",
+    "updated_at_ms": 1770788272589
+  },
+  "corr-203-9911-e9ec231f": {
+    "correlation_id": "corr-203-9911-e9ec231f",
+    "request_id": "corr-203-9911-e9ec231f",
+    "task_id": null,
+    "job_id": "job-3f500feb4426",
+    "user_id": 9911,
+    "model_id": "flux-2/flex-image-to-image",
+    "updated_at_ms": 1770789173227,
+    "missing_actions": [
+      "TASK_LIFECYCLE:TASK_LIFECYCLE:task_id:missing_required_ids_after_create"
+    ],
+    "source": "missing_ids"
+  },
+  "request:corr-203-9911-e9ec231f": {
+    "correlation_id": "corr-203-9911-e9ec231f",
+    "request_id": "corr-203-9911-e9ec231f",
+    "task_id": null,
+    "job_id": "job-3f500feb4426",
+    "updated_at_ms": 1770789173227
+  },
+  "corr-203-9911-f3b296bd": {
+    "correlation_id": "corr-203-9911-f3b296bd",
+    "request_id": "corr-203-9911-f3b296bd",
+    "task_id": null,
+    "job_id": "job-044565fe61f7",
+    "user_id": 9911,
+    "model_id": "flux-2/flex-image-to-image",
+    "updated_at_ms": 1770789350363,
+    "missing_actions": [
+      "TASK_LIFECYCLE:TASK_LIFECYCLE:task_id:missing_required_ids_after_create"
+    ],
+    "source": "missing_ids"
+  },
+  "request:corr-203-9911-f3b296bd": {
+    "correlation_id": "corr-203-9911-f3b296bd",
+    "request_id": "corr-203-9911-f3b296bd",
+    "task_id": null,
+    "job_id": "job-044565fe61f7",
+    "updated_at_ms": 1770789350363
+  },
+  "corr-1-9911-86838f85": {
+    "correlation_id": "corr-1-9911-86838f85",
+    "request_id": "corr-1-9911-86838f85",
+    "task_id": null,
+    "job_id": null,
+    "user_id": 9911,
+    "model_id": "test-model",
+    "updated_at_ms": 1770789885339,
+    "missing_actions": [],
+    "source": "confirm_generate.start"
+  },
+  "request:corr-1-9911-86838f85": {
+    "correlation_id": "corr-1-9911-86838f85",
+    "request_id": "corr-1-9911-86838f85",
+    "task_id": null,
+    "job_id": null,
+    "updated_at_ms": 1770789885339
   }
 }

@@ -15962,33 +15962,19 @@ async def _button_callback_impl(
                 problem_count = total - ok_count
 
                 lines = [
-                    f"🤝 <b>ПАРТНЁРЫ И ИНСТАНСЫ</b>\n",
-                    f"Всего: <b>{total}</b> | ✅ <b>{ok_count}</b> | ⚠️ <b>{problem_count}</b>\n",
-                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n",
+                    f"🤝 <b>ИНСТАНСЫ</b>  ({total} шт: ✅{ok_count} ⚠️{problem_count})\n",
                 ]
 
                 for p in partners:
                     pid = p["partner_id"]
                     is_self = pid == current_instance
+                    label = f"<b>{pid}</b>" + (" 👑" if is_self else "")
 
-                    if p["problems"]:
-                        status_icon = "🔴"
-                    elif p["has_recent_activity"]:
-                        status_icon = "🟢"
-                    else:
-                        status_icon = "🟡"
-
-                    label = f"<b>{pid}</b>"
-                    if is_self:
-                        label += " 👑 (ты)"
-
-                    lines.append(f"\n{status_icon} {label}")
-                    lines.append(f"   👥 Юзеров: <b>{p['users_count']}</b>")
-                    lines.append(f"   🎨 Генераций: <b>{p['generations_count']}</b>")
-                    lines.append(f"   💳 Платежей: <b>{p['payments_count']}</b>")
-                    lines.append(f"   📁 Файлов: <b>{p['file_count']}</b>")
-                    lines.append(f"   🕐 Обновлено: <b>{p['last_updated_ago']}</b> назад")
-
+                    # Line 1: name + deploy status
+                    lines.append(f"\n{p['deploy_status']} {label}")
+                    # Line 2: files + last update
+                    lines.append(f"   📁 {p['file_count']} файл. | 🕐 {p['last_updated_ago']} назад")
+                    # Lines 3-4: problems (if any)
                     if p["problems"]:
                         for prob in p["problems"]:
                             lines.append(f"   ⚠️ <i>{prob}</i>")

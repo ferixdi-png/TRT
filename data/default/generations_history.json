@@ -615,269 +615,306 @@
       ],
       "price": 0.0,
       "timestamp": "2026-02-10T10:05:33.695050"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:08:20.686303"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:19:03.375837"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:24:09.207504"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:26:52.037410"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:29:55.896987"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:32:00.237502"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:34:59.227229"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:37:50.468952"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:42:16.930388"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:46:59.917338"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:50:30.865351"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:57:10.663516"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:00:25.012011"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:02:49.646197"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:05:38.012764"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:08:10.696001"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:11:24.199943"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:14:29.578838"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:17:22.463180"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:22:45.665811"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:26:11.317388"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:31:16.889732"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:36:20.906982"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:42:41.156744"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:51:29.618544"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:54:29.491653"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T09:04:30.268314"
     }
   ],
   "9911": [
-    {
-      "id": "task-123",
-      "model_id": "test-model",
-      "model_name": "Test Model",
-      "params": {},
-      "result_urls": [
-        "https://example.com/result.png"
-      ],
-      "price": 0.0,
-      "timestamp": "2026-01-27T16:52:03.742622"
-    },
-    {
-      "id": "task-123",
-      "model_id": "test-model",
-      "model_name": "Test Model",
-      "params": {},
-      "result_urls": [
-        "https://example.com/result.png"
-      ],
-      "price": 0.0,
-      "timestamp": "2026-01-27T17:03:10.768293"
-    },
-    {
-      "id": "task-123",
-      "model_id": "test-model",
-      "model_name": "Test Model",
-      "params": {},
-      "result_urls": [
-        "https://example.com/result.png"
-      ],
-      "price": 0.0,
-      "timestamp": "2026-01-27T17:13:13.098851"
-    },
-    {
-      "id": "task-123",
-      "model_id": "test-model",
-      "model_name": "Test Model",
-      "params": {},
-      "result_urls": [
-        "https://example.com/result.png"
-      ],
-      "price": 0.0,
-      "timestamp": "2026-01-27T17:21:04.440811"
-    },
-    {
-      "id": "task-123",
-      "model_id": "test-model",
-      "model_name": "Test Model",
-      "params": {},
-      "result_urls": [
-        "https://example.com/result.png"
-      ],
-      "price": 0.0,
-      "timestamp": "2026-01-27T17:27:00.601344"
-    },
-    {
-      "id": "task-123",
-      "model_id": "test-model",
-      "model_name": "Test Model",
-      "params": {},
-      "result_urls": [
-        "https://example.com/result.png"
-      ],
-      "price": 0.0,
-      "timestamp": "2026-01-27T17:32:12.969778"
-    },
-    {
-      "id": "task-123",
-      "model_id": "test-model",
-      "model_name": "Test Model",
-      "params": {},
-      "result_urls": [
-        "https://example.com/result.png"
-      ],
-      "price": 0.0,
-      "timestamp": "2026-01-27T17:42:33.343061"
-    },
-    {
-      "id": "task-123",
-      "model_id": "test-model",
-      "model_name": "Test Model",
-      "params": {},
-      "result_urls": [
-        "https://example.com/result.png"
-      ],
-      "price": 0.0,
-      "timestamp": "2026-01-27T17:47:55.118847"
-    },
-    {
-      "id": "task-123",
-      "model_id": "test-model",
-      "model_name": "Test Model",
-      "params": {},
-      "result_urls": [
-        "https://example.com/result.png"
-      ],
-      "price": 0.0,
-      "timestamp": "2026-01-27T17:54:15.517459"
-    },
-    {
-      "id": "task-123",
-      "model_id": "test-model",
-      "model_name": "Test Model",
-      "params": {},
-      "result_urls": [
-        "https://example.com/result.png"
-      ],
-      "price": 0.0,
-      "timestamp": "2026-01-27T17:58:44.826021"
-    },
-    {
-      "id": "task-123",
-      "model_id": "test-model",
-      "model_name": "Test Model",
-      "params": {},
-      "result_urls": [
-        "https://example.com/result.png"
-      ],
-      "price": 0.0,
-      "timestamp": "2026-01-27T18:04:42.273041"
-    },
-    {
-      "id": "task-123",
-      "model_id": "test-model",
-      "model_name": "Test Model",
-      "params": {},
-      "result_urls": [
-        "https://example.com/result.png"
-      ],
-      "price": 0.0,
-      "timestamp": "2026-01-27T18:10:44.945252"
-    },
-    {
-      "id": "task-123",
-      "model_id": "test-model",
-      "model_name": "Test Model",
-      "params": {},
-      "result_urls": [
-        "https://example.com/result.png"
-      ],
-      "price": 0.0,
-      "timestamp": "2026-01-27T20:59:22.459004"
-    },
-    {
-      "id": "task-123",
-      "model_id": "test-model",
-      "model_name": "Test Model",
-      "params": {},
-      "result_urls": [
-        "https://example.com/result.png"
-      ],
-      "price": 0.0,
-      "timestamp": "2026-01-27T21:03:43.843435"
-    },
-    {
-      "id": "task-123",
-      "model_id": "test-model",
-      "model_name": "Test Model",
-      "params": {},
-      "result_urls": [
-        "https://example.com/result.png"
-      ],
-      "price": 0.0,
-      "timestamp": "2026-01-27T21:07:59.046887"
-    },
-    {
-      "id": "task-123",
-      "model_id": "test-model",
-      "model_name": "Test Model",
-      "params": {},
-      "result_urls": [
-        "https://example.com/result.png"
-      ],
-      "price": 0.0,
-      "timestamp": "2026-01-27T21:21:53.880983"
-    },
-    {
-      "id": "task-123",
-      "model_id": "test-model",
-      "model_name": "Test Model",
-      "params": {},
-      "result_urls": [
-        "https://example.com/result.png"
-      ],
-      "price": 0.0,
-      "timestamp": "2026-01-27T21:43:54.690688"
-    },
-    {
-      "id": "task-123",
-      "model_id": "test-model",
-      "model_name": "Test Model",
-      "params": {},
-      "result_urls": [
-        "https://example.com/result.png"
-      ],
-      "price": 0.0,
-      "timestamp": "2026-01-27T21:54:13.267907"
-    },
-    {
-      "id": "task-123",
-      "model_id": "test-model",
-      "model_name": "Test Model",
-      "params": {},
-      "result_urls": [
-        "https://example.com/result.png"
-      ],
-      "price": 0.0,
-      "timestamp": "2026-01-27T21:58:42.455370"
-    },
-    {
-      "id": "task-123",
-      "model_id": "test-model",
-      "model_name": "Test Model",
-      "params": {},
-      "result_urls": [
-        "https://example.com/result.png"
-      ],
-      "price": 0.0,
-      "timestamp": "2026-01-28T13:49:03.373580"
-    },
-    {
-      "id": "task-123",
-      "model_id": "test-model",
-      "model_name": "Test Model",
-      "params": {},
-      "result_urls": [
-        "https://example.com/result.png"
-      ],
-      "price": 0.0,
-      "timestamp": "2026-01-28T16:01:16.081972"
-    },
-    {
-      "id": "task-123",
-      "model_id": "test-model",
-      "model_name": "Test Model",
-      "params": {},
-      "result_urls": [
-        "https://example.com/result.png"
-      ],
-      "price": 0.0,
-      "timestamp": "2026-01-28T16:16:05.807446"
-    },
-    {
-      "id": "task-123",
-      "model_id": "flux-2/flex-image-to-image",
-      "model_name": "Flux 2 Flex Image to Image",
-      "params": {
-        "prompt": "test",
-        "image_input": [
-          "https://example.com/file"
-        ],
-        "aspect_ratio": "1:1",
-        "resolution": "1K"
-      },
-      "result_urls": [
-        "https://example.com/result.png"
-      ],
-      "price": 12.0,
-      "timestamp": "2026-01-28T16:17:18.548131"
-    },
     {
       "id": "task-123",
       "model_id": "test-model",
@@ -1610,6 +1647,681 @@
       ],
       "price": 12.0,
       "timestamp": "2026-02-10T10:07:01.331934"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:08:32.499540"
+    },
+    {
+      "id": "task-123",
+      "model_id": "flux-2/flex-image-to-image",
+      "model_name": "✨ Flux 2 Flex Image to Image",
+      "params": {
+        "prompt": "test",
+        "image_input": [
+          "https://example.com/file"
+        ],
+        "aspect_ratio": "1:1",
+        "resolution": "1K"
+      },
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 12.0,
+      "timestamp": "2026-02-11T07:09:42.046937"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:19:20.849509"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:24:22.308898"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:27:08.799766"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:30:12.848122"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:32:17.641778"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:35:17.689840"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:38:07.063961"
+    },
+    {
+      "id": "task-123",
+      "model_id": "flux-2/flex-image-to-image",
+      "model_name": "✨ Flux 2 Flex Image to Image",
+      "params": {
+        "prompt": "test",
+        "image_input": [
+          "https://example.com/file"
+        ],
+        "aspect_ratio": "1:1",
+        "resolution": "1K"
+      },
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 12.0,
+      "timestamp": "2026-02-11T07:39:22.755359"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:42:33.943364"
+    },
+    {
+      "id": "task-123",
+      "model_id": "flux-2/flex-image-to-image",
+      "model_name": "✨ Flux 2 Flex Image to Image",
+      "params": {
+        "prompt": "test",
+        "image_input": [
+          "https://example.com/file"
+        ],
+        "aspect_ratio": "1:1",
+        "resolution": "1K"
+      },
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 12.0,
+      "timestamp": "2026-02-11T07:43:46.794293"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:47:13.912936"
+    },
+    {
+      "id": "task-123",
+      "model_id": "flux-2/flex-image-to-image",
+      "model_name": "✨ Flux 2 Flex Image to Image",
+      "params": {
+        "prompt": "test",
+        "image_input": [
+          "https://example.com/file"
+        ],
+        "aspect_ratio": "1:1",
+        "resolution": "1K"
+      },
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 12.0,
+      "timestamp": "2026-02-11T07:48:22.530653"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:50:47.440654"
+    },
+    {
+      "id": "task-123",
+      "model_id": "flux-2/flex-image-to-image",
+      "model_name": "✨ Flux 2 Flex Image to Image",
+      "params": {
+        "prompt": "test",
+        "image_input": [
+          "https://example.com/file"
+        ],
+        "aspect_ratio": "1:1",
+        "resolution": "1K"
+      },
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 12.0,
+      "timestamp": "2026-02-11T07:51:59.163000"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:57:27.394600"
+    },
+    {
+      "id": "task-123",
+      "model_id": "flux-2/flex-image-to-image",
+      "model_name": "✨ Flux 2 Flex Image to Image",
+      "params": {
+        "prompt": "test",
+        "image_input": [
+          "https://example.com/file"
+        ],
+        "aspect_ratio": "1:1",
+        "resolution": "1K"
+      },
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 12.0,
+      "timestamp": "2026-02-11T07:58:40.798186"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:00:41.658793"
+    },
+    {
+      "id": "task-123",
+      "model_id": "flux-2/flex-image-to-image",
+      "model_name": "✨ Flux 2 Flex Image to Image",
+      "params": {
+        "prompt": "test",
+        "image_input": [
+          "https://example.com/file"
+        ],
+        "aspect_ratio": "1:1",
+        "resolution": "1K"
+      },
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 12.0,
+      "timestamp": "2026-02-11T08:01:52.888324"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:03:03.081020"
+    },
+    {
+      "id": "task-123",
+      "model_id": "flux-2/flex-image-to-image",
+      "model_name": "✨ Flux 2 Flex Image to Image",
+      "params": {
+        "prompt": "test",
+        "image_input": [
+          "https://example.com/file"
+        ],
+        "aspect_ratio": "1:1",
+        "resolution": "1K"
+      },
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 12.0,
+      "timestamp": "2026-02-11T08:04:12.426632"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:05:53.045107"
+    },
+    {
+      "id": "task-123",
+      "model_id": "flux-2/flex-image-to-image",
+      "model_name": "✨ Flux 2 Flex Image to Image",
+      "params": {
+        "prompt": "test",
+        "image_input": [
+          "https://example.com/file"
+        ],
+        "aspect_ratio": "1:1",
+        "resolution": "1K"
+      },
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 12.0,
+      "timestamp": "2026-02-11T08:07:02.220870"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:08:24.185585"
+    },
+    {
+      "id": "task-123",
+      "model_id": "flux-2/flex-image-to-image",
+      "model_name": "✨ Flux 2 Flex Image to Image",
+      "params": {
+        "prompt": "test",
+        "image_input": [
+          "https://example.com/file"
+        ],
+        "aspect_ratio": "1:1",
+        "resolution": "1K"
+      },
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 12.0,
+      "timestamp": "2026-02-11T08:09:31.708653"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:11:40.779720"
+    },
+    {
+      "id": "task-123",
+      "model_id": "flux-2/flex-image-to-image",
+      "model_name": "✨ Flux 2 Flex Image to Image",
+      "params": {
+        "prompt": "test",
+        "image_input": [
+          "https://example.com/file"
+        ],
+        "aspect_ratio": "1:1",
+        "resolution": "1K"
+      },
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 12.0,
+      "timestamp": "2026-02-11T08:12:53.555795"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:14:45.064158"
+    },
+    {
+      "id": "task-123",
+      "model_id": "flux-2/flex-image-to-image",
+      "model_name": "✨ Flux 2 Flex Image to Image",
+      "params": {
+        "prompt": "test",
+        "image_input": [
+          "https://example.com/file"
+        ],
+        "aspect_ratio": "1:1",
+        "resolution": "1K"
+      },
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 12.0,
+      "timestamp": "2026-02-11T08:15:53.524176"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:17:34.216043"
+    },
+    {
+      "id": "task-123",
+      "model_id": "flux-2/flex-image-to-image",
+      "model_name": "✨ Flux 2 Flex Image to Image",
+      "params": {
+        "prompt": "test",
+        "image_input": [
+          "https://example.com/file"
+        ],
+        "aspect_ratio": "1:1",
+        "resolution": "1K"
+      },
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 12.0,
+      "timestamp": "2026-02-11T08:18:45.466697"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:22:56.617388"
+    },
+    {
+      "id": "task-123",
+      "model_id": "flux-2/flex-image-to-image",
+      "model_name": "✨ Flux 2 Flex Image to Image",
+      "params": {
+        "prompt": "test",
+        "image_input": [
+          "https://example.com/file"
+        ],
+        "aspect_ratio": "1:1",
+        "resolution": "1K"
+      },
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 12.0,
+      "timestamp": "2026-02-11T08:24:01.936792"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:26:25.767363"
+    },
+    {
+      "id": "task-123",
+      "model_id": "flux-2/flex-image-to-image",
+      "model_name": "✨ Flux 2 Flex Image to Image",
+      "params": {
+        "prompt": "test",
+        "image_input": [
+          "https://example.com/file"
+        ],
+        "aspect_ratio": "1:1",
+        "resolution": "1K"
+      },
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 12.0,
+      "timestamp": "2026-02-11T08:27:35.157741"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:31:32.022680"
+    },
+    {
+      "id": "task-123",
+      "model_id": "flux-2/flex-image-to-image",
+      "model_name": "✨ Flux 2 Flex Image to Image",
+      "params": {
+        "prompt": "test",
+        "image_input": [
+          "https://example.com/file"
+        ],
+        "aspect_ratio": "1:1",
+        "resolution": "1K"
+      },
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 12.0,
+      "timestamp": "2026-02-11T08:32:39.896559"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:36:37.399161"
+    },
+    {
+      "id": "task-123",
+      "model_id": "flux-2/flex-image-to-image",
+      "model_name": "✨ Flux 2 Flex Image to Image",
+      "params": {
+        "prompt": "test",
+        "image_input": [
+          "https://example.com/file"
+        ],
+        "aspect_ratio": "1:1",
+        "resolution": "1K"
+      },
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 12.0,
+      "timestamp": "2026-02-11T08:37:53.157494"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:42:57.532533"
+    },
+    {
+      "id": "task-123",
+      "model_id": "flux-2/flex-image-to-image",
+      "model_name": "✨ Flux 2 Flex Image to Image",
+      "params": {
+        "prompt": "test",
+        "image_input": [
+          "https://example.com/file"
+        ],
+        "aspect_ratio": "1:1",
+        "resolution": "1K"
+      },
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 12.0,
+      "timestamp": "2026-02-11T08:44:11.294646"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:51:45.597118"
+    },
+    {
+      "id": "task-123",
+      "model_id": "flux-2/flex-image-to-image",
+      "model_name": "✨ Flux 2 Flex Image to Image",
+      "params": {
+        "prompt": "test",
+        "image_input": [
+          "https://example.com/file"
+        ],
+        "aspect_ratio": "1:1",
+        "resolution": "1K"
+      },
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 12.0,
+      "timestamp": "2026-02-11T08:52:53.834096"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:54:44.581666"
+    },
+    {
+      "id": "task-123",
+      "model_id": "flux-2/flex-image-to-image",
+      "model_name": "✨ Flux 2 Flex Image to Image",
+      "params": {
+        "prompt": "test",
+        "image_input": [
+          "https://example.com/file"
+        ],
+        "aspect_ratio": "1:1",
+        "resolution": "1K"
+      },
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 12.0,
+      "timestamp": "2026-02-11T08:55:50.968531"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T09:04:45.572253"
+    },
+    {
+      "id": "task-123",
+      "model_id": "flux-2/flex-image-to-image",
+      "model_name": "✨ Flux 2 Flex Image to Image",
+      "params": {
+        "prompt": "test",
+        "image_input": [
+          "https://example.com/file"
+        ],
+        "aspect_ratio": "1:1",
+        "resolution": "1K"
+      },
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 12.0,
+      "timestamp": "2026-02-11T09:05:59.736850"
     }
   ],
   "7777": [
@@ -2173,6 +2885,303 @@
       ],
       "price": 0.0,
       "timestamp": "2026-02-10T10:05:53.217978"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:08:32.699973"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:19:21.080272"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:24:22.492421"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:27:09.030382"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:30:13.020440"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:32:17.941888"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:35:17.962706"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:38:07.313519"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:42:34.234641"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:47:14.163807"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:50:47.691765"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T07:57:27.622239"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:00:41.974739"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:03:03.356999"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:05:53.250755"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:08:24.353225"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:11:41.018621"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:14:45.323087"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:17:34.386259"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:22:56.745739"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:26:26.013484"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:31:32.293460"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:36:37.703144"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:42:57.807842"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:51:45.879287"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T08:54:44.851087"
+    },
+    {
+      "id": "task-123",
+      "model_id": "test-model",
+      "model_name": "Test Model",
+      "params": {},
+      "result_urls": [
+        "https://example.com/result.png"
+      ],
+      "price": 0.0,
+      "timestamp": "2026-02-11T09:04:45.793576"
     }
   ]
 }

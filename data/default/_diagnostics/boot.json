@@ -1,32 +1,30 @@
 {
-  "timestamp": "2026-02-09T13:42:58.111373+00:00",
+  "timestamp": "2026-02-11T04:05:51.594719+00:00",
   "result": "FAIL",
   "meta": {
-    "bot_instance_id": "p1",
-    "bot_mode": "auto",
+    "bot_instance_id": "partner-01",
+    "bot_mode": "polling",
     "port": 10000
   },
   "sections": {
     "CONFIG": {
-      "status": "FAIL",
+      "status": "OK",
       "checks": {
         "ADMIN_ID": {
           "status": "OK",
           "details": "valid"
         },
         "BOT_INSTANCE_ID": {
-          "status": "FAIL",
-          "details": "invalid format",
-          "hint": "Use lowercase letters, digits, . _ - (slug)"
+          "status": "OK",
+          "details": "normalized=partner-01"
         },
         "BOT_MODE": {
-          "status": "DEGRADED",
-          "details": "default=auto"
+          "status": "OK",
+          "details": "polling"
         },
         "WEBHOOK_BASE_URL": {
-          "status": "FAIL",
-          "details": "missing",
-          "hint": "Set WEBHOOK_BASE_URL"
+          "status": "OK",
+          "details": "ok"
         },
         "PORT": {
           "status": "OK",
@@ -41,9 +39,8 @@
           "details": "SET"
         },
         "PAYMENT_SUPPORT": {
-          "status": "DEGRADED",
-          "details": "owner defaults",
-          "hint": "Set PAYMENT_/SUPPORT_ vars"
+          "status": "OK",
+          "details": "SET"
         }
       }
     },
@@ -66,12 +63,12 @@
         "connect": {
           "status": "FAIL",
           "details": "connect failed",
-          "hint": "invalid DSN: scheme is expected to be either \"postgresql\" or \"postgres\", got ''"
+          "hint": "[Errno 11001] getaddrinfo failed"
         },
         "query": {
           "status": "FAIL",
           "details": "SELECT 1 failed",
-          "hint": "invalid DSN: scheme is expected to be either \"postgresql\" or \"postgres\", got ''"
+          "hint": "[Errno 11001] getaddrinfo failed"
         },
         "pool_size": {
           "status": "OK",
@@ -81,7 +78,7 @@
       "meta": {
         "status": "FAIL",
         "details": "connect failed",
-        "hint": "invalid DSN: scheme is expected to be either \"postgresql\" or \"postgres\", got ''"
+        "hint": "[Errno 11001] getaddrinfo failed"
       }
     },
     "STORAGE": {
@@ -93,7 +90,7 @@
         },
         "tenant_namespace": {
           "status": "OK",
-          "details": "p1"
+          "details": "partner-01"
         },
         "rw_smoke": {
           "status": "OK",
@@ -110,18 +107,18 @@
       }
     },
     "REDIS": {
-      "status": "DEGRADED",
+      "status": "FAIL",
       "checks": {
         "ping": {
-          "status": "DEGRADED",
-          "details": "not configured",
-          "hint": "Set REDIS_URL to enable"
+          "status": "FAIL",
+          "details": "ping failed",
+          "hint": "Error 22 connecting to localhost:6379. Удаленный компьютер отклонил это сетевое подключение."
         }
       },
       "meta": {
-        "status": "DEGRADED",
-        "details": "not configured",
-        "hint": "Set REDIS_URL to enable"
+        "status": "FAIL",
+        "details": "ping failed",
+        "hint": "Error 22 connecting to localhost:6379. Удаленный компьютер отклонил это сетевое подключение."
       }
     },
     "TELEGRAM": {
@@ -204,7 +201,7 @@
   },
   "summary": {
     "CONFIG": {
-      "status": "FAIL"
+      "status": "OK"
     },
     "NETWORK/PORT": {
       "status": "OK",
@@ -219,8 +216,8 @@
       "details": "rw ok"
     },
     "REDIS": {
-      "status": "DEGRADED",
-      "details": "not configured"
+      "status": "FAIL",
+      "details": "ping failed"
     },
     "TELEGRAM": {
       "status": "FAIL",
@@ -242,16 +239,13 @@
     }
   },
   "critical_failures": {
-    "BOT_INSTANCE_ID": "Use lowercase letters, digits, . _ - (3-32 chars)",
     "DATABASE": "Verify DATABASE_URL and DB availability",
     "TELEGRAM_BOT_TOKEN": "Fix TELEGRAM_BOT_TOKEN format"
   },
   "degraded_notes": {
-    "BOT_MODE": "BOT_MODE not set; default applied",
-    "PAYMENT_SUPPORT": "Owner defaults in use"
+    "REDIS": "Redis ping failed"
   },
   "how_to_fix": [
-    "BOT_INSTANCE_ID: Use lowercase letters, digits, . _ - (3-32 chars)",
     "DATABASE: Verify DATABASE_URL and DB availability",
     "TELEGRAM_BOT_TOKEN: Fix TELEGRAM_BOT_TOKEN format"
   ]

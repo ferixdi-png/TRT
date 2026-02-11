@@ -2,10 +2,10 @@
   "8888:task-123": {
     "user_id": 8888,
     "task_id": "task-123",
-    "job_id": "job-d13d4814b194",
+    "job_id": "job-f5f04bc8ea0f",
     "model_id": "test-model",
-    "request_id": "corr-1-8888-08143111",
-    "correlation_id": "corr-1-8888-08143111",
+    "request_id": "corr-1-8888-8d8c3695",
+    "correlation_id": "corr-1-8888-8d8c3695",
     "prompt_hash": "a7d766d8d25f",
     "chat_id": 12345,
     "message_id": 1,
@@ -15,8 +15,8 @@
     "is_admin_user": false,
     "status": "delivered",
     "created_at": "2026-01-27T16:51:54.434425",
-    "updated_at": "2026-02-10T10:05:33.679028",
-    "delivered_at": "2026-02-10T10:05:33.679036",
+    "updated_at": "2026-02-11T09:04:30.252250",
+    "delivered_at": "2026-02-11T09:04:30.252259",
     "result_urls": [
       "https://example.com/result.png"
     ]
@@ -24,10 +24,10 @@
   "777:task-send-fail": {
     "user_id": 777,
     "task_id": "task-send-fail",
-    "job_id": "job-b6d219ab5866",
+    "job_id": "job-df6b8db6c435",
     "model_id": "test-model",
-    "request_id": "corr-1-777-d911ee4c",
-    "correlation_id": "corr-1-777-d911ee4c",
+    "request_id": "corr-1-777-99140a0b",
+    "correlation_id": "corr-1-777-99140a0b",
     "prompt_hash": "a7d766d8d25f",
     "chat_id": 12345,
     "message_id": 1,
@@ -37,15 +37,15 @@
     "is_admin_user": false,
     "status": "failed",
     "created_at": "2026-01-27T16:52:00.937091",
-    "updated_at": "2026-02-10T10:05:49.596370"
+    "updated_at": "2026-02-11T09:04:42.455315"
   },
   "9911:task-123": {
     "user_id": 9911,
     "task_id": "task-123",
-    "job_id": "job-9173545c21b6",
+    "job_id": "job-6c777f18a015",
     "model_id": "flux-2/flex-image-to-image",
-    "request_id": "corr-203-9911-0381177a",
-    "correlation_id": "corr-203-9911-0381177a",
+    "request_id": "corr-203-9911-606f6104",
+    "correlation_id": "corr-203-9911-606f6104",
     "prompt_hash": "9f86d081884c",
     "chat_id": 12345,
     "message_id": 1,
@@ -55,8 +55,8 @@
     "is_admin_user": false,
     "status": "delivered",
     "created_at": "2026-01-27T16:52:03.657569",
-    "updated_at": "2026-02-10T10:07:01.313763",
-    "delivered_at": "2026-02-10T10:07:01.313771",
+    "updated_at": "2026-02-11T09:05:59.713172",
+    "delivered_at": "2026-02-11T09:05:59.713187",
     "result_urls": [
       "https://example.com/result.png"
     ]
@@ -64,10 +64,10 @@
   "7777:task-123": {
     "user_id": 7777,
     "task_id": "task-123",
-    "job_id": "job-917901712579",
+    "job_id": "job-d112a26b7503",
     "model_id": "test-model",
-    "request_id": "corr-1-7777-86ee73de",
-    "correlation_id": "corr-1-7777-86ee73de",
+    "request_id": "corr-1-7777-ddddfe15",
+    "correlation_id": "corr-1-7777-ddddfe15",
     "prompt_hash": "a7d766d8d25f",
     "chat_id": 12345,
     "message_id": 1,
@@ -77,8 +77,8 @@
     "is_admin_user": false,
     "status": "delivered",
     "created_at": "2026-01-27T16:52:03.865478",
-    "updated_at": "2026-02-10T10:05:53.208634",
-    "delivered_at": "2026-02-10T10:05:53.208642",
+    "updated_at": "2026-02-11T09:04:45.784825",
+    "delivered_at": "2026-02-11T09:04:45.784834",
     "result_urls": [
       "https://example.com/result.png"
     ]
@@ -86,7 +86,7 @@
   "42:task-123": {
     "user_id": 42,
     "task_id": "task-123",
-    "job_id": "job-4b21d6eea458",
+    "job_id": "job-2bd1f8148575",
     "model_id": "sora-2-text-to-video",
     "request_id": "corr-test",
     "prompt_hash": "2cf24dba5fb0",
@@ -98,7 +98,7 @@
     "is_admin_user": false,
     "status": "pending",
     "created_at": "2026-01-27T16:53:48.209806",
-    "updated_at": "2026-02-10T10:08:38.750762"
+    "updated_at": "2026-02-11T09:07:34.707340"
   },
   "1:1d16481e-0f9b-4d43-a4d4-635ce6652b0f": {
     "user_id": 1,

@@ -2115,21 +2115,30 @@ class PostgresStorage(BaseStorage):
 
     @_retry_transient
     async def list_all_partners(self) -> List[Dict[str, Any]]:
-        """List all partner instances with health/status info.
+        """List all partner instances with compact deployment diagnostics.
 
         Returns a list of dicts with keys:
-            partner_id, file_count, last_updated, users_count,
-            generations_count, payments_count, has_recent_activity, problems
+            partner_id, file_count, last_updated_ago, deploy_status,
+            missing_critical, problems
         """
+        # Critical files every healthy instance must have
+        CRITICAL_FILES = {
+            "user_balances.json",
+            "generations_history.json",
+            "generation_jobs.json",
+            "daily_free_generations.json",
+        }
+
         pool = await self._get_pool()
         async with pool.acquire() as conn:
-            # Step 1: Get basic partner info
+            # Get partner info + their file lists in one pass
             rows = await conn.fetch(
                 """
                 SELECT
                     partner_id,
-                    count(*)        AS file_count,
-                    max(updated_at) AS last_updated
+                    count(*)                          AS file_count,
+                    max(updated_at)                   AS last_updated,
+                    array_agg(DISTINCT filename)      AS filenames
                 FROM storage_json
                 GROUP BY partner_id
                 ORDER BY last_updated DESC
@@ -2144,68 +2153,58 @@ class PostgresStorage(BaseStorage):
                 pid = row["partner_id"]
                 last_upd = row["last_updated"]
                 file_count = row["file_count"]
+                filenames = set(row["filenames"] or [])
 
-                # Step 2: Load key counts per partner from well-known files
-                def _count_keys(payload: Any) -> int:
-                    if isinstance(payload, dict):
-                        return len(payload)
-                    return 0
-
-                users_count = 0
-                gens_count = 0
-                payments_count = 0
-                try:
-                    ur = await conn.fetchval(
-                        "SELECT payload FROM storage_json WHERE partner_id=$1 AND filename=$2",
-                        pid, "user_registry.json",
-                    )
-                    users_count = _count_keys(ur)
-                except Exception:
-                    pass
-                try:
-                    gh = await conn.fetchval(
-                        "SELECT payload FROM storage_json WHERE partner_id=$1 AND filename=$2",
-                        pid, "generations_history.json",
-                    )
-                    gens_count = _count_keys(gh)
-                except Exception:
-                    pass
-                try:
-                    ph = await conn.fetchval(
-                        "SELECT payload FROM storage_json WHERE partner_id=$1 AND filename=$2",
-                        pid, "payments.json",
-                    )
-                    payments_count = _count_keys(ph)
-                except Exception:
-                    pass
-
-                # Step 3: Detect problems
+                # --- Deployment status ---
                 problems: List[str] = []
-                has_recent = False
+
                 if last_upd:
                     age = now - last_upd
-                    has_recent = age < timedelta(hours=1)
-                    if age > timedelta(days=1):
-                        problems.append("нет активности >24ч")
-                    elif age > timedelta(hours=6):
-                        problems.append("нет активности >6ч")
+                    total_sec = int(age.total_seconds())
+                    if total_sec < 60:
+                        ago_str = f"{total_sec} сек"
+                    elif total_sec < 3600:
+                        ago_str = f"{total_sec // 60} мин"
+                    elif total_sec < 86400:
+                        h = total_sec // 3600
+                        m = (total_sec % 3600) // 60
+                        ago_str = f"{h}ч {m}м"
+                    else:
+                        d = total_sec // 86400
+                        h = (total_sec % 86400) // 3600
+                        ago_str = f"{d}д {h}ч"
+
+                    if age < timedelta(minutes=10):
+                        deploy_status = "🟢 активен"
+                    elif age < timedelta(hours=1):
+                        deploy_status = "🟢 активен"
+                    elif age < timedelta(hours=6):
+                        deploy_status = "🟡 тихо"
+                    elif age < timedelta(days=1):
+                        deploy_status = "🔴 нет активности >6ч"
+                        problems.append("возможно остановлен")
+                    else:
+                        deploy_status = "🔴 мёртв >24ч"
+                        problems.append("скорее всего выключен или упал")
                 else:
-                    problems.append("нет данных updated_at")
+                    ago_str = "—"
+                    deploy_status = "🔴 нет данных"
+                    problems.append("нет updated_at")
+
+                # --- Missing critical files ---
+                missing = CRITICAL_FILES - filenames
+                if missing:
+                    short_names = [f.replace(".json", "") for f in sorted(missing)]
+                    problems.append("нет файлов: " + ", ".join(short_names))
 
                 if file_count < 3:
-                    problems.append(f"мало файлов ({file_count})")
-                if users_count == 0:
-                    problems.append("0 пользователей")
+                    problems.append(f"всего {file_count} файл(ов) — неполная настройка")
 
                 result.append({
                     "partner_id": pid,
                     "file_count": file_count,
-                    "last_updated": last_upd.isoformat() if last_upd else None,
-                    "last_updated_ago": str(now - last_upd).split(".")[0] if last_upd else "N/A",
-                    "users_count": users_count,
-                    "generations_count": gens_count,
-                    "payments_count": payments_count,
-                    "has_recent_activity": has_recent,
+                    "last_updated_ago": ago_str,
+                    "deploy_status": deploy_status,
                     "problems": problems,
                 })
 
