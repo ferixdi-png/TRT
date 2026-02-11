@@ -15994,13 +15994,12 @@ async def _button_callback_impl(
                         key_line = " ".join(f"{v}{k}" for k, v in cs.items())
                         lines.append(f"   {key_line}")
 
-                    # Lines 4+: real problems from boot report
-                    if p["problems"]:
-                        for prob in p["problems"]:
-                            lines.append(f"   ⚠️ <i>{prob}</i>")
-                    elif p.get("section_issues"):
-                        for si in p["section_issues"]:
-                            lines.append(f"   ⚠️ <i>{si}</i>")
+                    # Lines 4+: real problems from boot report (max 3)
+                    show_problems = p["problems"] or p.get("section_issues", [])
+                    for prob in show_problems[:3]:
+                        lines.append(f"   ⚠️ <i>{prob}</i>")
+                    if len(show_problems) > 3:
+                        lines.append(f"   ... и ещё {len(show_problems) - 3} проблем(а)")
 
                 text = "\n".join(lines)
                 # Telegram message limit is 4096 chars
