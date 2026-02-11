@@ -885,7 +885,9 @@
     },
     "kling-2.6/motion-control": {
       "status": "MISSING_PARAM_SCHEMA",
-      "issues": ["New model, pricing pending."],
+      "issues": [
+        "New model, pricing pending."
+      ],
       "found_skus": []
     },
     "wan/2-6-text-to-video": {
@@ -895,27 +897,37 @@
     },
     "runway/aleph": {
       "status": "MISSING_PARAM_SCHEMA",
-      "issues": ["New model, pricing pending."],
+      "issues": [
+        "New model, pricing pending."
+      ],
       "found_skus": []
     },
     "elevenlabs/tts-turbo-2-5": {
       "status": "MISSING_PARAM_SCHEMA",
-      "issues": ["New model, pricing pending."],
+      "issues": [
+        "New model, pricing pending."
+      ],
       "found_skus": []
     },
     "elevenlabs/tts-multilingual-v2": {
       "status": "MISSING_PARAM_SCHEMA",
-      "issues": ["New model, pricing pending."],
+      "issues": [
+        "New model, pricing pending."
+      ],
       "found_skus": []
     },
     "elevenlabs/sound-effect-v2": {
       "status": "MISSING_PARAM_SCHEMA",
-      "issues": ["New model, pricing pending."],
+      "issues": [
+        "New model, pricing pending."
+      ],
       "found_skus": []
     },
     "elevenlabs/text-to-dialogue-v3": {
       "status": "MISSING_PARAM_SCHEMA",
-      "issues": ["New model, pricing pending."],
+      "issues": [
+        "New model, pricing pending."
+      ],
       "found_skus": []
     },
     "gpt-image/1.5-text-to-image": {
@@ -927,6 +939,16 @@
       "status": "READY",
       "issues": [],
       "found_skus": []
+    },
+    "kling-3.0/text-to-video": {
+      "status": "READY",
+      "missing_skus": [],
+      "sku_count": 12
+    },
+    "kling-3.0/image-to-video": {
+      "status": "READY",
+      "missing_skus": [],
+      "sku_count": 12
     }
   }
 }

@@ -66,7 +66,10 @@ async def test_unknown_callback_fallback_answers_and_menu(monkeypatch):
     await harness.setup()
     ensure_error_handler_registered(harness.application)
 
+    menu_called = []
+
     async def fake_menu(*args, **kwargs):
+        menu_called.append(True)
         return None
 
     monkeypatch.setattr("bot_kie.ensure_main_menu", fake_menu)
@@ -87,7 +90,7 @@ async def test_unknown_callback_fallback_answers_and_menu(monkeypatch):
     await harness.application.process_update(update)
 
     assert harness.outbox.callback_answers
-    assert harness.outbox.messages
-    assert "Кнопка устарела" in harness.outbox.messages[-1]["text"]
+    # fallback handler now uses ensure_main_menu (edit) instead of send_message
+    assert menu_called, "ensure_main_menu should be called by fallback handler"
 
     await harness.teardown()

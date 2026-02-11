@@ -16,7 +16,7 @@ from bot_kie import (
 async def test_select_model_auto_switches_stale_gen_type(harness, caplog, monkeypatch):
     harness.add_handler(CallbackQueryHandler(button_callback, block=True))
     user_id = 44001
-    model_id = "midjourney/api"
+    model_id = "z-image"
     model_spec = get_model(model_id)
     derived_gen_type = _derive_model_gen_type(model_spec)
 

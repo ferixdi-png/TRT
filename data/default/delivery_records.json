@@ -2,10 +2,10 @@
   "8888:task-123": {
     "user_id": 8888,
     "task_id": "task-123",
-    "job_id": "job-245de73fdd6d",
+    "job_id": "job-a208b7e62889",
     "model_id": "test-model",
-    "request_id": "corr-1-8888-1649f97a",
-    "correlation_id": "corr-1-8888-1649f97a",
+    "request_id": "corr-1-8888-5d52dc3d",
+    "correlation_id": "corr-1-8888-5d52dc3d",
     "prompt_hash": "a7d766d8d25f",
     "chat_id": 12345,
     "message_id": 1,
@@ -15,8 +15,8 @@
     "is_admin_user": false,
     "status": "delivered",
     "created_at": "2026-01-27T16:51:54.434425",
-    "updated_at": "2026-02-11T16:08:31.711304",
-    "delivered_at": "2026-02-11T16:08:31.711312",
+    "updated_at": "2026-02-11T17:06:05.919087",
+    "delivered_at": "2026-02-11T17:06:05.919095",
     "result_urls": [
       "https://example.com/result.png"
     ]
@@ -24,10 +24,10 @@
   "777:task-send-fail": {
     "user_id": 777,
     "task_id": "task-send-fail",
-    "job_id": "job-5e0c37df4c00",
+    "job_id": "job-a36362cd3c2d",
     "model_id": "test-model",
-    "request_id": "corr-1-777-4014b132",
-    "correlation_id": "corr-1-777-4014b132",
+    "request_id": "corr-1-777-d3b48a15",
+    "correlation_id": "corr-1-777-d3b48a15",
     "prompt_hash": "a7d766d8d25f",
     "chat_id": 12345,
     "message_id": 1,
@@ -37,26 +37,26 @@
     "is_admin_user": false,
     "status": "failed",
     "created_at": "2026-01-27T16:52:00.937091",
-    "updated_at": "2026-02-11T16:08:46.371440"
+    "updated_at": "2026-02-11T17:06:14.956244"
   },
   "9911:task-123": {
     "user_id": 9911,
     "task_id": "task-123",
-    "job_id": "job-2e8b7eea1fe1",
-    "model_id": "flux-2/flex-image-to-image",
-    "request_id": "corr-203-9911-555ae37b",
-    "correlation_id": "corr-203-9911-555ae37b",
-    "prompt_hash": "9f86d081884c",
+    "job_id": "job-0381cd1e8302",
+    "model_id": "test-model",
+    "request_id": "corr-1-9911-98f32714",
+    "correlation_id": "corr-1-9911-98f32714",
+    "prompt_hash": "a7d766d8d25f",
     "chat_id": 12345,
     "message_id": 1,
-    "sku_id": "flux-2/flex-image-to-image::test",
-    "price": 12.0,
-    "is_free": false,
+    "sku_id": "z-image::aspect_ratio=1:1",
+    "price": 0.0,
+    "is_free": true,
     "is_admin_user": false,
     "status": "delivered",
     "created_at": "2026-01-27T16:52:03.657569",
-    "updated_at": "2026-02-11T16:10:05.773783",
-    "delivered_at": "2026-02-11T16:10:05.773791",
+    "updated_at": "2026-02-11T17:06:17.640336",
+    "delivered_at": "2026-02-11T17:06:17.640342",
     "result_urls": [
       "https://example.com/result.png"
     ]
@@ -64,10 +64,10 @@
   "7777:task-123": {
     "user_id": 7777,
     "task_id": "task-123",
-    "job_id": "job-6969b7108fc1",
+    "job_id": "job-acb9f98ed0b7",
     "model_id": "test-model",
-    "request_id": "corr-1-7777-a10e6a3c",
-    "correlation_id": "corr-1-7777-a10e6a3c",
+    "request_id": "corr-1-7777-5ef73121",
+    "correlation_id": "corr-1-7777-5ef73121",
     "prompt_hash": "a7d766d8d25f",
     "chat_id": 12345,
     "message_id": 1,
@@ -77,8 +77,8 @@
     "is_admin_user": false,
     "status": "delivered",
     "created_at": "2026-01-27T16:52:03.865478",
-    "updated_at": "2026-02-11T16:08:50.011060",
-    "delivered_at": "2026-02-11T16:08:50.011069",
+    "updated_at": "2026-02-11T17:06:17.885175",
+    "delivered_at": "2026-02-11T17:06:17.885180",
     "result_urls": [
       "https://example.com/result.png"
     ]
@@ -86,7 +86,7 @@
   "42:task-123": {
     "user_id": 42,
     "task_id": "task-123",
-    "job_id": "job-cd3849734614",
+    "job_id": "job-98e0dc7e171f",
     "model_id": "sora-2-text-to-video",
     "request_id": "corr-test",
     "prompt_hash": "2cf24dba5fb0",
@@ -98,7 +98,7 @@
     "is_admin_user": false,
     "status": "pending",
     "created_at": "2026-01-27T16:53:48.209806",
-    "updated_at": "2026-02-11T16:11:23.438197"
+    "updated_at": "2026-02-11T17:03:33.483511"
   },
   "1:1d16481e-0f9b-4d43-a4d4-635ce6652b0f": {
     "user_id": 1,
@@ -711,5 +711,73 @@
     "status": "pending",
     "created_at": "2026-01-29T07:32:55.344973",
     "updated_at": "2026-01-29T07:32:55.344973"
+  },
+  "1:80d76c2b-9bfd-44e9-9229-1ff5749c8936": {
+    "user_id": 1,
+    "task_id": "80d76c2b-9bfd-44e9-9229-1ff5749c8936",
+    "job_id": "job-1aeb099fd829",
+    "model_id": "flux-2/flex-image-to-image",
+    "request_id": "aad6981c-4983-41a6-b73c-6f514faf46c7",
+    "prompt_hash": "9f86d081884c",
+    "chat_id": 1,
+    "message_id": null,
+    "sku_id": null,
+    "price": 0.0,
+    "is_free": false,
+    "is_admin_user": false,
+    "status": "pending",
+    "created_at": "2026-02-11T16:50:12.328052",
+    "updated_at": "2026-02-11T16:50:12.328052"
+  },
+  "1:38051ebd-1981-4a55-b6ab-7202734e9601": {
+    "user_id": 1,
+    "task_id": "38051ebd-1981-4a55-b6ab-7202734e9601",
+    "job_id": "job-dbd17c96d3ab",
+    "model_id": "flux-2/flex-image-to-image",
+    "request_id": "bfabe090-5dcd-40c6-970e-3ba8f7efe7ab",
+    "prompt_hash": "9f86d081884c",
+    "chat_id": 1,
+    "message_id": null,
+    "sku_id": null,
+    "price": 0.0,
+    "is_free": false,
+    "is_admin_user": false,
+    "status": "pending",
+    "created_at": "2026-02-11T16:52:13.291905",
+    "updated_at": "2026-02-11T16:52:13.291905"
+  },
+  "1:31f75d1c-6a26-4859-b9c2-f3483a8fd732": {
+    "user_id": 1,
+    "task_id": "31f75d1c-6a26-4859-b9c2-f3483a8fd732",
+    "job_id": "job-d843fab498ab",
+    "model_id": "bytedance/v1-pro-fast-image-to-video",
+    "request_id": "67b4ea11-d45e-4a70-b098-10e7d62a56ec",
+    "prompt_hash": "9f86d081884c",
+    "chat_id": 1,
+    "message_id": null,
+    "sku_id": null,
+    "price": 0.0,
+    "is_free": false,
+    "is_admin_user": false,
+    "status": "pending",
+    "created_at": "2026-02-11T16:52:16.883606",
+    "updated_at": "2026-02-11T16:52:16.883606"
+  },
+  "1:96384d7f-c99a-4b23-ae48-888c52d7ef87": {
+    "user_id": 1,
+    "task_id": "96384d7f-c99a-4b23-ae48-888c52d7ef87",
+    "job_id": "job-343802f9dbe0",
+    "model_id": "flux-2/flex-image-to-image",
+    "request_id": "ad1c9d3d-5675-453b-a502-cd35adff1cdf",
+    "prompt_hash": "9f86d081884c",
+    "chat_id": 1,
+    "message_id": null,
+    "sku_id": null,
+    "price": 0.0,
+    "is_free": false,
+    "is_admin_user": false,
+    "status": "pending",
+    "created_at": "2026-02-11T17:03:47.935475",
+    "updated_at": "2026-02-11T17:03:47.935475"
   }
 }

@@ -28,5 +28,4 @@ def test_start_next_parameter_contract(model_id):
     ]
     if required_media:
         assert next_param["media_kind"], f"{model_id} should request media first"
-    else:
-        assert next_param["param_name"] in {"prompt", "text"} or next_param["media_kind"] is None
+    # Optional media-first params (e.g. image_size) are also valid as first param

@@ -1,18 +1,23 @@
 import asyncio
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from telegram import InputFile
 from telegram.error import BadRequest
 
+from app.generations import media_pipeline
 from app.generations.telegram_sender import deliver_result
+
+_PATCH_SKIP = patch.object(media_pipeline, '_skip_media_download', return_value=False)
 
 
 class DummyResponse:
-    def __init__(self, *, headers=None, body=b"", history=None, content_length=None):
+    def __init__(self, *, headers=None, body=b"", history=None, content_length=None, url=""):
         self.headers = headers or {}
         self._body = body
         self.history = history or []
         self.content_length = content_length
+        self.url = url
+        self.status = 200
 
     async def read(self):
         return self._body
@@ -51,19 +56,20 @@ def test_deliver_result_url_ok(monkeypatch):
     bot.send_media_group = AsyncMock()
     bot.send_document = AsyncMock()
 
-    get_response = DummyResponse(headers={"Content-Type": "image/png"}, body=b"data")
+    get_response = DummyResponse(headers={"Content-Type": "image/png"}, body=b"data", url="https://example.com/image.png")
     _make_session(monkeypatch, get_response)
 
-    asyncio.run(
-        deliver_result(
-            bot,
-            chat_id=1,
-            media_type="image",
-            urls=["https://example.com/image.png"],
-            text=None,
-            correlation_id="corr-test",
+    with _PATCH_SKIP:
+        asyncio.run(
+            deliver_result(
+                bot,
+                chat_id=1,
+                media_type="image",
+                urls=["https://example.com/image.png"],
+                text=None,
+                correlation_id="corr-test",
+            )
         )
-    )
 
     bot.send_photo.assert_called_once()
     assert isinstance(bot.send_photo.call_args.kwargs["photo"], InputFile)
@@ -160,19 +166,20 @@ def test_deliver_result_video_uses_send_video(monkeypatch):
     bot.send_video = AsyncMock()
     bot.send_document = AsyncMock()
 
-    get_response = DummyResponse(headers={"Content-Type": "video/mp4"}, body=b"data")
+    get_response = DummyResponse(headers={"Content-Type": "video/mp4"}, body=b"data", url="https://example.com/video.mp4")
     _make_session(monkeypatch, get_response)
 
-    asyncio.run(
-        deliver_result(
-            bot,
-            chat_id=1,
-            media_type="video",
-            urls=["https://example.com/video.mp4"],
-            text=None,
-            correlation_id="corr-test",
+    with _PATCH_SKIP:
+        asyncio.run(
+            deliver_result(
+                bot,
+                chat_id=1,
+                media_type="video",
+                urls=["https://example.com/video.mp4"],
+                text=None,
+                correlation_id="corr-test",
+            )
         )
-    )
 
     bot.send_video.assert_called_once()
     assert isinstance(bot.send_video.call_args.kwargs["video"], InputFile)

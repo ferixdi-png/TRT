@@ -31,10 +31,12 @@ def mock_update():
 def mock_context():
     """Создаёт mock Context для тестов."""
     context = Mock()
+    context.user_data = {}
     context.bot = Mock()
     context.bot.send_message = AsyncMock()
     context.bot.send_photo = AsyncMock()
     context.bot.send_video = AsyncMock()
+    context.bot.answer_callback_query = AsyncMock()
     return context
 
 
