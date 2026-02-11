@@ -15,9 +15,18 @@ os.environ.pop("CHAT_ZIMAGE_CHAT", None)
 # ── Import after env cleanup ────────────────────────────────────────────
 from app.chat_zimage.handler import (
     CHAT_ZIMAGE_MODEL,
+    CHAT_ZIMAGE_COOLDOWN,
+    CHAT_ZIMAGE_MAX_PER_USER,
     PHRASES_OK,
     PLACEHOLDER_PATH,
     _ChatLimiter,
+    _check_cooldown,
+    _set_cooldown,
+    _user_last_gen,
+    _user_in_queue,
+    _user_queue_enter,
+    _user_queue_leave,
+    _user_queue_count,
     _load_placeholder,
     _parse_chat_username,
     _TARGET_USERNAME,
@@ -66,15 +75,47 @@ def test_silent_mode_no_error_phrases_sent():
     assert all(isinstance(p, str) and len(p) > 0 for p in PHRASES_OK)
 
 
-# ── No internal cooldown (Telegram Slow Mode handles it) ────────────────
+# ── Per-user cooldown ───────────────────────────────────────────────────────
 
-def test_no_internal_cooldown():
-    """Internal cooldown was removed — Telegram Slow Mode handles rate-limiting."""
-    import app.chat_zimage.handler as h
-    assert not hasattr(h, "_cooldowns"), "_cooldowns should be removed"
-    assert not hasattr(h, "_check_cooldown"), "_check_cooldown should be removed"
-    assert not hasattr(h, "_set_cooldown"), "_set_cooldown should be removed"
-    assert not hasattr(h, "CHAT_ZIMAGE_COOLDOWN"), "CHAT_ZIMAGE_COOLDOWN should be removed"
+def test_cooldown_not_set_initially():
+    """First request from a user should not be blocked by cooldown."""
+    assert _check_cooldown(999999) is None
+
+
+def test_cooldown_blocks_after_generation():
+    """After setting cooldown, further requests should be blocked."""
+    test_uid = 888888
+    _user_last_gen.pop(test_uid, None)  # cleanup
+    _set_cooldown(test_uid)
+    remaining = _check_cooldown(test_uid)
+    assert remaining is not None and remaining > 0
+    _user_last_gen.pop(test_uid, None)  # cleanup
+
+
+def test_cooldown_expires():
+    """After cooldown expires, user should be allowed again."""
+    test_uid = 777777
+    _user_last_gen[test_uid] = time.time() - (CHAT_ZIMAGE_COOLDOWN + 10)
+    assert _check_cooldown(test_uid) is None
+    _user_last_gen.pop(test_uid, None)  # cleanup
+
+
+# ── Per-user queue limit ───────────────────────────────────────────────────
+
+def test_user_queue_tracking():
+    """Per-user queue enter/leave tracking works correctly."""
+    test_uid = 666666
+    _user_in_queue.pop(test_uid, None)  # cleanup
+    assert _user_queue_count(test_uid) == 0
+    _user_queue_enter(test_uid)
+    assert _user_queue_count(test_uid) == 1
+    _user_queue_enter(test_uid)
+    assert _user_queue_count(test_uid) == 2
+    _user_queue_leave(test_uid)
+    assert _user_queue_count(test_uid) == 1
+    _user_queue_leave(test_uid)
+    assert _user_queue_count(test_uid) == 0
+    _user_in_queue.pop(test_uid, None)  # cleanup
 
 
 # ── Limiter ──────────────────────────────────────────────────────────────

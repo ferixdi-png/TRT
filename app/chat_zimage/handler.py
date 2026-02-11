@@ -12,11 +12,19 @@ GATE architecture:
   On any failure — cooldown, queue full, generation error — the bot
   stays completely silent (details only in logs).
 
+Queue & concurrency model:
+  - Incoming requests go into a bounded queue (FIFO via asyncio.Semaphore).
+  - N worker slots process from the queue concurrently.
+  - Per-user cooldown prevents one person from hogging the queue.
+  - Per-user queue limit (max 1 pending request) prevents spam.
+  - If the global queue is full, the request is silently dropped.
+
 Config via env vars:
   CHAT_ZIMAGE_CHAT            — @username of the target chat (required)
-  CHAT_ZIMAGE_COOLDOWN        — per-user cooldown seconds (default 300)
-  CHAT_ZIMAGE_MAX_CONCURRENCY — max parallel generations (default 1)
+  CHAT_ZIMAGE_COOLDOWN        — per-user cooldown seconds (default 900 = 15 min)
+  CHAT_ZIMAGE_MAX_CONCURRENCY — max parallel generations (default 3)
   CHAT_ZIMAGE_MAX_QUEUE       — max queued requests (default 20)
+  CHAT_ZIMAGE_MAX_PER_USER    — max queued requests per user (default 1)
   CHAT_ZIMAGE_ASPECT_RATIO    — default aspect ratio (default 1:1)
   CHAT_ZIMAGE_TIMEOUT         — generation timeout seconds (default 120)
 """
@@ -67,8 +75,10 @@ def _parse_chat_username(raw: str) -> str:
 
 _TARGET_USERNAME: str = _parse_chat_username(CHAT_ZIMAGE_CHAT)
 CHAT_ZIMAGE_MODEL: str = "z-image"
-CHAT_ZIMAGE_MAX_CONCURRENCY: int = int(os.getenv("CHAT_ZIMAGE_MAX_CONCURRENCY", "1"))
+CHAT_ZIMAGE_COOLDOWN: int = int(os.getenv("CHAT_ZIMAGE_COOLDOWN", "900"))
+CHAT_ZIMAGE_MAX_CONCURRENCY: int = int(os.getenv("CHAT_ZIMAGE_MAX_CONCURRENCY", "3"))
 CHAT_ZIMAGE_MAX_QUEUE: int = int(os.getenv("CHAT_ZIMAGE_MAX_QUEUE", "20"))
+CHAT_ZIMAGE_MAX_PER_USER: int = int(os.getenv("CHAT_ZIMAGE_MAX_PER_USER", "1"))
 CHAT_ZIMAGE_ASPECT_RATIO: str = os.getenv("CHAT_ZIMAGE_ASPECT_RATIO", "1:1")
 CHAT_ZIMAGE_TIMEOUT: int = int(os.getenv("CHAT_ZIMAGE_TIMEOUT", "120"))
 CHAT_ZIMAGE_ADMIN_IDS: Set[int] = {
@@ -107,11 +117,59 @@ def _load_placeholder() -> bytes:
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# PER-USER COOLDOWN & QUEUE TRACKING
+# ═══════════════════════════════════════════════════════════════════════
+
+_user_last_gen: Dict[int, float] = {}
+_user_in_queue: Dict[int, int] = {}
+
+
+def _check_cooldown(user_id: int) -> Optional[int]:
+    """Check per-user cooldown. Returns remaining seconds or None if OK."""
+    if CHAT_ZIMAGE_COOLDOWN <= 0:
+        return None
+    last = _user_last_gen.get(user_id)
+    if last is None:
+        return None
+    elapsed = time.time() - last
+    remaining = CHAT_ZIMAGE_COOLDOWN - elapsed
+    if remaining > 0:
+        return int(remaining)
+    return None
+
+
+def _set_cooldown(user_id: int) -> None:
+    """Mark generation start time for cooldown tracking."""
+    _user_last_gen[user_id] = time.time()
+
+
+def _user_queue_count(user_id: int) -> int:
+    """Return how many requests this user currently has in the queue."""
+    return _user_in_queue.get(user_id, 0)
+
+
+def _user_queue_enter(user_id: int) -> None:
+    _user_in_queue[user_id] = _user_in_queue.get(user_id, 0) + 1
+
+
+def _user_queue_leave(user_id: int) -> None:
+    count = _user_in_queue.get(user_id, 0)
+    if count <= 1:
+        _user_in_queue.pop(user_id, None)
+    else:
+        _user_in_queue[user_id] = count - 1
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # CONCURRENCY LIMITER (isolated from main bot)
 # ═══════════════════════════════════════════════════════════════════════
 
 class _ChatLimiter:
-    """Semaphore-based limiter with bounded queue for chat mode."""
+    """Semaphore-based limiter with bounded queue for chat mode.
+
+    asyncio.Semaphore wakes waiters in FIFO order, so requests
+    are processed in the order they arrive.
+    """
 
     def __init__(self, max_concurrency: int, max_queue: int) -> None:
         self._sem = asyncio.Semaphore(max_concurrency)
@@ -124,6 +182,10 @@ class _ChatLimiter:
             return False
         self._in_flight += 1
         return True
+
+    def queue_position(self) -> int:
+        """Return approximate queue position (0-based, 0 = next to run)."""
+        return max(0, self._in_flight - self._sem._value)
 
     async def wait_for_slot(self) -> None:
         """Wait for a concurrency slot (blocks until available)."""
@@ -274,12 +336,17 @@ async def _background_generate(update: Update, context: ContextTypes.DEFAULT_TYP
     chat_id = update.effective_chat.id
     message_id = update.effective_message.message_id
     corr_id = f"corr-{update.update_id}-{user_id}"
-    logger.info("[CHAT_ZIMAGE] BACKGROUND_START corr_id=%s user_id=%s chat_id=%s prompt=%s", corr_id, user_id, chat_id, prompt[:50])
+    queue_pos = limiter.queue_position()
+    logger.info(
+        "[CHAT_ZIMAGE] BACKGROUND_START corr_id=%s user_id=%s chat_id=%s queue_pos=%d prompt=%s",
+        corr_id, user_id, chat_id, queue_pos, prompt[:50],
+    )
 
     try:
-        logger.info("[CHAT_ZIMAGE] BEFORE_SLOT_WAIT corr_id=%s", corr_id)
+        logger.info("[CHAT_ZIMAGE] BEFORE_SLOT_WAIT corr_id=%s queue_pos=%d", corr_id, queue_pos)
         async with limiter._sem:
             logger.info("[CHAT_ZIMAGE] SLOT_ACQUIRED corr_id=%s", corr_id)
+            _set_cooldown(user_id)
             result_urls, task_id = await _run_zimage(user_id, prompt)
 
         if result_urls:
@@ -308,7 +375,8 @@ async def _background_generate(update: Update, context: ContextTypes.DEFAULT_TYP
         except Exception:
             pass  # Best effort
     finally:
-        limiter._in_flight -= 1
+        limiter._in_flight = max(0, limiter._in_flight - 1)
+        _user_queue_leave(user_id)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -352,7 +420,25 @@ async def _chat_zimage_gate(
         prompt = message.text.strip()
 
         if prompt and user_id:
-            # Queue — silent skip if full
+            # Per-user cooldown check
+            cooldown_remaining = _check_cooldown(user_id)
+            if cooldown_remaining is not None:
+                logger.info(
+                    "CHAT_ZIMAGE_COOLDOWN user_id=%s remaining=%ds",
+                    user_id, cooldown_remaining,
+                )
+                # Raise to block main handlers, but don't queue the request
+                raise ApplicationHandlerStop
+
+            # Per-user queue limit
+            if _user_queue_count(user_id) >= CHAT_ZIMAGE_MAX_PER_USER:
+                logger.info(
+                    "CHAT_ZIMAGE_USER_QUEUE_FULL user_id=%s count=%d max=%d",
+                    user_id, _user_queue_count(user_id), CHAT_ZIMAGE_MAX_PER_USER,
+                )
+                raise ApplicationHandlerStop
+
+            # Global queue check
             limiter = _get_limiter()
             if not limiter.try_enter():
                 logger.info(
@@ -360,8 +446,9 @@ async def _chat_zimage_gate(
                     user_id, limiter._in_flight,
                 )
             else:
+                _user_queue_enter(user_id)
+                queue_pos = limiter.queue_position()
                 # Launch background task (no webhook stall)
-                # Rate-limiting is handled by Telegram Slow Mode in chat settings
                 task = asyncio.create_task(
                     _background_generate(update, context, prompt, limiter),
                     name=f"chat_zimg_{user_id}_{uuid.uuid4().hex[:6]}",
@@ -370,8 +457,8 @@ async def _chat_zimage_gate(
                 task.add_done_callback(_background_tasks.discard)
 
                 logger.info(
-                    "CHAT_ZIMAGE_QUEUED user_id=%s chat_id=%s prompt_len=%d tasks=%d",
-                    user_id, chat.id, len(prompt), len(_background_tasks),
+                    "CHAT_ZIMAGE_QUEUED user_id=%s chat_id=%s prompt_len=%d tasks=%d queue_pos=%d",
+                    user_id, chat.id, len(prompt), len(_background_tasks), queue_pos,
                 )
 
     # Block ALL further handler processing for this chat
@@ -401,12 +488,14 @@ def register_chat_zimage_handler(application: Any) -> bool:
 
     logger.info(
         "CHAT_ZIMAGE_REGISTERED chat=%s resolved_username=%s model=%s "
-        "concurrency=%d queue=%d aspect=%s timeout=%ds admin_ids=%s group=-50",
+        "concurrency=%d queue=%d max_per_user=%d cooldown=%ds aspect=%s timeout=%ds admin_ids=%s group=-50",
         CHAT_ZIMAGE_CHAT,
         _TARGET_USERNAME,
         CHAT_ZIMAGE_MODEL,
         CHAT_ZIMAGE_MAX_CONCURRENCY,
         CHAT_ZIMAGE_MAX_QUEUE,
+        CHAT_ZIMAGE_MAX_PER_USER,
+        CHAT_ZIMAGE_COOLDOWN,
         CHAT_ZIMAGE_ASPECT_RATIO,
         CHAT_ZIMAGE_TIMEOUT,
         CHAT_ZIMAGE_ADMIN_IDS or "none",
