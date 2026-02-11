@@ -256,6 +256,7 @@ def build_step1_prompt_text(
     *,
     correlation_id: str | None = None,
     user_lang: str = "ru",
+    step_info: str = "",
 ) -> str:
     from app.model_descriptions import format_intro_card
     
@@ -328,7 +329,7 @@ def build_step1_prompt_text(
     if user_lang == "en":
         lines = [
             intro_card,
-            "📝 <b>Step 1/3: Describe what you want</b>",
+            f"\ud83d\udcdd <b>{step_info + ': ' if step_info else 'Step 1/3: '}Describe what you want</b>",
             "",
             "💡 <b>Example:</b> <i>A cat in sunglasses on a tropical beach, sunset, photorealistic</i>",
             "",
@@ -337,7 +338,7 @@ def build_step1_prompt_text(
     else:
         lines = [
             intro_card,
-            "📝 <b>Шаг 1/3: Опиши что хочешь получить</b>",
+            f"📝 <b>{step_info + ': ' if step_info else 'Шаг 1/3: '}Опиши что хочешь получить</b>",
             "",
             "💡 <b>Пример:</b> <i>Кот в солнечных очках на тропическом пляже, закат, фотореализм</i>",
             "",

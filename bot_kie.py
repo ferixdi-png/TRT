@@ -19525,9 +19525,12 @@ def _get_chat_id_from_update(update: Update) -> int | None:
 
 def _get_step_info(session: dict, param_name: str, user_lang: str) -> str:
     param_order = session.get('param_order', [])
-    if param_name in param_order:
-        step_index = param_order.index(param_name) + 1
-        total_steps = len(param_order)
+    required_params = session.get('required', [])
+    # Only count params the user actually fills: media (always shown) + required
+    visible_params = [p for p in param_order if _get_media_kind(p) or p in required_params]
+    if param_name in visible_params:
+        step_index = visible_params.index(param_name) + 1
+        total_steps = len(visible_params)
         if user_lang == 'en':
             return f"Step {step_index}/{total_steps}"
         return f"Шаг {step_index}/{total_steps}"
@@ -19546,11 +19549,17 @@ def _get_param_example(param_name: str, param_info: dict, user_lang: str, enum_v
     return f"{prefix}: {example}"
 
 
-def _get_param_format_hint(param_type: str, enum_values: list | None, user_lang: str) -> str:
+def _get_param_format_hint(param_type: str, enum_values: list | None, user_lang: str, param_name: str = "") -> str:
     if enum_values:
         return "Format: choose from list" if user_lang == 'en' else "Формат: выберите значение из списка"
     if param_type == "boolean":
         return "Format: yes/no" if user_lang == 'en' else "Формат: да/нет"
+    media_kind = _get_media_kind(param_name) if param_name else None
+    if media_kind:
+        media_hints_ru = {"image": "Формат: изображение (JPG, PNG, WEBP)", "video": "Формат: видео", "audio": "Формат: аудио"}
+        media_hints_en = {"image": "Format: image (JPG, PNG, WEBP)", "video": "Format: video", "audio": "Format: audio"}
+        hints = media_hints_en if user_lang == 'en' else media_hints_ru
+        return hints.get(media_kind, "Format: file" if user_lang == 'en' else "Формат: файл")
     return "Format: text" if user_lang == 'en' else "Формат: текст"
 
 
@@ -19882,7 +19891,7 @@ async def prompt_for_specific_param(
     step_prefix = f"{step_info}: " if step_info else ""
     is_optional = not param_info.get('required', False)
     default_value = param_info.get('default')
-    format_hint = _get_param_format_hint(param_type, enum_values, user_lang)
+    format_hint = _get_param_format_hint(param_type, enum_values, user_lang, param_name=param_name)
     example_hint = _get_param_example(param_name, param_info, user_lang, enum_values)
     required_label = _format_required_label(is_optional, user_lang)
     chat_id = _get_chat_id_from_update(update)
@@ -19956,6 +19965,7 @@ async def prompt_for_specific_param(
             billing_ctx,
             get_is_admin(user_id),
             correlation_id=correlation_id,
+            step_info=step_info,
         )
         keyboard = [
             [
@@ -20612,7 +20622,7 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
             param_desc = param_info.get('description', '')
             step_info = _get_step_info(session, param_name, user_lang)
             step_prefix = f"{step_info}: " if step_info else ""
-            format_hint = _get_param_format_hint(param_type, enum_values, user_lang)
+            format_hint = _get_param_format_hint(param_type, enum_values, user_lang, param_name=param_name)
             example_hint = _get_param_example(param_name, param_info, user_lang, enum_values)
             example_line = f"🧪 {example_hint}\n" if example_hint else ""
             free_counter_line = await _resolve_free_counter_line(
@@ -20723,7 +20733,7 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 default_text = f"\n\nПо умолчанию: {'Да' if default_value else 'Нет'}"
             step_info = _get_step_info(session, param_name, user_lang)
             step_prefix = f"{step_info}: " if step_info else ""
-            format_hint = _get_param_format_hint(param_type, enum_values, user_lang)
+            format_hint = _get_param_format_hint(param_type, enum_values, user_lang, param_name=param_name)
             example_hint = _get_param_example(param_name, param_info, user_lang, enum_values)
             example_line = f"🧪 {example_hint}\n" if example_hint else ""
             details_text = "\n".join([format_hint, required_label, example_hint] if example_hint else [format_hint, required_label])
@@ -20925,7 +20935,7 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
         max_length = param_info.get('max') or param_info.get('max_length')
         max_text = f"\n\nМакс. длина: {max_length} символов" if max_length else ""
         default_value = param_info.get('default')
-        format_hint = _get_param_format_hint(param_type, enum_values, user_lang)
+        format_hint = _get_param_format_hint(param_type, enum_values, user_lang, param_name=param_name)
         example_hint = _get_param_example(param_name, param_info, user_lang, enum_values)
         example_line = f"🧪 {example_hint}\n" if example_hint else ""
 
@@ -20969,6 +20979,7 @@ async def start_next_parameter(update: Update, context: ContextTypes.DEFAULT_TYP
                 billing_ctx,
                 get_is_admin(user_id),
                 correlation_id=correlation_id,
+                step_info=_get_step_info(session, param_name, user_lang),
             )
         else:
             default_info = f"\n\nПо умолчанию: {default_value}" if default_value and is_optional else ""
