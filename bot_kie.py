@@ -15960,48 +15960,62 @@ async def _button_callback_impl(
                 # Filter out 'diagnostics' pseudo-partner
                 partners = [p for p in partners if p["partner_id"] != "diagnostics"]
                 total = len(partners)
-                ok_count = sum(1 for p in partners if not p["problems"])
-                problem_count = total - ok_count
+                ok_count = sum(1 for p in partners if p.get("all_required_ok"))
+                problem_count = sum(1 for p in partners if p.get("has_boot") and not p.get("all_required_ok"))
+                no_boot = sum(1 for p in partners if not p.get("has_boot"))
 
                 lines = [
-                    f"🤝 <b>ИНСТАНСЫ</b>  ({total} шт: ✅{ok_count} ⚠️{problem_count})\n",
+                    f"🤝 <b>ИНСТАНСЫ</b> ({total} шт)",
+                    f"✅ Всё ОК: {ok_count} | ⚠️ Проблемы: {problem_count}" + (f" | ❓ Нет отчёта: {no_boot}" if no_boot else ""),
+                    "",
                 ]
 
                 for p in partners:
                     pid = p["partner_id"]
                     is_self = pid == current_instance
                     label = f"<b>{pid}</b>" + (" 👑" if is_self else "")
-                    boot_r = p.get("boot_result", "—")
+                    ds = p["deploy_status"]
 
-                    # Boot result badge
-                    if boot_r == "READY":
-                        boot_badge = "✅"
-                    elif boot_r == "DEGRADED":
-                        boot_badge = "⚠️"
-                    elif boot_r == "FAIL":
-                        boot_badge = "❌"
+                    # Line 1: deploy status + name + last activity
+                    lines.append(f"{ds} {label}  🕐 {p['last_updated_ago']}")
+
+                    if not p.get("has_boot"):
+                        # No boot report — partner hasn't redeployed
+                        lines.append("   ❓ <i>Нет boot-отчёта — нужен редеплой</i>")
+                        lines.append("")
+                        continue
+
+                    # Line 2: Required keys — the most important line
+                    rk = p.get("required_keys", {})
+                    if p.get("all_required_ok"):
+                        lines.append("   🔑 Обязательные: ✅ <b>все на месте</b>")
                     else:
-                        boot_badge = "❓"
+                        missing = p.get("required_missing", [])
+                        key_parts = [f"{v}{k}" for k, v in rk.items()]
+                        lines.append("   🔑 " + " ".join(key_parts))
+                        if missing:
+                            lines.append(f"   ❌ <b>Нет: {', '.join(missing)}</b>")
 
-                    # Line 1: deploy status + name
-                    lines.append(f"\n{p['deploy_status']} {label}")
-                    # Line 2: boot result + last update
-                    lines.append(f"   Boot: {boot_badge} {boot_r} | 🕐 {p['last_updated_ago']} назад")
+                    # Line 3: Optional features
+                    opt = p.get("optional_features", {})
+                    if opt:
+                        opt_parts = [f"{v}{k}" for k, v in opt.items()]
+                        lines.append(f"   📦 Доп: {' | '.join(opt_parts)}")
 
-                    # Line 3: config keys quick view (if boot report exists)
-                    cs = p.get("config_status", {})
-                    if cs:
-                        key_line = " ".join(f"{v}{k}" for k, v in cs.items())
-                        lines.append(f"   {key_line}")
+                    # Lines 4+: deeper problems (max 2 per partner)
+                    probs = p.get("problems", [])
+                    if probs:
+                        for prob in probs[:2]:
+                            # Truncate long hints
+                            if len(prob) > 80:
+                                prob = prob[:77] + "..."
+                            lines.append(f"   ⚠️ <i>{prob}</i>")
+                        if len(probs) > 2:
+                            lines.append(f"   <i>...ещё {len(probs) - 2}</i>")
 
-                    # Lines 4+: real problems from boot report (max 3)
-                    show_problems = p["problems"] or p.get("section_issues", [])
-                    for prob in show_problems[:3]:
-                        lines.append(f"   ⚠️ <i>{prob}</i>")
-                    if len(show_problems) > 3:
-                        lines.append(f"   ... и ещё {len(show_problems) - 3} проблем(а)")
+                    lines.append("")
 
-                text = "\n".join(lines)
+                text = "\n".join(lines).rstrip()
                 # Telegram message limit is 4096 chars
                 if len(text) > 4000:
                     text = text[:3990] + "\n\n<i>...обрезано</i>"

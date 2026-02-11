@@ -2115,17 +2115,13 @@ class PostgresStorage(BaseStorage):
 
     @_retry_transient
     async def list_all_partners(self) -> List[Dict[str, Any]]:
-        """List all partner instances with real deployment diagnostics.
+        """List all partner instances with required/optional key diagnostics.
 
-        Reads each partner's _diagnostics/boot.json for actual config issues.
-
-        Returns a list of dicts with keys:
-            partner_id, file_count, last_updated_ago, deploy_status,
-            boot_result, problems, config_status
+        Reads each partner's _diagnostics/boot.json for actual config status.
+        Separates required keys from optional features and shows service issues.
         """
         pool = await self._get_pool()
         async with pool.acquire() as conn:
-            # Get basic info per partner
             rows = await conn.fetch(
                 """
                 SELECT
@@ -2138,7 +2134,6 @@ class PostgresStorage(BaseStorage):
                 """
             )
 
-            # Batch-load all boot reports in one query
             boot_rows = await conn.fetch(
                 """
                 SELECT partner_id, payload
@@ -2160,6 +2155,19 @@ class PostgresStorage(BaseStorage):
             result: List[Dict[str, Any]] = []
             from datetime import datetime, timezone, timedelta
             now = datetime.now(timezone.utc)
+
+            # Required keys mapping: boot check name -> short display name
+            REQUIRED_CONFIG = {
+                "ADMIN_ID": "ADMIN",
+                "BOT_INSTANCE_ID": "INSTANCE",
+                "WEBHOOK_BASE_URL": "WEBHOOK",
+                "KIE_API_KEY": "KIE",
+            }
+            # Required services (from sections)
+            REQUIRED_SERVICES = {
+                "TELEGRAM": "TG_TOKEN",
+                "DATABASE": "DATABASE",
+            }
 
             for row in rows:
                 pid = row["partner_id"]
@@ -2186,69 +2194,109 @@ class PostgresStorage(BaseStorage):
                     age = None
                     ago_str = "—"
 
-                # --- Deploy status from activity ---
-                problems: List[str] = []
+                # --- Deploy status ---
                 if age is None:
-                    deploy_status = "🔴 нет данных"
+                    deploy_status = "🔴"
                 elif age < timedelta(hours=1):
-                    deploy_status = "🟢 активен"
+                    deploy_status = "🟢"
                 elif age < timedelta(hours=6):
-                    deploy_status = "🟡 тихо"
-                elif age < timedelta(days=1):
-                    deploy_status = "🔴 неактивен >6ч"
-                    problems.append("возможно остановлен")
+                    deploy_status = "🟡"
                 else:
-                    deploy_status = "🔴 мёртв >24ч"
-                    problems.append("скорее всего выключен или упал")
+                    deploy_status = "🔴"
 
-                # --- Parse boot report for REAL config issues ---
+                # --- Parse boot report ---
                 boot = boot_reports.get(pid, {})
-                boot_result = boot.get("result", "—")
-                boot_ts = boot.get("timestamp", "")
+                has_boot = bool(boot)
+                boot_result = boot.get("result", "")
 
-                # Extract critical failures from boot report
+                config_checks = boot.get("sections", {}).get("CONFIG", {}).get("checks", {})
+                sections = boot.get("sections", {})
+                summary = boot.get("summary", {})
+
+                # --- Required keys status ---
+                required_keys: Dict[str, str] = {}  # short_name -> emoji
+                required_missing: List[str] = []
+
+                for check_key, short_name in REQUIRED_CONFIG.items():
+                    check = config_checks.get(check_key, {})
+                    st = check.get("status", "")
+                    if st == "OK":
+                        required_keys[short_name] = "✅"
+                    elif st == "FAIL":
+                        required_keys[short_name] = "❌"
+                        required_missing.append(short_name)
+                    elif st == "DEGRADED":
+                        required_keys[short_name] = "⚠️"
+                    else:
+                        required_keys[short_name] = "❓"
+
+                for sec_key, short_name in REQUIRED_SERVICES.items():
+                    sec = summary.get(sec_key, {})
+                    sec_st = sec.get("status", "")
+                    if sec_st == "OK":
+                        required_keys[short_name] = "✅"
+                    elif sec_st == "FAIL":
+                        required_keys[short_name] = "❌"
+                        required_missing.append(short_name)
+                    elif sec_st == "DEGRADED":
+                        required_keys[short_name] = "⚠️"
+                    else:
+                        required_keys[short_name] = "❓"
+
+                all_required_ok = len(required_missing) == 0 and has_boot
+
+                # --- Optional features ---
+                optional_features: Dict[str, str] = {}
+
+                # Redis
+                redis_st = summary.get("REDIS", {}).get("status", "")
+                if redis_st == "OK":
+                    optional_features["Redis"] = "✅"
+                elif redis_st == "DEGRADED":
+                    optional_features["Redis"] = "⚠️"
+                elif redis_st == "FAIL":
+                    optional_features["Redis"] = "❌"
+
+                # Payment/Support
+                pay_check = config_checks.get("PAYMENT_SUPPORT", {})
+                pay_st = pay_check.get("status", "")
+                if pay_st == "OK":
+                    optional_features["Оплата"] = "✅"
+                elif pay_st == "DEGRADED":
+                    optional_features["Оплата"] = "⚠️"
+
+                # --- Service problems (deeper diagnostics) ---
+                problems: List[str] = []
                 critical = boot.get("critical_failures", {})
                 for key, hint in critical.items():
                     problems.append(f"{key}: {hint}")
 
-                # Extract degraded notes
-                degraded = boot.get("degraded_notes", {})
-                for key, note in degraded.items():
-                    problems.append(f"{key}: {note}")
-
-                # Check individual config checks for NOT_SET keys
-                config_checks = boot.get("sections", {}).get("CONFIG", {}).get("checks", {})
-                config_status: Dict[str, str] = {}
-                for check_name, check_data in config_checks.items():
-                    st = check_data.get("status", "")
-                    detail = check_data.get("details", "")
-                    if st == "FAIL":
-                        config_status[check_name] = "❌"
-                    elif st == "DEGRADED":
-                        config_status[check_name] = "⚠️"
-                    elif detail == "SET" or st == "OK":
-                        config_status[check_name] = "✅"
-
-                # Check section-level statuses for quick overview
-                sections_summary = boot.get("summary", {})
-                section_issues: List[str] = []
-                for sec_name in ["DATABASE", "STORAGE", "REDIS", "TELEGRAM", "AI"]:
-                    sec = sections_summary.get(sec_name, {})
-                    sec_st = sec.get("status", "")
-                    if sec_st == "FAIL":
-                        sec_detail = sec.get("details", "")
-                        section_issues.append(f"{sec_name}: FAIL" + (f" ({sec_detail})" if sec_detail else ""))
+                # Section-level FAIL details (for deeper diagnostics)
+                for sec_name in ["DATABASE", "STORAGE", "TELEGRAM"]:
+                    sec_data = sections.get(sec_name, {})
+                    if sec_data.get("status") == "FAIL":
+                        checks = sec_data.get("checks", {})
+                        for ck_name, ck_data in checks.items():
+                            if ck_data.get("status") == "FAIL":
+                                detail = ck_data.get("details", "")
+                                hint = ck_data.get("hint", "")
+                                msg = f"{sec_name}/{ck_name}: {detail}"
+                                if hint:
+                                    msg += f" — {hint}"
+                                problems.append(msg)
 
                 result.append({
                     "partner_id": pid,
                     "file_count": file_count,
                     "last_updated_ago": ago_str,
                     "deploy_status": deploy_status,
+                    "has_boot": has_boot,
                     "boot_result": boot_result,
-                    "boot_timestamp": boot_ts,
+                    "required_keys": required_keys,
+                    "required_missing": required_missing,
+                    "all_required_ok": all_required_ok,
+                    "optional_features": optional_features,
                     "problems": problems,
-                    "config_status": config_status,
-                    "section_issues": section_issues,
                 })
 
             return result
