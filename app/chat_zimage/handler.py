@@ -181,34 +181,57 @@ async def _download_image(url: str) -> Optional[bytes]:
 # HELPER: run Z-Image generation via storage and KIE
 # ═══════════════════════════════════════════════════════════════════════
 
-async def _run_zimage(user_id: int, prompt: str) -> Optional[GenerationResult]:
-    """Run Z-Image generation via storage and KIE."""
-    logger.info("[CHAT_ZIMAGE] RUN_ZIMAGE_START user_id=%s prompt=%s", user_id, prompt[:50])
-    
-    from app.generations.universal_engine import run_generation
-    
-    session_params: Dict[str, Any] = {
+async def _run_zimage(user_id: int, prompt: str) -> tuple:
+    """Run Z-Image generation via KIE client directly.
+
+    Uses KIE client (create_task + wait_for_task) instead of
+    run_generation / storage to avoid reconciler picking up the job
+    and delivering to the user's private chat.
+
+    Returns (result_urls: list[str] | None, task_id: str).
+    """
+    from app.kie.kie_client import get_kie_client
+
+    task_id = ""
+    correlation_id = f"corr-chat-zimg-{user_id}-{uuid.uuid4().hex[:8]}"
+    logger.info("[CHAT_ZIMAGE] RUN_ZIMAGE_START user_id=%s prompt=%s corr=%s", user_id, prompt[:50], correlation_id)
+
+    kie = get_kie_client()
+    input_data: Dict[str, Any] = {
         "prompt": prompt,
         "aspect_ratio": CHAT_ZIMAGE_ASPECT_RATIO,
     }
-    
-    job_id = f"chat-zimg-{uuid.uuid4().hex[:12]}"
-    correlation_id = f"corr-chat-zimg-{user_id}-{uuid.uuid4().hex[:8]}"
-    
-    result = await run_generation(
-        user_id=user_id,
+
+    # 1. Create task in KIE
+    create_resp = await kie.create_task(
         model_id=CHAT_ZIMAGE_MODEL,
-        session_params=session_params,
-        timeout=CHAT_ZIMAGE_TIMEOUT,
-        wait_for_result=True,
+        input_data=input_data,
         correlation_id=correlation_id,
-        job_id=job_id,
-        is_free=True,
-        chat_id=user_id,  # For chat mode, chat_id = user_id (private chat)
     )
-    
-    logger.info("[CHAT_ZIMAGE] RUN_ZIMAGE_DONE user_id=%s job_id=%s result=%s", user_id, job_id, "OK" if result else "FAIL")
-    return result, job_id
+    if not create_resp.get("ok"):
+        logger.warning("[CHAT_ZIMAGE] KIE_CREATE_FAIL user_id=%s error=%s", user_id, create_resp.get("error"))
+        return None, task_id
+
+    task_id = create_resp["taskId"]
+    logger.info("[CHAT_ZIMAGE] KIE_TASK_CREATED user_id=%s task_id=%s", user_id, task_id)
+
+    # 2. Poll KIE until completion
+    poll_resp = await kie.wait_for_task(
+        task_id=task_id,
+        timeout=CHAT_ZIMAGE_TIMEOUT,
+        poll_interval=3,
+        correlation_id=correlation_id,
+    )
+    if not poll_resp.get("ok") or poll_resp.get("state") not in ("success", "completed"):
+        logger.warning(
+            "[CHAT_ZIMAGE] KIE_POLL_FAIL user_id=%s task_id=%s state=%s error=%s",
+            user_id, task_id, poll_resp.get("state"), poll_resp.get("error"),
+        )
+        return None, task_id
+
+    result_urls = poll_resp.get("resultUrls") or []
+    logger.info("[CHAT_ZIMAGE] RUN_ZIMAGE_DONE user_id=%s task_id=%s urls=%d", user_id, task_id, len(result_urls))
+    return result_urls, task_id
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -227,10 +250,10 @@ async def _background_generate(update: Update, context: ContextTypes.DEFAULT_TYP
         logger.info("[CHAT_ZIMAGE] BEFORE_SLOT_WAIT corr_id=%s", corr_id)
         async with limiter._sem:
             logger.info("[CHAT_ZIMAGE] SLOT_ACQUIRED corr_id=%s", corr_id)
-            result, job_id = await _run_zimage(user_id, prompt)
+            result_urls, task_id = await _run_zimage(user_id, prompt)
 
-        if result and result.urls:
-            image_data = await _download_image(result.urls[0])
+        if result_urls:
+            image_data = await _download_image(result_urls[0])
             if image_data:
                 phrase = random.choice(PHRASES_OK)
                 photo = io.BytesIO(image_data)
@@ -238,14 +261,14 @@ async def _background_generate(update: Update, context: ContextTypes.DEFAULT_TYP
                 await update.effective_message.reply_photo(photo=photo, caption=phrase)
                 logger.info(
                     "CHAT_ZIMAGE_OK user_id=%s task_id=%s prompt_len=%d",
-                    user_id, job_id, len(prompt),
+                    user_id, task_id, len(prompt),
                 )
             else:
                 await update.effective_message.reply_text("Не скачалось :(")
-                logger.warning("CHAT_ZIMAGE_DOWNLOAD_FAIL user_id=%s job_id=%s", user_id, job_id)
+                logger.warning("CHAT_ZIMAGE_DOWNLOAD_FAIL user_id=%s task_id=%s", user_id, task_id)
         else:
             await update.effective_message.reply_text("Не сгенерировалось :(")
-            logger.warning("CHAT_ZIMAGE_GENERATION_FAIL user_id=%s job_id=%s", user_id, job_id)
+            logger.warning("CHAT_ZIMAGE_GENERATION_FAIL user_id=%s task_id=%s", user_id, task_id)
     except asyncio.CancelledError:
         raise
     except Exception as exc:
