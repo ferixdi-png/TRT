@@ -15993,28 +15993,18 @@ async def _button_callback_impl(
                     if not p.get("has_boot"):
                         # No boot report — verdict based on deploy status + data
                         if users_n > 0 and pays_n > 0:
-                            verdict = f"✅ Активен ({users_n} юз., {pays_n} плат.)"
+                            lines.append(f"   ✅ Активен: {users_n} юз., {pays_n} плат., {gens_n} ген.")
                         elif users_n > 0:
-                            verdict = f"📊 Есть юзеры ({users_n}), платежей нет"
+                            lines.append(f"   📊 {users_n} юз., {gens_n} ген., платежей нет")
                         elif ds == "🟢":
-                            verdict = "⏳ Бот запущен, но никто не писал /start"
-                            lines.append(f"   {verdict}")
-                            lines.append("   <i>Отправь ссылку на бота клиентам</i>")
-                            lines.append("")
-                            continue
+                            lines.append("   ⏳ Бот онлайн, юзеров нет")
+                            lines.append("   <i>→ Отправь ссылку t.me/бот клиентам</i>")
                         elif ds == "🟡":
-                            verdict = "😴 Бот давно без сообщений"
-                            lines.append(f"   {verdict}")
-                            lines.append("   <i>Нет трафика или бот засыпает</i>")
-                            lines.append("")
-                            continue
+                            lines.append("   😴 Render усыпил бота (нет трафика)")
+                            lines.append("   <i>→ Напиши /start боту чтобы разбудить</i>")
                         else:  # 🔴
-                            verdict = "🛑 Бот неактивен"
-                            lines.append(f"   {verdict}")
-                            lines.append("   <i>Проверь деплой на Render</i>")
-                            lines.append("")
-                            continue
-                        lines.append(f"   {verdict}")
+                            lines.append("   🛑 Бот не отвечает давно")
+                            lines.append("   <i>→ Открой Render Dashboard → проверь логи</i>")
                         lines.append("")
                         continue
 
@@ -16061,13 +16051,18 @@ async def _button_callback_impl(
                     if missing:
                         verdict = f"❌ Не настроен — нет: {', '.join(missing)}"
                     elif probs:
-                        verdict = "⚠️ Есть замечания"
+                        verdict = f"⚠️ Есть замечания ({len(probs)} шт.)"
                     elif users_n > 0 and pays_n > 0:
-                        verdict = f"✅ Работает ({users_n} юз., {pays_n} плат.)"
+                        verdict = f"✅ Работает: {users_n} юз., {pays_n} плат., {gens_n} ген."
                     elif users_n > 0:
-                        verdict = f"✅ Настроен ({users_n} юз., нет платежей)"
+                        verdict = f"✅ Настроен: {users_n} юз., {gens_n} ген., платежей нет"
                     else:
-                        verdict = "✅ Настроен, ожидает пользователей"
+                        if ds == "🔴":
+                            verdict = "⚠️ Настроен, но бот неактивен — проверь Render"
+                        elif ds == "🟡":
+                            verdict = "✅ Настроен, ожидает трафик"
+                        else:
+                            verdict = "✅ Настроен, ожидает пользователей"
                     lines.append(f"   <b>{verdict}</b>")
 
                     lines.append("")
