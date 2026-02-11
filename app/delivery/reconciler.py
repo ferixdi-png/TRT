@@ -45,6 +45,10 @@ DELIVERED_STATES = {"delivered"}
 DELIVERY_POLL_TIMEOUT_SECONDS = int(os.getenv("DELIVERY_POLL_TIMEOUT_SECONDS", "300"))
 DELIVERY_MAX_JOB_AGE_SECONDS = int(os.getenv("DELIVERY_MAX_JOB_AGE_SECONDS", "3600"))
 DELIVERY_RECONCILER_MAX_BACKOFF_SECONDS = int(os.getenv("DELIVERY_RECONCILER_MAX_BACKOFF_SECONDS", "60"))
+JOBS_GC_MAX_AGE_SECONDS = int(os.getenv("JOBS_GC_MAX_AGE_SECONDS", "7200"))
+JOBS_GC_TERMINAL_STATES = {"delivered", "failed", "canceled", "timeout"}
+_jobs_gc_last_run: float = 0.0
+JOBS_GC_INTERVAL_SECONDS = int(os.getenv("JOBS_GC_INTERVAL_SECONDS", "300"))
 
 
 def _delivery_key(user_id: int, task_id: str) -> str:
@@ -898,6 +902,22 @@ async def deliver_job_result(
             "✅ RECONCILER_DELIVERED task_id=%s job_id=%s user_id=%s urls_count=%s",
             task_id, job_id, user_id, len(job_result.urls) if job_result.urls else 0
         )
+        # Clean up the old "Генерация..." status message so it doesn't stay stuck
+        if message_id and chat_id:
+            try:
+                await bot.delete_message(chat_id=chat_id, message_id=message_id)
+                logger.info("✅ RECONCILER_STATUS_MSG_DELETED chat_id=%s message_id=%s", chat_id, message_id)
+            except Exception:
+                try:
+                    await bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        text="✅ <b>Результат доставлен</b>",
+                        parse_mode="HTML",
+                    )
+                    logger.info("✅ RECONCILER_STATUS_MSG_EDITED chat_id=%s message_id=%s", chat_id, message_id)
+                except Exception as edit_exc:
+                    logger.warning("RECONCILER_STATUS_MSG_CLEANUP_FAILED chat_id=%s message_id=%s error=%s", chat_id, message_id, edit_exc)
         try:
             await storage.update_job_status(job_id, "delivered", result_urls=job_result.urls)
             logger.info("✅ RECONCILER_JOB_DELIVERED job_id=%s status=delivered", job_id)
@@ -1053,14 +1073,6 @@ async def reconcile_pending_results(
                 param={"age_s": int(age_s), "max_age_s": DELIVERY_MAX_JOB_AGE_SECONDS},
             )
             continue
-        await _maybe_notify_timeout(
-            bot,
-            storage,
-            job,
-            age_s=age_s,
-            timeout_seconds=DELIVERY_POLL_TIMEOUT_SECONDS,
-            get_user_language=get_user_language,
-        )
         correlation_id = job.get("correlation_id") or job.get("request_id")
         request_id = job.get("request_id") or correlation_id
         job_id_value = job.get("job_id") or task_id
@@ -1068,8 +1080,18 @@ async def reconcile_pending_results(
             status = await kie_client.get_task_status(task_id, correlation_id=correlation_id)
         except Exception as exc:
             logger.warning("delivery_status_poll_failed task_id=%s error=%s", task_id, exc)
+            await _maybe_notify_timeout(
+                bot, storage, job, age_s=age_s,
+                timeout_seconds=DELIVERY_POLL_TIMEOUT_SECONDS,
+                get_user_language=get_user_language,
+            )
             continue
         if not status.get("ok"):
+            await _maybe_notify_timeout(
+                bot, storage, job, age_s=age_s,
+                timeout_seconds=DELIVERY_POLL_TIMEOUT_SECONDS,
+                get_user_language=get_user_language,
+            )
             continue
         resolution = normalize_provider_state(status.get("state"))
         status_state = resolution.canonical_state
@@ -1118,6 +1140,11 @@ async def reconcile_pending_results(
                 outcome=status_state,
                 param={"raw_state": raw_state},
             )
+            await _maybe_notify_timeout(
+                bot, storage, job, age_s=age_s,
+                timeout_seconds=DELIVERY_POLL_TIMEOUT_SECONDS,
+                get_user_language=get_user_language,
+            )
             if status_state == "waiting":
                 await _maybe_notify_waiting(
                     bot,
@@ -1136,6 +1163,22 @@ async def reconcile_pending_results(
                 )
             except Exception as storage_exc:
                 logger.warning("Failed to update job failure: %s", storage_exc)
+            fail_message_id = job.get("message_id")
+            fail_chat_id = job.get("chat_id") or job.get("user_id")
+            if fail_message_id and fail_chat_id:
+                try:
+                    await bot.delete_message(chat_id=fail_chat_id, message_id=fail_message_id)
+                    logger.info("🗑️ RECONCILER_FAIL_STATUS_MSG_DELETED chat_id=%s message_id=%s", fail_chat_id, fail_message_id)
+                except Exception:
+                    try:
+                        await bot.edit_message_text(
+                            chat_id=fail_chat_id,
+                            message_id=fail_message_id,
+                            text="❌ <b>Генерация не удалась</b>",
+                            parse_mode="HTML",
+                        )
+                    except Exception:
+                        pass
             prompt_hash = job.get("prompt_hash")
             model_id = job.get("model_id")
             user_id = job.get("user_id")
@@ -1205,6 +1248,47 @@ async def reconcile_pending_results(
     )
 
 
+async def _gc_old_jobs(storage: Any) -> None:
+    global _jobs_gc_last_run
+    now = time.time()
+    if now - _jobs_gc_last_run < JOBS_GC_INTERVAL_SECONDS:
+        return
+    _jobs_gc_last_run = now
+    if not hasattr(storage, "update_json_file"):
+        return
+    jobs_filename = _jobs_filename(storage)
+    removed_count = 0
+
+    def updater(data: Dict[str, Any]) -> Dict[str, Any]:
+        nonlocal removed_count
+        if not data:
+            return data
+        next_data = {}
+        for key, record in data.items():
+            if not isinstance(record, dict):
+                continue
+            status = (record.get("status") or "").lower()
+            if status not in JOBS_GC_TERMINAL_STATES:
+                next_data[key] = record
+                continue
+            age = _job_age_seconds(record, now_ts=now)
+            if age is not None and age > JOBS_GC_MAX_AGE_SECONDS:
+                removed_count += 1
+                continue
+            next_data[key] = record
+        return next_data
+
+    try:
+        await asyncio.wait_for(
+            storage.update_json_file(jobs_filename, updater),
+            timeout=5.0,
+        )
+        if removed_count > 0:
+            logger.info("🗑️ JOBS_GC_CLEANED removed=%d gc_max_age_s=%d", removed_count, JOBS_GC_MAX_AGE_SECONDS)
+    except Exception as exc:
+        logger.warning("JOBS_GC_FAILED error=%s", exc)
+
+
 async def run_reconciler_loop(
     bot,
     storage,
@@ -1243,4 +1327,8 @@ async def run_reconciler_loop(
         except Exception as exc:
             logger.error("delivery_reconciler_failed: %s", exc, exc_info=True)
             backoff_seconds = min(max_backoff, max(interval_seconds, backoff_seconds * 2))
+        try:
+            await _gc_old_jobs(storage)
+        except Exception as gc_exc:
+            logger.warning("JOBS_GC_ERROR error=%s", gc_exc)
         await asyncio.sleep(backoff_seconds)
