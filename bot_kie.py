@@ -157,8 +157,8 @@ CALLBACK_DATA_RATE_LIMIT_PER_SEC = float(os.getenv("TG_CALLBACK_DATA_RATE_LIMIT_
 CALLBACK_DATA_RATE_LIMIT_BURST = float(os.getenv("TG_CALLBACK_DATA_RATE_LIMIT_BURST", "2"))
 UPDATE_DEDUP_TTL_SECONDS = float(os.getenv("TG_UPDATE_DEDUP_TTL_SECONDS", "60"))
 CALLBACK_DEDUP_TTL_SECONDS = float(os.getenv("TG_CALLBACK_DEDUP_TTL_SECONDS", "30"))
-CALLBACK_CONCURRENCY_LIMIT = int(os.getenv("TG_CALLBACK_CONCURRENCY_LIMIT", "8"))
-CALLBACK_CONCURRENCY_TIMEOUT_SECONDS = float(os.getenv("TG_CALLBACK_CONCURRENCY_TIMEOUT_SECONDS", "2.0"))
+CALLBACK_CONCURRENCY_LIMIT = int(os.getenv("TG_CALLBACK_CONCURRENCY_LIMIT", "25"))
+CALLBACK_CONCURRENCY_TIMEOUT_SECONDS = float(os.getenv("TG_CALLBACK_CONCURRENCY_TIMEOUT_SECONDS", "15.0"))
 START_INFLIGHT_TTL_SECONDS = float(os.getenv("START_INFLIGHT_TTL_SECONDS", "12.0"))
 STORAGE_IO_TIMEOUT_SECONDS = float(os.getenv("STORAGE_IO_TIMEOUT_SECONDS", "10.0"))
 STORAGE_OP_TIMEOUT_SECONDS = max(0.1, float(os.getenv("STORAGE_OP_TIMEOUT_MS", "10000")) / 1000)
@@ -11960,6 +11960,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         acquired = False
         if _callback_semaphore:
+            # Log semaphore pressure (available slots)
+            _sem_available = _callback_semaphore._value  # type: ignore[attr-defined]
+            if _sem_available <= 3:
+                logger.warning(
+                    "CALLBACK_SEMAPHORE_PRESSURE available=%d/%d user_id=%s data=%s",
+                    _sem_available, CALLBACK_CONCURRENCY_LIMIT,
+                    update.effective_user.id if update.effective_user else None,
+                    query.data[:40] if query and query.data else None,
+                )
             try:
                 await asyncio.wait_for(
                     _callback_semaphore.acquire(),
@@ -11968,6 +11977,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 acquired = True
             except asyncio.TimeoutError:
                 user_id = update.effective_user.id if update.effective_user else None
+                logger.error(
+                    "CALLBACK_SEMAPHORE_EXHAUSTED available=0/%d timeout=%.1fs user_id=%s data=%s",
+                    CALLBACK_CONCURRENCY_LIMIT, CALLBACK_CONCURRENCY_TIMEOUT_SECONDS,
+                    user_id, query.data[:40] if query and query.data else None,
+                )
                 user_lang = get_user_language(user_id) if user_id else "ru"
                 busy_text = (
                     "⏳ <b>Сервер занят</b>\n\nПопробуйте снова через пару секунд."
