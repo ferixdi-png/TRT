@@ -15992,19 +15992,20 @@ async def _button_callback_impl(
 
                     if not p.get("has_boot"):
                         # No boot report — verdict based on deploy status + data
+                        lines.append("   🔑 Ключи: <i>нет отчёта — бот не присылал диагностику</i>")
                         if users_n > 0 and pays_n > 0:
                             lines.append(f"   ✅ Активен: {users_n} юз., {pays_n} плат., {gens_n} ген.")
                         elif users_n > 0:
                             lines.append(f"   📊 {users_n} юз., {gens_n} ген., платежей нет")
                         elif ds == "🟢":
                             lines.append("   ⏳ Бот онлайн, юзеров нет")
-                            lines.append("   <i>→ Отправь ссылку t.me/бот клиентам</i>")
                         elif ds == "🟡":
                             lines.append("   😴 Render усыпил бота (нет трафика)")
                             lines.append('   <i>→ <a href="https://telegra.ph/Render-Free-zasypaet-kak-sdelat-chtoby-servis-vsegda-byl-zhivoj-za-2-minuty-02-06">Настрой бесплатный keep-alive</a> или возьми тариф $5</i>')
                         else:  # 🔴
                             lines.append("   🛑 Бот не отвечает давно")
                             lines.append("   <i>→ Открой Render Dashboard → проверь логи</i>")
+                        lines.append("   <i>→ Перезапусти бота на Render для полной диагностики</i>")
                         lines.append("")
                         continue
 
