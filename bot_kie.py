@@ -15972,6 +15972,9 @@ async def _button_callback_impl(
                     "",
                 ]
 
+                # Noise filter — these problems are expected on Render, hide them
+                NOISE_PREFIXES = ("PORT_BIND:",)
+
                 for p in partners:
                     pid = p["partner_id"]
                     is_self = pid == current_instance
@@ -15981,61 +15984,56 @@ async def _button_callback_impl(
                     # Line 1: deploy status + name + last activity
                     lines.append(f"{ds} {label}  🕐 {p['last_updated_ago']}")
 
+                    # --- Data summary (always available from DB) ---
+                    ds_info = p.get("data_summary", {})
+                    users_n = ds_info.get("users", 0)
+                    pays_n = ds_info.get("payments", 0)
+                    gens_n = ds_info.get("generations", 0)
+
                     if not p.get("has_boot"):
-                        # No boot report — show real data from DB instead
-                        ds_info = p.get("data_summary", {})
-                        users_n = ds_info.get("users", 0)
-                        pays_n = ds_info.get("payments", 0)
-                        gens_n = ds_info.get("generations", 0)
-                        files_list = ds_info.get("files", [])
-                        lines.append(f"   👥 Юзеры: <b>{users_n}</b> | 💳 Платежи: <b>{pays_n}</b> | 🎨 Генерации: <b>{gens_n}</b>")
-                        lines.append(f"   📁 Файлов: {len(files_list)}")
-                        if users_n == 0 and pays_n == 0:
-                            lines.append("   ⚠️ <i>Бот пустой — нет активности</i>")
+                        # No boot report — show verdict from DB data
+                        if users_n > 0 and pays_n > 0:
+                            verdict = f"📊 Активен ({users_n} юз., {pays_n} плат.)"
+                        elif users_n > 0:
+                            verdict = f"📊 Есть юзеры ({users_n}), нет платежей"
+                        else:
+                            verdict = "⏳ Нет пользователей — бот ещё не использовался"
+                        lines.append(f"   {verdict}")
+                        lines.append(f"   <i>Подробная диагностика после перезапуска бота</i>")
                         lines.append("")
                         continue
 
-                    # Line 2: Required keys — the most important line
+                    # --- Required keys ---
                     rk = p.get("required_keys", {})
+                    missing = p.get("required_missing", [])
                     if p.get("all_required_ok"):
                         lines.append("   🔑 Обязательные: ✅ <b>все на месте</b>")
                     else:
-                        missing = p.get("required_missing", [])
                         key_parts = [f"{v}{k}" for k, v in rk.items()]
                         lines.append("   🔑 " + " ".join(key_parts))
                         if missing:
                             lines.append(f"   ❌ <b>Нет: {', '.join(missing)}</b>")
 
-                    # Line 3+: Optional features by category
+                    # --- Optional features by category ---
                     opt = p.get("optional_features", {})
                     if opt:
-                        # Group: Payment
                         pay_keys = ["Банк", "Держатель", "Телефон"]
                         pay_parts = [f"{opt[k]}{k}" for k in pay_keys if k in opt]
                         if pay_parts:
                             lines.append(f"   💳 Оплата: {' '.join(pay_parts)}")
 
-                        # Group: Support
                         sup_keys = ["Поддержка TG", "Текст поддержки"]
                         sup_parts = [f"{opt[k]}{k}" for k in sup_keys if k in opt]
                         if sup_parts:
                             lines.append(f"   💬 Поддержка: {' '.join(sup_parts)}")
 
-                        # Group: Branding & Extensions
                         ext_keys = ["Имя бота", "Username", "WebApp", "ZImage чат", "ZImage админы"]
                         ext_parts = [f"{opt[k]}{k}" for k in ext_keys if k in opt]
                         if ext_parts:
                             lines.append(f"   🎨 Доп: {' '.join(ext_parts)}")
 
-                    # Data summary line
-                    ds_info = p.get("data_summary", {})
-                    users_n = ds_info.get("users", 0)
-                    pays_n = ds_info.get("payments", 0)
-                    gens_n = ds_info.get("generations", 0)
-                    lines.append(f"   👥 {users_n} юз. | 💳 {pays_n} плат. | 🎨 {gens_n} ген.")
-
-                    # Lines: deeper problems (max 2 per partner)
-                    probs = p.get("problems", [])
+                    # --- Real problems (filter noise) ---
+                    probs = [pr for pr in p.get("problems", []) if not any(pr.startswith(n) for n in NOISE_PREFIXES)]
                     if probs:
                         for prob in probs[:2]:
                             if len(prob) > 80:
@@ -16043,6 +16041,19 @@ async def _button_callback_impl(
                             lines.append(f"   ⚠️ <i>{prob}</i>")
                         if len(probs) > 2:
                             lines.append(f"   <i>...ещё {len(probs) - 2}</i>")
+
+                    # --- Russian verdict ---
+                    if missing:
+                        verdict = f"❌ Не настроен — нет: {', '.join(missing)}"
+                    elif probs:
+                        verdict = "⚠️ Есть замечания"
+                    elif users_n > 0 and pays_n > 0:
+                        verdict = f"✅ Работает ({users_n} юз., {pays_n} плат.)"
+                    elif users_n > 0:
+                        verdict = f"✅ Настроен ({users_n} юз., нет платежей)"
+                    else:
+                        verdict = "✅ Настроен, ожидает пользователей"
+                    lines.append(f"   <b>{verdict}</b>")
 
                     lines.append("")
 
