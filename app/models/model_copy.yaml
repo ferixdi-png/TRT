@@ -262,6 +262,18 @@ kling-2.6/text-to-video:
     default: 'Длительность: {duration} • Разрешение: {resolution} • Аудио: {audio}
       • Режим: {mode} • Масштаб: {scale} • Формат: {format} • Лимит: {limit}'
     by_sku_key: {}
+kling-3.0/text-to-video:
+  model_short: 'Kling 3.0: видеогенерация нового поколения из текста. Мульти-шот сторителлинг,
+    нативное аудио, до 15 секунд.'
+  sku_templates:
+    default: 'Длительность: {duration} • Режим: {mode} • Аудио: {sound}'
+    by_sku_key: {}
+kling-3.0/image-to-video:
+  model_short: 'Kling 3.0: оживление фото в видео нового поколения. Стартовый и финальный
+    кадры, нативное аудио, до 15 секунд.'
+  sku_templates:
+    default: 'Длительность: {duration} • Режим: {mode} • Аудио: {sound}'
+    by_sku_key: {}
 kling-2.6/motion-control:
   model_short: Перенос движений с видео на изображение. Создайте анимацию персонажа
     по референсному видео.

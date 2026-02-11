@@ -281,6 +281,102 @@ KIE_MODELS = [
         }
     },
     {
+        "id": "kling-3.0/text-to-video",
+        "name": "Kling 3.0 Text-to-Video",
+        "description": "Kling 3.0 — видеогенерация нового поколения из текста. Мульти-шот сторителлинг, нативная генерация аудио (речь, звуки, музыка), кинематографический контроль до 15 секунд. Режим std (720p) и pro (1080p).",
+        "category": "Видео",
+        "emoji": "🎬",
+        "pricing": "100-600 кредитов в зависимости от длительности, режима и наличия звука",
+        "input_params": {
+            "prompt": {
+                "type": "string",
+                "description": "Текстовое описание видео с мульти-шот сторителлингом (макс. 2500 символов). Поддерживает визуальные описания и диалоги.",
+                "required": True,
+                "max_length": 2500
+            },
+            "sound": {
+                "type": "boolean",
+                "description": "Добавить нативное аудио (речь, фоновые звуки, звуковые эффекты)",
+                "required": True,
+                "default": False
+            },
+            "mode": {
+                "type": "string",
+                "description": "Режим генерации: std (720p) или pro (1080p)",
+                "required": True,
+                "default": "std",
+                "enum": ["std", "pro"]
+            },
+            "aspect_ratio": {
+                "type": "string",
+                "description": "Соотношение сторон видео",
+                "required": True,
+                "default": "16:9",
+                "enum": ["1:1", "16:9", "9:16"]
+            },
+            "duration": {
+                "type": "string",
+                "description": "Длительность видео в секундах",
+                "required": True,
+                "default": "5",
+                "enum": ["5", "10", "15"]
+            },
+            "multi_shots": {
+                "type": "boolean",
+                "description": "Включить мульти-шот режим для кинематографического сторителлинга",
+                "required": False,
+                "default": False
+            }
+        }
+    },
+    {
+        "id": "kling-3.0/image-to-video",
+        "name": "Kling 3.0 Image-to-Video",
+        "description": "Kling 3.0 — оживление фото в видео нового поколения. Стартовый и финальный кадры, нативное аудио, мульти-шот контроль до 15 секунд. Режим std (720p) и pro (1080p).",
+        "category": "Видео",
+        "emoji": "🎞️",
+        "pricing": "100-600 кредитов в зависимости от длительности, режима и наличия звука",
+        "input_params": {
+            "prompt": {
+                "type": "string",
+                "description": "Текстовое описание видео с мульти-шот сторителлингом (макс. 2500 символов)",
+                "required": True,
+                "max_length": 2500
+            },
+            "image_urls": {
+                "type": "array",
+                "description": "Стартовый и/или финальный кадры (JPG/PNG, макс 10МБ)",
+                "required": True
+            },
+            "sound": {
+                "type": "boolean",
+                "description": "Добавить нативное аудио (речь, фоновые звуки, звуковые эффекты)",
+                "required": True,
+                "default": False
+            },
+            "mode": {
+                "type": "string",
+                "description": "Режим генерации: std (720p) или pro (1080p)",
+                "required": True,
+                "default": "std",
+                "enum": ["std", "pro"]
+            },
+            "duration": {
+                "type": "string",
+                "description": "Длительность видео в секундах",
+                "required": True,
+                "default": "5",
+                "enum": ["5", "10", "15"]
+            },
+            "multi_shots": {
+                "type": "boolean",
+                "description": "Включить мульти-шот режим для кинематографического сторителлинга",
+                "required": False,
+                "default": False
+            }
+        }
+    },
+    {
         "id": "kling-2.6/motion-control",
         "name": "Kling 2.6 Motion Control",
         "description": "Перенос движений с референсного видео на изображение персонажа. Создает анимацию с точным копированием движений.",
@@ -3183,12 +3279,12 @@ GENERATION_TYPES = {
     "text-to-video": {
         "name": "🎬 Текст в видео",
         "description": "Создавайте видео из текстового описания",
-        "models": ["sora-2-pro-text-to-video", "sora-2-text-to-video", "kling-2.6/text-to-video", "kling/v2-5-turbo-text-to-video-pro", "wan/2-6-text-to-video", "wan/2-5-text-to-video", "hailuo/02-text-to-video-pro", "hailuo/02-text-to-video-standard", "kling/v2-1-master-text-to-video", "grok-imagine/text-to-video", "grok/imagine", "kling/v2-5-turbo", "hailuo/2.3", "runway/gen-4", "runway/aleph"]
+        "models": ["kling-3.0/text-to-video", "sora-2-pro-text-to-video", "sora-2-text-to-video", "kling-2.6/text-to-video", "kling/v2-5-turbo-text-to-video-pro", "wan/2-6-text-to-video", "wan/2-5-text-to-video", "hailuo/02-text-to-video-pro", "hailuo/02-text-to-video-standard", "kling/v2-1-master-text-to-video", "grok-imagine/text-to-video", "grok/imagine", "kling/v2-5-turbo", "hailuo/2.3", "runway/gen-4", "runway/aleph"]
     },
     "image-to-video": {
         "name": "📸 Фото в видео",
         "description": "Превращайте изображения в динамичные видео",
-        "models": ["sora-2-pro-image-to-video", "sora-2-image-to-video", "kling-2.6/image-to-video", "kling-2.6/motion-control", "kling/v2-5-turbo-image-to-video-pro", "wan/2-5-image-to-video", "hailuo/02-image-to-video-pro", "hailuo/02-image-to-video-standard", "bytedance/v1-pro-fast-image-to-video", "kling/v2-1-master-image-to-video", "kling/v2-1-standard", "kling/v2-1-pro", "google/veo-3.1"]
+        "models": ["kling-3.0/image-to-video", "sora-2-pro-image-to-video", "sora-2-image-to-video", "kling-2.6/image-to-video", "kling-2.6/motion-control", "kling/v2-5-turbo-image-to-video-pro", "wan/2-5-image-to-video", "hailuo/02-image-to-video-pro", "hailuo/02-image-to-video-standard", "bytedance/v1-pro-fast-image-to-video", "kling/v2-1-master-image-to-video", "kling/v2-1-standard", "kling/v2-1-pro", "google/veo-3.1"]
     },
     "tools": {
         "name": "🛠️ Инструменты",

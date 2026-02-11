@@ -283,6 +283,71 @@ models:
         - '5'
         - '10'
     model_mode: text_to_video
+  kling-3.0/text-to-video:
+    model_type: text_to_video
+    input:
+      prompt:
+        type: string
+        required: true
+        max: 2500
+      sound:
+        type: boolean
+        required: true
+      mode:
+        type: enum
+        required: true
+        values:
+        - std
+        - pro
+      aspect_ratio:
+        type: enum
+        required: true
+        values:
+        - '1:1'
+        - '16:9'
+        - '9:16'
+      duration:
+        type: enum
+        required: true
+        values:
+        - '5'
+        - '10'
+        - '15'
+      multi_shots:
+        type: boolean
+        required: false
+    model_mode: text_to_video
+  kling-3.0/image-to-video:
+    model_type: image_to_video
+    input:
+      prompt:
+        type: string
+        required: true
+        max: 2500
+      image_urls:
+        type: array
+        item_type: string
+        required: true
+      sound:
+        type: boolean
+        required: true
+      mode:
+        type: enum
+        required: true
+        values:
+        - std
+        - pro
+      duration:
+        type: enum
+        required: true
+        values:
+        - '5'
+        - '10'
+        - '15'
+      multi_shots:
+        type: boolean
+        required: false
+    model_mode: image_to_video
   kling-2.6/motion-control:
     model_type: image_to_video
     input:

@@ -440,6 +440,178 @@ models:
       - unit: video
         price_rub: 172.85
         notes: image-to-video WITH audio (duration not specified)
+  - id: kling-3.0/text-to-video
+    skus:
+      - unit: video
+        price_rub: 78.57
+        params:
+          mode: std
+          sound: false
+          duration: "5"
+        notes: std 720p WITHOUT audio 5s
+      - unit: video
+        price_rub: 117.86
+        params:
+          mode: std
+          sound: true
+          duration: "5"
+        notes: std 720p WITH audio 5s
+      - unit: video
+        price_rub: 106.07
+        params:
+          mode: pro
+          sound: false
+          duration: "5"
+        notes: pro 1080p WITHOUT audio 5s
+      - unit: video
+        price_rub: 157.14
+        params:
+          mode: pro
+          sound: true
+          duration: "5"
+        notes: pro 1080p WITH audio 5s
+      - unit: video
+        price_rub: 157.14
+        params:
+          mode: std
+          sound: false
+          duration: "10"
+        notes: std 720p WITHOUT audio 10s
+      - unit: video
+        price_rub: 235.71
+        params:
+          mode: std
+          sound: true
+          duration: "10"
+        notes: std 720p WITH audio 10s
+      - unit: video
+        price_rub: 212.14
+        params:
+          mode: pro
+          sound: false
+          duration: "10"
+        notes: pro 1080p WITHOUT audio 10s
+      - unit: video
+        price_rub: 314.28
+        params:
+          mode: pro
+          sound: true
+          duration: "10"
+        notes: pro 1080p WITH audio 10s
+      - unit: video
+        price_rub: 235.71
+        params:
+          mode: std
+          sound: false
+          duration: "15"
+        notes: std 720p WITHOUT audio 15s
+      - unit: video
+        price_rub: 353.57
+        params:
+          mode: std
+          sound: true
+          duration: "15"
+        notes: std 720p WITH audio 15s
+      - unit: video
+        price_rub: 318.21
+        params:
+          mode: pro
+          sound: false
+          duration: "15"
+        notes: pro 1080p WITHOUT audio 15s
+      - unit: video
+        price_rub: 471.42
+        params:
+          mode: pro
+          sound: true
+          duration: "15"
+        notes: pro 1080p WITH audio 15s
+  - id: kling-3.0/image-to-video
+    skus:
+      - unit: video
+        price_rub: 78.57
+        params:
+          mode: std
+          sound: false
+          duration: "5"
+        notes: std 720p WITHOUT audio 5s
+      - unit: video
+        price_rub: 117.86
+        params:
+          mode: std
+          sound: true
+          duration: "5"
+        notes: std 720p WITH audio 5s
+      - unit: video
+        price_rub: 106.07
+        params:
+          mode: pro
+          sound: false
+          duration: "5"
+        notes: pro 1080p WITHOUT audio 5s
+      - unit: video
+        price_rub: 157.14
+        params:
+          mode: pro
+          sound: true
+          duration: "5"
+        notes: pro 1080p WITH audio 5s
+      - unit: video
+        price_rub: 157.14
+        params:
+          mode: std
+          sound: false
+          duration: "10"
+        notes: std 720p WITHOUT audio 10s
+      - unit: video
+        price_rub: 235.71
+        params:
+          mode: std
+          sound: true
+          duration: "10"
+        notes: std 720p WITH audio 10s
+      - unit: video
+        price_rub: 212.14
+        params:
+          mode: pro
+          sound: false
+          duration: "10"
+        notes: pro 1080p WITHOUT audio 10s
+      - unit: video
+        price_rub: 314.28
+        params:
+          mode: pro
+          sound: true
+          duration: "10"
+        notes: pro 1080p WITH audio 10s
+      - unit: video
+        price_rub: 235.71
+        params:
+          mode: std
+          sound: false
+          duration: "15"
+        notes: std 720p WITHOUT audio 15s
+      - unit: video
+        price_rub: 353.57
+        params:
+          mode: std
+          sound: true
+          duration: "15"
+        notes: std 720p WITH audio 15s
+      - unit: video
+        price_rub: 318.21
+        params:
+          mode: pro
+          sound: false
+          duration: "15"
+        notes: pro 1080p WITHOUT audio 15s
+      - unit: video
+        price_rub: 471.42
+        params:
+          mode: pro
+          sound: true
+          duration: "15"
+        notes: pro 1080p WITH audio 15s
   - id: kling-2.6/motion-control
     skus:
       - unit: second

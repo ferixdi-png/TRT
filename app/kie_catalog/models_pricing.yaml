@@ -618,6 +618,114 @@ models:
     notes: with audio-10.0s
   description_ru: Создание видео из текста через Kling 2.6. Стабильный результат,
     точный промпт.
+- id: kling-3.0/text-to-video
+  title_ru: 🎬 Kling 3.0 Text to Video
+  type: t2v
+  modes:
+  - unit: video
+    credits: 100.0
+    official_usd: 0.5
+    notes: std-without audio-5.0s
+  - unit: video
+    credits: 150.0
+    official_usd: 0.75
+    notes: std-with audio-5.0s
+  - unit: video
+    credits: 135.0
+    official_usd: 0.675
+    notes: pro-without audio-5.0s
+  - unit: video
+    credits: 200.0
+    official_usd: 1.0
+    notes: pro-with audio-5.0s
+  - unit: video
+    credits: 200.0
+    official_usd: 1.0
+    notes: std-without audio-10.0s
+  - unit: video
+    credits: 300.0
+    official_usd: 1.5
+    notes: std-with audio-10.0s
+  - unit: video
+    credits: 270.0
+    official_usd: 1.35
+    notes: pro-without audio-10.0s
+  - unit: video
+    credits: 400.0
+    official_usd: 2.0
+    notes: pro-with audio-10.0s
+  - unit: video
+    credits: 300.0
+    official_usd: 1.5
+    notes: std-without audio-15.0s
+  - unit: video
+    credits: 450.0
+    official_usd: 2.25
+    notes: std-with audio-15.0s
+  - unit: video
+    credits: 405.0
+    official_usd: 2.025
+    notes: pro-without audio-15.0s
+  - unit: video
+    credits: 600.0
+    official_usd: 3.0
+    notes: pro-with audio-15.0s
+  description_ru: 'Kling 3.0: генерация видео нового поколения из текста. Мульти-шот
+    сторителлинг, нативное аудио, кинематографический контроль до 15 секунд.'
+- id: kling-3.0/image-to-video
+  title_ru: 🎬 Kling 3.0 Image to Video
+  type: i2v
+  modes:
+  - unit: video
+    credits: 100.0
+    official_usd: 0.5
+    notes: std-without audio-5.0s
+  - unit: video
+    credits: 150.0
+    official_usd: 0.75
+    notes: std-with audio-5.0s
+  - unit: video
+    credits: 135.0
+    official_usd: 0.675
+    notes: pro-without audio-5.0s
+  - unit: video
+    credits: 200.0
+    official_usd: 1.0
+    notes: pro-with audio-5.0s
+  - unit: video
+    credits: 200.0
+    official_usd: 1.0
+    notes: std-without audio-10.0s
+  - unit: video
+    credits: 300.0
+    official_usd: 1.5
+    notes: std-with audio-10.0s
+  - unit: video
+    credits: 270.0
+    official_usd: 1.35
+    notes: pro-without audio-10.0s
+  - unit: video
+    credits: 400.0
+    official_usd: 2.0
+    notes: pro-with audio-10.0s
+  - unit: video
+    credits: 300.0
+    official_usd: 1.5
+    notes: std-without audio-15.0s
+  - unit: video
+    credits: 450.0
+    official_usd: 2.25
+    notes: std-with audio-15.0s
+  - unit: video
+    credits: 405.0
+    official_usd: 2.025
+    notes: pro-without audio-15.0s
+  - unit: video
+    credits: 600.0
+    official_usd: 3.0
+    notes: pro-with audio-15.0s
+  description_ru: 'Kling 3.0: оживление фото в видео нового поколения. Стартовый и
+    финальный кадры, нативное аудио, мульти-шот контроль до 15 секунд.'
 - id: kling-2.6/motion-control
   title_ru: 🎬 Kling 2.6 Motion Control
   type: i2v
