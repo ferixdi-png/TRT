@@ -275,6 +275,10 @@ class KIEClient:
                         status=status,
                         message=text,
                     )
+                    logger.warning(
+                        "🔴 KIE_HTTP_ERROR path=%s status=%s attempt=%d/%d latency_ms=%s body=%s",
+                        path, status, attempt, self.max_retries + 1, latency_ms, text[:500] if text else "empty",
+                    )
                     if attempt <= self.max_retries and self._should_retry(status, last_error):
                         await asyncio.sleep(self._backoff_delay(attempt, status))
                         continue

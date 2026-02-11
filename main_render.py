@@ -238,6 +238,13 @@ def build_webhook_handler(
         update_id = getattr(update, "update_id", None)
         user_id = update.effective_user.id if update.effective_user else None
         chat_id = update.effective_chat.id if update.effective_chat else None
+        # Expanded logging: every incoming update
+        _cb_data = update.callback_query.data if update.callback_query else None
+        _msg_text = (update.message.text or "")[:50] if update.message else None
+        logger.info(
+            "📨 WEBHOOK_UPDATE_IN update_id=%s user_id=%s type=%s callback_data=%s msg=%s",
+            update_id, user_id, _resolve_update_type(update), _cb_data, _msg_text,
+        )
         increment_update_metric("webhook_process_start")
         log_structured_event(
             correlation_id=correlation_id,

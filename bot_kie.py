@@ -11907,6 +11907,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     update_id = getattr(update, "update_id", None)
     callback_answered = False
+    # Mark update as handled FIRST so group-1 fallback (back_to_menu_fallback) can skip it
+    if update_id is not None and context and getattr(context, "user_data", None) is not None:
+        context.user_data["last_callback_handled_update_id"] = update_id
     try:
         _create_background_task(
             _check_and_deliver_pending_results(update, context),
@@ -12215,10 +12218,7 @@ async def _button_callback_impl(
     # ==================== NO-SILENCE GUARD: Track outgoing actions ====================
     from app.observability.no_silence_guard import get_no_silence_guard, track_outgoing_action
     guard = get_no_silence_guard()
-    _create_background_task(
-        _check_and_deliver_pending_results(update, context),
-        action="pending_result_check",
-    )
+    # NOTE: _check_and_deliver_pending_results already called in button_callback wrapper
     update_id = update.update_id
     correlation_id = ensure_correlation_id(update, context)
     # ==================== END NO-SILENCE GUARD ====================
@@ -13000,11 +13000,14 @@ async def _button_callback_impl(
         if data == "back_to_menu":
             # Answer callback immediately to show button was pressed
             logger.info("🔙 BACK_TO_MENU_HANDLER_REACHED user_id=%s data=%s update_id=%s", user_id, data, update_id)
-            try:
-                await query.answer()
-                logger.info("🔙 BACK_TO_MENU_ANSWER_OK user_id=%s", user_id)
-            except Exception as ans_err:
-                logger.warning("🔙 BACK_TO_MENU_ANSWER_FAILED user_id=%s error=%s", user_id, ans_err)
+            if not callback_answered:
+                try:
+                    await query.answer()
+                    logger.info("🔙 BACK_TO_MENU_ANSWER_OK user_id=%s", user_id)
+                except Exception as ans_err:
+                    logger.warning("🔙 BACK_TO_MENU_ANSWER_FAILED user_id=%s error=%s", user_id, ans_err)
+            else:
+                logger.info("🔙 BACK_TO_MENU_ANSWER_SKIP already_answered user_id=%s", user_id)
             correlation_id = ensure_correlation_id(update, context)
             partner_id = (os.getenv("PARTNER_ID") or os.getenv("BOT_INSTANCE_ID") or "default").strip() or "default"
             try:
@@ -16084,7 +16087,7 @@ async def _button_callback_impl(
                             media_data = await resp.read()
                             
                             is_last = (i == len(result_urls[:5]) - 1)
-                            is_video = gen.get('model_id', '') in ['sora-2-text-to-video', 'sora-watermark-remover', 'kling-2.6/image-to-video', 'kling-2.6/text-to-video', 'kling/v2-5-turbo-text-to-video-pro', 'kling/v2-5-turbo-image-to-video-pro', 'wan/2-5-image-to-video', 'wan/2-5-text-to-video', 'wan/2-6-text-to-video', 'wan/2-2-animate-move', 'wan/2-2-animate-replace', 'hailuo/02-text-to-video-pro', 'hailuo/02-image-to-video-pro', 'hailuo/02-text-to-video-standard', 'hailuo/02-image-to-video-standard']
+                            is_video = is_video_model(gen.get('model_id', ''))
                             
                             keyboard = []
                             if is_last:
@@ -17652,7 +17655,7 @@ async def _button_callback_impl(
                                     media_data = await resp.read()
                                     
                                     is_last = (i == len(result_urls[:5]) - 1)
-                                    is_video = gen.get('model_id', '') in ['sora-2-text-to-video', 'sora-watermark-remover', 'kling-2.6/image-to-video', 'kling-2.6/text-to-video', 'kling/v2-5-turbo-text-to-video-pro', 'kling/v2-5-turbo-image-to-video-pro', 'wan/2-5-image-to-video', 'wan/2-5-text-to-video', 'wan/2-6-text-to-video', 'wan/2-2-animate-move', 'wan/2-2-animate-replace', 'hailuo/02-text-to-video-pro', 'hailuo/02-image-to-video-pro', 'hailuo/02-text-to-video-standard', 'hailuo/02-image-to-video-standard']
+                                    is_video = is_video_model(gen.get('model_id', ''))
                                     
                                     keyboard = []
                                     if is_last:
@@ -27688,9 +27691,6 @@ async def poll_task_status(update: Update, context: ContextTypes.DEFAULT_TYPE, t
                 try:
                     result_data = json.loads(result_json)
                     
-                    # Determine if this is a video model
-                    is_video_model = model_id in ['sora-2-text-to-video', 'sora-watermark-remover', 'kling-3.0/text-to-video', 'kling-3.0/image-to-video', 'kling-2.6/image-to-video', 'kling-2.6/text-to-video', 'kling/v2-5-turbo-text-to-video-pro', 'kling/v2-5-turbo-image-to-video-pro', 'wan/2-5-image-to-video', 'wan/2-5-text-to-video', 'wan/2-2-animate-move', 'wan/2-2-animate-replace', 'hailuo/02-text-to-video-pro', 'hailuo/02-image-to-video-pro', 'hailuo/02-text-to-video-standard', 'hailuo/02-image-to-video-standard', 'topaz/video-upscale', 'kling/v1-avatar-standard', 'kling/ai-avatar-v1-pro', 'infinitalk/from-audio', 'wan/2-2-a14b-speech-to-video-turbo', 'bytedance/v1-pro-fast-image-to-video', 'kling/v2-1-master-image-to-video', 'kling/v2-1-standard', 'kling/v2-1-pro', 'kling/v2-1-master-text-to-video', 'wan/2-2-a14b-text-to-video-turbo', 'wan/2-2-a14b-image-to-video-turbo']
-                    
                     # For sora-2-text-to-video, check remove_watermark parameter
                     if model_id == 'sora-2-text-to-video':
                         remove_watermark = params.get('remove_watermark', True)
@@ -29227,6 +29227,11 @@ async def _register_all_handlers_internal(application: Application):
         """Dedicated fallback handler for back_to_menu - ensures main menu always accessible."""
         query = update.callback_query
         user_id = query.from_user.id if query and query.from_user else None
+        # Guard: skip if button_callback in group 0 already handled this update
+        if context and getattr(context, "user_data", None) is not None:
+            if context.user_data.get("last_callback_handled_update_id") == update.update_id:
+                logger.debug("BACK_TO_MENU_FALLBACK_SKIP already_handled update_id=%s user_id=%s", update.update_id, user_id)
+                return
         logger.info("BACK_TO_MENU_FALLBACK_HANDLER user_id=%s", user_id)
         try:
             await query.answer()
@@ -29254,20 +29259,21 @@ async def _register_all_handlers_internal(application: Application):
     # Fallback handler for unknown callbacks (must be last, lowest priority)
     async def unknown_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Fallback handler for unknown callbacks - ensures no silence"""
+        # Guard: skip early if button_callback already handled this update (avoid redundant work)
+        if context and getattr(context, "user_data", None) is not None:
+            if context.user_data.get("last_callback_handled_update_id") == update.update_id:
+                return
         query = update.callback_query
         user_id = query.from_user.id if query and query.from_user else None
         user_lang = get_user_language(user_id) if user_id else "ru"
+        if query and is_known_callback_data(query.data):
+            logger.debug(f"Skipping unknown_callback_handler for known callback: {query.data}")
+            return
         await _answer_callback_early(
             query,
             user_lang=user_lang,
             callback_data=query.data if query else None,
         )
-        if context and getattr(context, "user_data", None) is not None:
-            if context.user_data.get("last_callback_handled_update_id") == update.update_id:
-                return
-        if query and is_known_callback_data(query.data):
-            logger.debug(f"Skipping unknown_callback_handler for known callback: {query.data}")
-            return
         correlation_id = ensure_correlation_id(update, context)
         chat_id = query.message.chat_id if query and query.message else None
         from app.observability.no_silence_guard import get_no_silence_guard

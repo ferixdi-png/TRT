@@ -58,6 +58,7 @@ async def fallback_callback_handler(
             await query.answer(message, show_alert=False)
 
             # Восстанавливаем главное меню через единый маршрут
+            menu_restored = False
             try:
                 from bot_kie import ensure_main_menu
 
@@ -67,32 +68,34 @@ async def fallback_callback_handler(
                     source="unknown_callback_fallback",
                     prefer_edit=True,
                 )
+                menu_restored = True
                 logger.info("✅ Меню восстановлено через ensure_main_menu")
             except Exception as restore_error:
                 logger.debug("❌ Не удалось восстановить меню: %s", restore_error, exc_info=True)
-            # Пробуем отправить короткое сообщение с кнопкой меню
-            try:
-                menu_label = "Главное меню" if user_lang == "ru" else "Main menu"
-                keyboard = InlineKeyboardMarkup(
-                    [[InlineKeyboardButton(menu_label, callback_data="back_to_menu")]]
-                )
-                message_text = (
-                    "Кнопка устарела, открой меню."
-                    f" Лог: {correlation_id or 'corr-na'}"
-                )
-                if query.message:
-                    await query.message.reply_text(
-                        message_text,
-                        reply_markup=keyboard,
+            # Пробуем отправить короткое сообщение с кнопкой меню ТОЛЬКО если ensure_main_menu не сработал
+            if not menu_restored:
+                try:
+                    menu_label = "Главное меню" if user_lang == "ru" else "Main menu"
+                    keyboard = InlineKeyboardMarkup(
+                        [[InlineKeyboardButton(menu_label, callback_data="back_to_menu")]]
                     )
-                elif fallback_chat_id:
-                    await context.bot.send_message(
-                        chat_id=fallback_chat_id,
-                        text=message_text,
-                        reply_markup=keyboard,
+                    message_text = (
+                        "Кнопка устарела, открой меню."
+                        f" Лог: {correlation_id or 'corr-na'}"
                     )
-            except Exception:
-                pass
+                    if query.message:
+                        await query.message.reply_text(
+                            message_text,
+                            reply_markup=keyboard,
+                        )
+                    elif fallback_chat_id:
+                        await context.bot.send_message(
+                            chat_id=fallback_chat_id,
+                            text=message_text,
+                            reply_markup=keyboard,
+                        )
+                except Exception:
+                    pass
         elif fallback_chat_id:
             menu_label = "Главное меню" if user_lang == "ru" else "Main menu"
             keyboard = InlineKeyboardMarkup(
