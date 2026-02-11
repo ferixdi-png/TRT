@@ -2115,35 +2115,47 @@ class PostgresStorage(BaseStorage):
 
     @_retry_transient
     async def list_all_partners(self) -> List[Dict[str, Any]]:
-        """List all partner instances with compact deployment diagnostics.
+        """List all partner instances with real deployment diagnostics.
+
+        Reads each partner's _diagnostics/boot.json for actual config issues.
 
         Returns a list of dicts with keys:
             partner_id, file_count, last_updated_ago, deploy_status,
-            missing_critical, problems
+            boot_result, problems, config_status
         """
-        # Critical files every healthy instance must have
-        CRITICAL_FILES = {
-            "user_balances.json",
-            "generations_history.json",
-            "generation_jobs.json",
-            "daily_free_generations.json",
-        }
-
         pool = await self._get_pool()
         async with pool.acquire() as conn:
-            # Get partner info + their file lists in one pass
+            # Get basic info per partner
             rows = await conn.fetch(
                 """
                 SELECT
                     partner_id,
-                    count(*)                          AS file_count,
-                    max(updated_at)                   AS last_updated,
-                    array_agg(DISTINCT filename)      AS filenames
+                    count(*)        AS file_count,
+                    max(updated_at) AS last_updated
                 FROM storage_json
                 GROUP BY partner_id
                 ORDER BY last_updated DESC
                 """
             )
+
+            # Batch-load all boot reports in one query
+            boot_rows = await conn.fetch(
+                """
+                SELECT partner_id, payload
+                FROM storage_json
+                WHERE filename = '_diagnostics/boot.json'
+                """
+            )
+            boot_reports: Dict[str, Any] = {}
+            for br in boot_rows:
+                payload = br["payload"]
+                if isinstance(payload, str):
+                    try:
+                        import json as _json
+                        payload = _json.loads(payload)
+                    except Exception:
+                        payload = {}
+                boot_reports[br["partner_id"]] = payload or {}
 
             result: List[Dict[str, Any]] = []
             from datetime import datetime, timezone, timedelta
@@ -2153,11 +2165,8 @@ class PostgresStorage(BaseStorage):
                 pid = row["partner_id"]
                 last_upd = row["last_updated"]
                 file_count = row["file_count"]
-                filenames = set(row["filenames"] or [])
 
-                # --- Deployment status ---
-                problems: List[str] = []
-
+                # --- Human-readable "ago" ---
                 if last_upd:
                     age = now - last_upd
                     total_sec = int(age.total_seconds())
@@ -2173,86 +2182,76 @@ class PostgresStorage(BaseStorage):
                         d = total_sec // 86400
                         h = (total_sec % 86400) // 3600
                         ago_str = f"{d}д {h}ч"
-
-                    if age < timedelta(minutes=10):
-                        deploy_status = "🟢 активен"
-                    elif age < timedelta(hours=1):
-                        deploy_status = "🟢 активен"
-                    elif age < timedelta(hours=6):
-                        deploy_status = "🟡 тихо"
-                    elif age < timedelta(days=1):
-                        deploy_status = "🔴 нет активности >6ч"
-                        problems.append("возможно остановлен")
-                    else:
-                        deploy_status = "🔴 мёртв >24ч"
-                        problems.append("скорее всего выключен или упал")
                 else:
+                    age = None
                     ago_str = "—"
+
+                # --- Deploy status from activity ---
+                problems: List[str] = []
+                if age is None:
                     deploy_status = "🔴 нет данных"
-                    problems.append("нет updated_at")
+                elif age < timedelta(hours=1):
+                    deploy_status = "🟢 активен"
+                elif age < timedelta(hours=6):
+                    deploy_status = "🟡 тихо"
+                elif age < timedelta(days=1):
+                    deploy_status = "🔴 неактивен >6ч"
+                    problems.append("возможно остановлен")
+                else:
+                    deploy_status = "🔴 мёртв >24ч"
+                    problems.append("скорее всего выключен или упал")
 
-                # --- Missing critical files ---
-                missing = CRITICAL_FILES - filenames
-                if missing:
-                    short_names = [f.replace(".json", "") for f in sorted(missing)]
-                    problems.append("нет файлов: " + ", ".join(short_names))
+                # --- Parse boot report for REAL config issues ---
+                boot = boot_reports.get(pid, {})
+                boot_result = boot.get("result", "—")
+                boot_ts = boot.get("timestamp", "")
 
-                if file_count < 3:
-                    problems.append(f"всего {file_count} файл(ов) — неполная настройка")
+                # Extract critical failures from boot report
+                critical = boot.get("critical_failures", {})
+                for key, hint in critical.items():
+                    problems.append(f"{key}: {hint}")
+
+                # Extract degraded notes
+                degraded = boot.get("degraded_notes", {})
+                for key, note in degraded.items():
+                    problems.append(f"{key}: {note}")
+
+                # Check individual config checks for NOT_SET keys
+                config_checks = boot.get("sections", {}).get("CONFIG", {}).get("checks", {})
+                config_status: Dict[str, str] = {}
+                for check_name, check_data in config_checks.items():
+                    st = check_data.get("status", "")
+                    detail = check_data.get("details", "")
+                    if st == "FAIL":
+                        config_status[check_name] = "❌"
+                    elif st == "DEGRADED":
+                        config_status[check_name] = "⚠️"
+                    elif detail == "SET" or st == "OK":
+                        config_status[check_name] = "✅"
+
+                # Check section-level statuses for quick overview
+                sections_summary = boot.get("summary", {})
+                section_issues: List[str] = []
+                for sec_name in ["DATABASE", "STORAGE", "REDIS", "TELEGRAM", "AI"]:
+                    sec = sections_summary.get(sec_name, {})
+                    sec_st = sec.get("status", "")
+                    if sec_st == "FAIL":
+                        sec_detail = sec.get("details", "")
+                        section_issues.append(f"{sec_name}: FAIL" + (f" ({sec_detail})" if sec_detail else ""))
 
                 result.append({
                     "partner_id": pid,
                     "file_count": file_count,
                     "last_updated_ago": ago_str,
                     "deploy_status": deploy_status,
+                    "boot_result": boot_result,
+                    "boot_timestamp": boot_ts,
                     "problems": problems,
+                    "config_status": config_status,
+                    "section_issues": section_issues,
                 })
 
             return result
-
-    @_retry_transient
-    async def ensure_partner_defaults(self) -> Dict[str, List[str]]:
-        """Create missing critical files with empty {} for all partners.
-
-        Returns dict: {partner_id: [list of created filenames]}
-        """
-        CRITICAL_FILES = {
-            "user_balances.json",
-            "generations_history.json",
-            "generation_jobs.json",
-            "daily_free_generations.json",
-        }
-
-        pool = await self._get_pool()
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(
-                """
-                SELECT partner_id, array_agg(DISTINCT filename) AS filenames
-                FROM storage_json
-                GROUP BY partner_id
-                """
-            )
-
-            created: Dict[str, List[str]] = {}
-            for row in rows:
-                pid = row["partner_id"]
-                existing = set(row["filenames"] or [])
-                missing = CRITICAL_FILES - existing
-                if not missing:
-                    continue
-                created[pid] = []
-                for fname in sorted(missing):
-                    await conn.execute(
-                        """
-                        INSERT INTO storage_json (partner_id, filename, payload, updated_at)
-                        VALUES ($1, $2, $3::jsonb, now())
-                        ON CONFLICT (partner_id, filename) DO NOTHING
-                        """,
-                        pid, fname, "{}",
-                    )
-                    created[pid].append(fname)
-
-            return created
 
     async def migrate_from_github(self, github_storage: BaseStorage) -> None:
         """Migrate data from GitHub storage to PostgreSQL.

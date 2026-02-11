@@ -240,7 +240,11 @@ async def _storage_rw_smoke(storage: Any) -> Dict[str, Any]:
 async def _check_data_integrity(storage: Any) -> Dict[str, Any]:
     if storage is None:
         return _status_entry(STATUS_FAIL, details="storage unavailable", hint="Fix DATABASE_URL/BOT_INSTANCE_ID")
-    files = ["user_registry.json", "payments.json", "referrals.json", "generations_history.json"]
+    files = [
+        "user_registry.json", "payments.json", "referrals.json",
+        "generations_history.json", "user_balances.json",
+        "generation_jobs.json", "daily_free_generations.json",
+    ]
     initialized = []
     for filename in files:
         try:

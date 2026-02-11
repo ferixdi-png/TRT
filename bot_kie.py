@@ -15957,6 +15957,8 @@ async def _button_callback_impl(
                     return ConversationHandler.END
 
                 current_instance = BOT_INSTANCE_ID or "default"
+                # Filter out 'diagnostics' pseudo-partner
+                partners = [p for p in partners if p["partner_id"] != "diagnostics"]
                 total = len(partners)
                 ok_count = sum(1 for p in partners if not p["problems"])
                 problem_count = total - ok_count
@@ -15969,15 +15971,36 @@ async def _button_callback_impl(
                     pid = p["partner_id"]
                     is_self = pid == current_instance
                     label = f"<b>{pid}</b>" + (" 👑" if is_self else "")
+                    boot_r = p.get("boot_result", "—")
 
-                    # Line 1: name + deploy status
+                    # Boot result badge
+                    if boot_r == "READY":
+                        boot_badge = "✅"
+                    elif boot_r == "DEGRADED":
+                        boot_badge = "⚠️"
+                    elif boot_r == "FAIL":
+                        boot_badge = "❌"
+                    else:
+                        boot_badge = "❓"
+
+                    # Line 1: deploy status + name
                     lines.append(f"\n{p['deploy_status']} {label}")
-                    # Line 2: files + last update
-                    lines.append(f"   📁 {p['file_count']} файл. | 🕐 {p['last_updated_ago']} назад")
-                    # Lines 3-4: problems (if any)
+                    # Line 2: boot result + last update
+                    lines.append(f"   Boot: {boot_badge} {boot_r} | 🕐 {p['last_updated_ago']} назад")
+
+                    # Line 3: config keys quick view (if boot report exists)
+                    cs = p.get("config_status", {})
+                    if cs:
+                        key_line = " ".join(f"{v}{k}" for k, v in cs.items())
+                        lines.append(f"   {key_line}")
+
+                    # Lines 4+: real problems from boot report
                     if p["problems"]:
                         for prob in p["problems"]:
                             lines.append(f"   ⚠️ <i>{prob}</i>")
+                    elif p.get("section_issues"):
+                        for si in p["section_issues"]:
+                            lines.append(f"   ⚠️ <i>{si}</i>")
 
                 text = "\n".join(lines)
                 # Telegram message limit is 4096 chars
@@ -15986,71 +16009,12 @@ async def _button_callback_impl(
 
                 keyboard = [
                     [InlineKeyboardButton("🔄 Обновить", callback_data="admin_partners")],
-                    [InlineKeyboardButton("🔧 Инициализировать файлы", callback_data="admin_init_partners")],
                     [InlineKeyboardButton("◀️ Назад", callback_data="admin_stats")],
                 ]
                 await query.edit_message_text(
                     text,
                     parse_mode="HTML",
                     reply_markup=InlineKeyboardMarkup(keyboard),
-                )
-                return ConversationHandler.END
-
-            if data == "admin_init_partners":
-                logger.info("ADMIN_INIT_PARTNERS user_id=%s", user_id)
-                if not is_admin_or_owner(user_id):
-                    await query.answer("❌ Только для администратора.", show_alert=True)
-                    return ConversationHandler.END
-                try:
-                    await query.answer("⏳ Создаю файлы...")
-                except Exception:
-                    pass
-
-                from app.storage.factory import get_storage
-                storage = get_storage()
-
-                if not hasattr(storage, "ensure_partner_defaults"):
-                    await query.edit_message_text(
-                        "⚠️ Функция доступна только с PostgreSQL.",
-                        parse_mode="HTML",
-                        reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton("◀️ Назад", callback_data="admin_partners")]
-                        ]),
-                    )
-                    return ConversationHandler.END
-
-                try:
-                    created = await storage.ensure_partner_defaults()
-                except Exception as exc:
-                    logger.error("ADMIN_INIT_PARTNERS_FAILED error=%s", exc, exc_info=True)
-                    await query.edit_message_text(
-                        f"⚠️ <b>Ошибка</b>\n<code>{str(exc)[:200]}</code>",
-                        parse_mode="HTML",
-                        reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton("◀️ Назад", callback_data="admin_partners")]
-                        ]),
-                    )
-                    return ConversationHandler.END
-
-                if not created:
-                    text = "✅ <b>Все файлы на месте</b>\n\nУ всех партнёров есть все критические файлы."
-                else:
-                    lines = ["🔧 <b>Инициализация завершена</b>\n"]
-                    total = 0
-                    for pid, fnames in created.items():
-                        short = [f.replace('.json', '') for f in fnames]
-                        lines.append(f"✅ <b>{pid}</b>: +{len(fnames)} ({', '.join(short)})")
-                        total += len(fnames)
-                    lines.append(f"\nСоздано файлов: <b>{total}</b>")
-                    text = "\n".join(lines)
-
-                await query.edit_message_text(
-                    text,
-                    parse_mode="HTML",
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("🔄 Проверить", callback_data="admin_partners")],
-                        [InlineKeyboardButton("◀️ Назад", callback_data="admin_stats")],
-                    ]),
                 )
                 return ConversationHandler.END
 
@@ -29133,7 +29097,6 @@ async def _register_all_handlers_internal(application: Application):
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_broadcast_stats$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_test_ocr$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_partners$'),
-            CallbackQueryHandler(button_callback, block=True, pattern='^admin_init_partners$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_users$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_payments$'),
             CallbackQueryHandler(button_callback, block=True, pattern='^admin_add_balance$'),
