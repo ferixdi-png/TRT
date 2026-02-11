@@ -545,10 +545,14 @@ async def webapp_generate(request: web.Request) -> web.Response:
         if not spec:
             return web.json_response({"error": f"Model {model_id} not found"}, status=404)
         
-        # Check if prompt is required for this model (some i2v models don't require it)
+        # Check if prompt is required for this model (media-input models may not require it)
         model_mode = getattr(spec, "model_mode", "")
         model_type = getattr(spec, "type", "")
-        prompt_optional = model_mode in ["image-to-video", "i2v"] or model_type in ["i2v"]
+        prompt_optional = model_mode in [
+            "image-to-video", "i2v", "image-to-image", "i2i",
+            "video-to-video", "v2v", "audio", "speech", "a2a",
+            "lip_sync",
+        ] or model_type in ["i2v", "i2i", "v2v", "a2a", "audio"]
         
         if not prompt and not prompt_optional:
             return web.json_response({"error": "prompt required"}, status=400)

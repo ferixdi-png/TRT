@@ -146,6 +146,28 @@ def get_sku_details(top_model_id: str, sku_id: str, lang: str = "ru") -> Optiona
     return None
 
 
+_pricing_cache: Optional[Dict[str, Any]] = None
+
+
+def _load_pricing() -> Dict[str, Any]:
+    """Load pricing catalog, cached after first successful load."""
+    global _pricing_cache
+    if _pricing_cache is not None:
+        return _pricing_cache
+    try:
+        pricing_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), "data", "kie_pricing_rub.yaml"
+        )
+        with open(pricing_path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+        if data.get("models"):
+            _pricing_cache = data
+        return data
+    except Exception as e:
+        logger.error("Failed to load kie_pricing_rub.yaml: %s", e)
+        return {"models": []}
+
+
 def get_sku_price_rub(price_ref: str, mode_key: str) -> Optional[float]:
     """
     Get price in RUB for SKU from pricing catalog.
@@ -158,11 +180,7 @@ def get_sku_price_rub(price_ref: str, mode_key: str) -> Optional[float]:
         Price in RUB or None if not found
     """
     try:
-        pricing_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), "data", "kie_pricing_rub.yaml"
-        )
-        with open(pricing_path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
+        data = _load_pricing()
         
         for model in data.get("models", []):
             if model.get("id") == price_ref:

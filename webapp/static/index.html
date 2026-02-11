@@ -2130,7 +2130,7 @@
             const hint = field.hint ? `<div class="field-hint">${field.hint}</div>` : '';
             
             // File upload fields
-            if (field.type === 'file_urls' || field.name.includes('image_input') || field.name.includes('image_urls')) {
+            if (field.type === 'file_urls' || field.name.includes('image_input') || field.name.includes('image_urls') || field.name.includes('source_image') || field.name.includes('reference_image')) {
                 return `
                     <div class="form-group" data-field="${field.name}">
                         <label class="form-label">🖼️ ${field.label} ${field.required ? '<span style="color: var(--error);">*</span>' : ''}</label>
@@ -2149,8 +2149,8 @@
                 `;
             }
             
-            // Audio upload (for lip_sync and speech models)
-            if (field.name.includes('audio')) {
+            // Audio upload (for lip_sync and speech models) - but NOT boolean params like 'with_audio'
+            if ((field.name.includes('audio_input') || field.name.includes('audio_urls') || field.name === 'audio') && field.type !== 'boolean') {
                 return `
                     <div class="form-group" data-field="${field.name}">
                         <label class="form-label">🎵 ${field.label} ${field.required ? '<span style="color: var(--error);">*</span>' : ''}</label>
@@ -2764,7 +2764,13 @@
                 }
             }
             
-            if (!prompt) {
+            // Only require prompt if model needs it (not for i2v, audio, etc.)
+            const curModelType = (appData.currentModel?.type || '').toLowerCase();
+            const promptOptional = curModelType.includes('i2v') || curModelType.includes('image-to-video') || 
+                curModelType.includes('a2a') || curModelType.includes('audio') ||
+                curModelType.includes('v2v') || curModelType.includes('video-to-video') ||
+                appData.currentModel?.requires_image || appData.currentModel?.requires_video || appData.currentModel?.requires_audio;
+            if (!prompt && !promptOptional) {
                 tg.showAlert('Введите описание для генерации');
                 return;
             }
@@ -2772,6 +2778,16 @@
             const submitBtn = document.getElementById('submitBtn');
             submitBtn.disabled = true;
             submitBtn.textContent = '⏳ Отправка...';
+            
+            // Merge presetParams from Top Model SKU selection (duration, resolution, quality, etc.)
+            if (appData.presetParams) {
+                for (const [key, val] of Object.entries(appData.presetParams)) {
+                    if (!(key in params)) {
+                        params[key] = val;
+                    }
+                }
+                appData.presetParams = null; // Clear after use
+            }
             
             const payload = {
                 model_id: modelId,
@@ -3135,22 +3151,36 @@
                     <div class="page-title">📋 История генераций</div>
                 </div>
                 ${history.map(h => {
+                    const urls = h.result_urls && h.result_urls.length > 0 ? h.result_urls : (h.result_url ? [h.result_url] : []);
+                    const mainUrl = urls[0] || '';
+                    const isReady = ['success', 'completed', 'delivered', 'result_validated'].includes(h.status) || mainUrl;
+                    const isVideo = mainUrl && (mainUrl.includes('.mp4') || mainUrl.includes('video'));
+                    const isAudio = mainUrl && (mainUrl.includes('.mp3') || mainUrl.includes('.wav') || mainUrl.includes('audio'));
                     let statusText = '⏳ В процессе';
                     let statusClass = '';
-                    if (h.result_url) {
+                    if (isReady && mainUrl) {
                         statusText = '✅ Готово';
-                    } else if (h.status === 'failed' || h.error) {
+                    } else if (h.status === 'failed' || h.status === 'canceled' || h.error_message) {
                         const errorMsg = h.error_message || h.error || '';
                         const shortError = errorMsg.length > 50 ? errorMsg.slice(0, 50) + '...' : errorMsg;
-                        statusText = '❌ ' + (shortError || 'Ошибка');
+                        statusText = h.status === 'canceled' ? '🚫 Отменено' : ('❌ ' + (shortError || 'Ошибка'));
                         statusClass = 'color: #ff6b6b;';
                     }
+                    const displayName = h.model_name || h.model_id || 'Неизвестно';
+                    let thumbHtml = '<div class="history-thumb" style="display:flex;align-items:center;justify-content:center;font-size:24px;">🎨</div>';
+                    if (mainUrl && isVideo) {
+                        thumbHtml = '<div class="history-thumb" style="display:flex;align-items:center;justify-content:center;font-size:24px;">🎬</div>';
+                    } else if (mainUrl && isAudio) {
+                        thumbHtml = '<div class="history-thumb" style="display:flex;align-items:center;justify-content:center;font-size:24px;">🎵</div>';
+                    } else if (mainUrl) {
+                        thumbHtml = `<img class="history-thumb" src="${mainUrl}" onerror="this.outerHTML='<div class=\\'history-thumb\\' style=\\'display:flex;align-items:center;justify-content:center;font-size:24px;\\'>🎨</div>'" />`;
+                    }
                     return `
-                    <div class="history-item" onclick="${h.result_url ? `window.open('${h.result_url}', '_blank')` : ''}">
-                        ${h.result_url ? `<img class="history-thumb" src="${h.result_url}" />` : '<div class="history-thumb"></div>'}
+                    <div class="history-item" onclick="${mainUrl ? `window.open('${mainUrl}', '_blank')` : ''}">
+                        ${thumbHtml}
                         <div class="history-info">
-                            <div class="history-model">${h.model_id || 'Неизвестно'}</div>
-                            <div class="history-status" style="${statusClass}">${statusText}</div>
+                            <div class="history-model">${displayName}</div>
+                            <div class="history-status" style="${statusClass}">${statusText}${urls.length > 1 ? ` (${urls.length} файлов)` : ''}</div>
                             <div class="history-date">${h.created_at || ''}</div>
                         </div>
                     </div>
