@@ -882,6 +882,51 @@
         "SSOT has unmapped pricing entries (missing param schema)."
       ],
       "found_skus": []
+    },
+    "kling-2.6/motion-control": {
+      "status": "MISSING_PARAM_SCHEMA",
+      "issues": ["New model, pricing pending."],
+      "found_skus": []
+    },
+    "wan/2-6-text-to-video": {
+      "status": "READY",
+      "issues": [],
+      "found_skus": []
+    },
+    "runway/aleph": {
+      "status": "MISSING_PARAM_SCHEMA",
+      "issues": ["New model, pricing pending."],
+      "found_skus": []
+    },
+    "elevenlabs/tts-turbo-2-5": {
+      "status": "MISSING_PARAM_SCHEMA",
+      "issues": ["New model, pricing pending."],
+      "found_skus": []
+    },
+    "elevenlabs/tts-multilingual-v2": {
+      "status": "MISSING_PARAM_SCHEMA",
+      "issues": ["New model, pricing pending."],
+      "found_skus": []
+    },
+    "elevenlabs/sound-effect-v2": {
+      "status": "MISSING_PARAM_SCHEMA",
+      "issues": ["New model, pricing pending."],
+      "found_skus": []
+    },
+    "elevenlabs/text-to-dialogue-v3": {
+      "status": "MISSING_PARAM_SCHEMA",
+      "issues": ["New model, pricing pending."],
+      "found_skus": []
+    },
+    "gpt-image/1.5-text-to-image": {
+      "status": "READY",
+      "issues": [],
+      "found_skus": []
+    },
+    "gpt-image/1.5-image-to-image": {
+      "status": "READY",
+      "issues": [],
+      "found_skus": []
     }
   }
 }

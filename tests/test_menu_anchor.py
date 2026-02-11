@@ -11,6 +11,7 @@ import bot_kie
 from bot_kie import UI_CONTEXT_MAIN_MENU, button_callback
 
 MAIN_MENU_BUTTONS = [
+    "🔥 Топ модели",
     "⚡ Бесплатные генерации",
     "🖼️ Текст → Фото",
     "🧩 Редактор фото",

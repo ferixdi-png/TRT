@@ -130,8 +130,25 @@ def validate_payload(
             return len(value) == 0
         return False
 
+    # Build reverse alias map: normalized_name -> original field names in payload
+    try:
+        from app.kie_catalog.input_schemas import normalize_field_name as _norm
+    except ImportError:
+        _norm = None
+
+    def _field_present(name: str) -> bool:
+        if name in payload and not _is_empty_required(payload.get(name)):
+            return True
+        # Check if any payload key normalizes to the same name as this field
+        if _norm is not None:
+            target = _norm(name)
+            for k in payload:
+                if _norm(k) == target and not _is_empty_required(payload.get(k)):
+                    return True
+        return False
+
     for field in fields:
-        if field.required and (field.name not in payload or _is_empty_required(payload.get(field.name))):
+        if field.required and not _field_present(field.name):
             errors.append(f"{field.name} is required")
 
     for key, value in payload.items():

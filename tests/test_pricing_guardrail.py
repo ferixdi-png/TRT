@@ -49,6 +49,7 @@ async def test_start_returns_menu_on_failure(harness, monkeypatch):
         raise RuntimeError("pricing failed")
 
     monkeypatch.setattr(bot_kie, "show_main_menu", _boom)
+    monkeypatch.setattr(bot_kie, "has_user_language_set", lambda uid: True)
     harness.add_handler(CommandHandler("start", bot_kie.start))
     result = await harness.process_command("/start", user_id=12345)
     assert result["success"] is True

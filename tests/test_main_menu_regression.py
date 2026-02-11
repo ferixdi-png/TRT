@@ -20,6 +20,7 @@ class TestMainMenuRegression:
         
         # Ожидаемая структура кнопок согласно эталону (обновлено 2026-02-03)
         expected_buttons = [
+            "🔥 Топ модели",
             "⚡ Бесплатные генерации",
             "🖼️ Текст → Фото", 
             "🧩 Редактор фото",
@@ -41,7 +42,9 @@ class TestMainMenuRegression:
             assert button.text == expected_text, f"Row {i}: expected '{expected_text}', got '{button.text}'"
             
             # Проверяем callback_data
-            if expected_text == "⚡ Бесплатные генерации":
+            if expected_text == "🔥 Топ модели":
+                assert button.callback_data == "top_models"
+            elif expected_text == "⚡ Бесплатные генерации":
                 assert button.callback_data == "fast_tools"
             elif expected_text == "🖼️ Текст → Фото":
                 assert button.callback_data == "gen_type:text-to-image"
@@ -70,6 +73,7 @@ class TestMainMenuRegression:
         
         # Ожидаемая структура кнопок согласно эталону (обновлено 2026-02-03)
         expected_buttons = [
+            "🔥 Top models",
             "⚡ Free generations",
             "🖼️ Text → Photo",
             "🧩 Photo editor", 
@@ -91,7 +95,9 @@ class TestMainMenuRegression:
             assert button.text == expected_text, f"Row {i}: expected '{expected_text}', got '{button.text}'"
             
             # Проверяем callback_data (аналогично русской версии)
-            if expected_text == "⚡ Free generations":
+            if expected_text == "🔥 Top models":
+                assert button.callback_data == "top_models"
+            elif expected_text == "⚡ Free generations":
                 assert button.callback_data == "fast_tools"
             elif expected_text == "🖼️ Text → Photo":
                 assert button.callback_data == "gen_type:text-to-image"
@@ -125,6 +131,7 @@ class TestMainMenuRegression:
                 # Проверяем что callback_data соответствует ожидаемым паттернам
                 button = row[0]
                 valid_callbacks = [
+                    "top_models",
                     "fast_tools",
                     "special_tools", 
                     "check_balance",
@@ -152,6 +159,7 @@ class TestMainMenuRegression:
             # Проверяем порядок для русского языка (обновлено 2026-02-03)
             if lang == "ru":
                 expected_order = [
+                    "🔥 Топ модели",
                     "⚡ Бесплатные генерации",
                     "🖼️ Текст → Фото",
                     "🧩 Редактор фото", 
@@ -165,6 +173,7 @@ class TestMainMenuRegression:
             # Проверяем порядок для английского языка (обновлено 2026-02-03)
             else:
                 expected_order = [
+                    "🔥 Top models",
                     "⚡ Free generations",
                     "🖼️ Text → Photo",
                     "🧩 Photo editor",

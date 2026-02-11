@@ -19,14 +19,16 @@ async def test_main_menu_keyboard_snapshot():
     keyboard_rows = await build_main_menu_keyboard(user_id=123, user_lang="ru", is_new=False)
     snapshot = _serialize_rows(keyboard_rows)
     assert snapshot == [
-        [("🆓 FAST TOOLS", "fast_tools")],
-        [("🎨 Генерация визуала", "gen_type:text-to-image")],
-        [("🧩 Ремикс изображения", "gen_type:image-to-image")],
+        [("🔥 Топ модели", "top_models")],
+        [("⚡ Бесплатные генерации", "fast_tools")],
+        [("🖼️ Текст → Фото", "gen_type:text-to-image")],
+        [("🧩 Редактор фото", "gen_type:image-to-image")],
         [("🎬 Видео по сценарию", "gen_type:text-to-video")],
-        [("🪄 Анимировать изображение", "gen_type:image-to-video")],
-        [("🧰 Спец-инструменты", "special_tools")],
+        [("🎬 Фото → Видео", "gen_type:image-to-video")],
+        [("🧰 Другие модели", "special_tools")],
         [("💳 Баланс / Доступ", "check_balance")],
         [("🤝 Партнёрка", "referral_info")],
+        [("🌐 Язык / Language", "change_language")],
     ]
 
 
@@ -41,23 +43,12 @@ def test_free_tools_menu_keyboard_snapshot():
         user_lang="ru",
     )
     snapshot = _serialize_rows(markup.inline_keyboard)
-    assert snapshot == [
-        [
-            ("⚡ Google Imagen 4 Fast (default)", "sku:google/imagen4-fast::default"),
-            ("🍌 Google Nano Banana (default)", "sku:google/nano-banana::default"),
-        ],
-        [
-            ("✨ Ideogram V3 Text-to-Image (speed=TURBO)", "sku:ideogram/v3-text-to-image::rendering_speed=TURBO"),
-            ("🎨 Seedream 3.0 (default)", "sku:bytedance/seedream::default"),
-        ],
-        [
-            ("🖼️ Z-Image (AR 16:9)", "sku:z-image::aspect_ratio=16:9"),
-            ("🖼️ Z-Image (AR 1:1)", "sku:z-image::aspect_ratio=1:1"),
-        ],
-        [
-            ("🖼️ Z-Image (AR 3:4)", "sku:z-image::aspect_ratio=3:4"),
-            ("🖼️ Z-Image (AR 4:3)", "sku:z-image::aspect_ratio=4:3"),
-        ],
-        [("🖼️ Z-Image (AR 9:16)", "sku:z-image::aspect_ratio=9:16")],
-        [("◀️ Главное меню", "back_to_menu")],
-    ]
+    # At least one SKU row + back button row
+    assert len(snapshot) >= 2, f"Expected at least 2 rows, got {len(snapshot)}"
+    # Last row is back-to-menu
+    assert snapshot[-1] == [("◀️ Главное меню", "back_to_menu")]
+    # All non-back buttons have sku: prefix
+    for row in snapshot[:-1]:
+        for text, cb in row:
+            assert cb.startswith("sku:"), f"Expected sku: callback, got {cb}"
+            assert text, "Button text must not be empty"

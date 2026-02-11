@@ -6567,6 +6567,80 @@ def _validate_ideogram_character(
     return True, None
 
 
+def _validate_bytedance_v1_lite_text_to_video(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """
+    Специфичная валидация для bytedance/v1-lite-text-to-video.
+    Параметры аналогичны pro-версии.
+    """
+    if model_id not in ["bytedance/v1-lite-text-to-video", "bytedance-v1-lite-text-to-video", "v1-lite-text-to-video"]:
+        return True, None
+
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации видео. Введите текстовое описание."
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 10000:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 10000)"
+
+    aspect_ratio = normalized_input.get('aspect_ratio')
+    if aspect_ratio is not None:
+        valid_aspect_ratios = ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"]
+        if aspect_ratio not in valid_aspect_ratios:
+            return False, f"Поле 'aspect_ratio' должно быть одним из: {', '.join(valid_aspect_ratios)} (получено: {aspect_ratio})"
+
+    resolution = normalized_input.get('resolution')
+    if resolution is not None:
+        valid_resolutions = ["480p", "720p", "1080p"]
+        if resolution not in valid_resolutions:
+            return False, f"Поле 'resolution' должно быть одним из: 480p, 720p, 1080p (получено: {resolution})"
+
+    duration = normalized_input.get('duration')
+    if duration is not None:
+        if isinstance(duration, str):
+            if duration not in ["5", "10"]:
+                return False, f"Поле 'duration' должно быть одним из: 5, 10 (получено: {duration})"
+            normalized_input['duration'] = duration
+        elif isinstance(duration, (int, float)):
+            if duration not in [5, 10]:
+                return False, f"Поле 'duration' должно быть одним из: 5, 10 (получено: {duration})"
+            normalized_input['duration'] = str(int(duration))
+        else:
+            return False, f"Поле 'duration' должно быть строкой или числом (получено: {duration})"
+
+    camera_fixed = normalized_input.get('camera_fixed')
+    if camera_fixed is not None:
+        normalized_bool = _normalize_boolean(camera_fixed)
+        if normalized_bool is None:
+            return False, f"Поле 'camera_fixed' должно быть boolean (true/false) (получено: {camera_fixed})"
+        normalized_input['camera_fixed'] = normalized_bool
+
+    seed = normalized_input.get('seed')
+    if seed is not None:
+        try:
+            seed_num = int(float(seed))
+            if seed_num < -1 or seed_num > 2147483647:
+                return False, f"Поле 'seed' должно быть в диапазоне от -1 до 2147483647 (получено: {seed})"
+            normalized_input['seed'] = seed_num
+        except (ValueError, TypeError):
+            return False, f"Поле 'seed' должно быть числом (получено: {seed})"
+
+    enable_safety_checker = normalized_input.get('enable_safety_checker')
+    if enable_safety_checker is not None:
+        normalized_bool = _normalize_boolean(enable_safety_checker)
+        if normalized_bool is None:
+            return False, f"Поле 'enable_safety_checker' должно быть boolean (true/false) (получено: {enable_safety_checker})"
+        normalized_input['enable_safety_checker'] = normalized_bool
+
+    return True, None
+
+
 def _validate_bytedance_v1_pro_text_to_video(
     model_id: str,
     normalized_input: Dict[str, Any]
@@ -7064,6 +7138,124 @@ def _normalize_duration_for_hailuo_2_3_pro(value: Any) -> Optional[str]:
         return "10"
     
     return None
+
+
+def _validate_hailuo_02_text_to_video_standard(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """Валидация для hailuo/02-text-to-video-standard (t2v вариант без image_url)."""
+    if model_id not in ["hailuo/02-text-to-video-standard", "hailuo/02-t2v-standard", "hailuo/0.2-text-to-video-standard"]:
+        return True, None
+
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации видео. Введите текстовое описание."
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 1500:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 1500)"
+
+    duration = normalized_input.get('duration')
+    if duration is not None:
+        normalized_duration = _normalize_duration_for_hailuo_2_3_pro(duration)
+        if normalized_duration is None:
+            return False, f"Поле 'duration' должно быть одним из: 6, 10 (получено: {duration})"
+        normalized_input['duration'] = normalized_duration
+
+    resolution = normalized_input.get('resolution')
+    if resolution is not None:
+        normalized_resolution = _normalize_resolution_for_hailuo_02_standard(resolution)
+        if normalized_resolution is None:
+            return False, f"Поле 'resolution' должно быть одним из: 512P, 768P (получено: {resolution})"
+        normalized_input['resolution'] = normalized_resolution
+
+    return True, None
+
+
+def _validate_hailuo_02_text_to_video_pro(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """Валидация для hailuo/02-text-to-video-pro (t2v вариант без image_url)."""
+    if model_id not in ["hailuo/02-text-to-video-pro", "hailuo/02-t2v-pro", "hailuo/0.2-text-to-video-pro"]:
+        return True, None
+
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации видео. Введите текстовое описание."
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 1500:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 1500)"
+
+    prompt_optimizer = normalized_input.get('prompt_optimizer')
+    if prompt_optimizer is not None:
+        normalized_bool = _normalize_boolean(prompt_optimizer)
+        if normalized_bool is None:
+            return False, f"Поле 'prompt_optimizer' должно быть boolean (true/false) (получено: {prompt_optimizer})"
+        normalized_input['prompt_optimizer'] = normalized_bool
+
+    return True, None
+
+
+def _validate_kling_v2_5_turbo_text_to_video_pro(
+    model_id: str,
+    normalized_input: Dict[str, Any]
+) -> Tuple[bool, Optional[str]]:
+    """Валидация для kling/v2-5-turbo-text-to-video-pro (t2v вариант без image_url)."""
+    if model_id not in ["kling/v2-5-turbo-text-to-video-pro", "kling/v2-5-turbo-t2v-pro", "kling/v2.5-turbo-text-to-video-pro"]:
+        return True, None
+
+    prompt = normalized_input.get('prompt')
+    if not prompt:
+        return False, "Поле 'prompt' обязательно для генерации видео. Введите текстовое описание."
+    if not isinstance(prompt, str):
+        prompt = str(prompt)
+    prompt_len = len(prompt.strip())
+    if prompt_len == 0:
+        return False, "Поле 'prompt' не может быть пустым"
+    if prompt_len > 2500:
+        return False, f"Поле 'prompt' слишком длинное: {prompt_len} символов (максимум 2500)"
+
+    duration = normalized_input.get('duration')
+    if duration is not None:
+        normalized_duration = _normalize_duration_for_kling_v2_5_turbo(duration)
+        if normalized_duration is None:
+            return False, f"Поле 'duration' должно быть одним из: 5, 10 (получено: {duration})"
+        normalized_input['duration'] = normalized_duration
+
+    negative_prompt = normalized_input.get('negative_prompt')
+    if negative_prompt is not None:
+        if not isinstance(negative_prompt, str):
+            negative_prompt = str(negative_prompt)
+        if len(negative_prompt.strip()) > 2496:
+            return False, f"Поле 'negative_prompt' слишком длинное: {len(negative_prompt.strip())} символов (максимум 2496)"
+        normalized_input['negative_prompt'] = negative_prompt.strip()
+
+    cfg_scale = normalized_input.get('cfg_scale')
+    if cfg_scale is not None:
+        try:
+            cfg_val = float(cfg_scale)
+            if cfg_val < 0 or cfg_val > 1:
+                return False, f"Поле 'cfg_scale' должно быть от 0 до 1 (получено: {cfg_scale})"
+            normalized_input['cfg_scale'] = round(cfg_val, 1)
+        except (ValueError, TypeError):
+            return False, f"Поле 'cfg_scale' должно быть числом от 0 до 1 (получено: {cfg_scale})"
+
+    aspect_ratio = normalized_input.get('aspect_ratio')
+    if aspect_ratio is not None:
+        valid_ratios = ["16:9", "9:16", "1:1"]
+        if aspect_ratio not in valid_ratios:
+            return False, f"Поле 'aspect_ratio' должно быть одним из: {', '.join(valid_ratios)} (получено: {aspect_ratio})"
+
+    return True, None
 
 
 def _validate_hailuo_02_image_to_video_standard(

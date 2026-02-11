@@ -69,8 +69,10 @@ async def test_tenant_isolation_by_bot_instance_id(monkeypatch):
     async def get_pool_b():
         return FakePool(conn_b)
 
-    storage_alpha._get_pool = get_pool_a
-    storage_beta._get_pool = get_pool_b
+    storage_alpha._ensure_pool = get_pool_a
+    storage_beta._ensure_pool = get_pool_b
+    storage_alpha._reset_circuit()
+    storage_beta._reset_circuit()
 
     await storage_alpha._save_json_unlocked("user_balances.json", {"1": 5})
     await storage_beta._save_json_unlocked("user_balances.json", {"1": 7})

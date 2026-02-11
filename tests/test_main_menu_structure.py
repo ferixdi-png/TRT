@@ -49,6 +49,7 @@ async def test_main_menu_has_all_required_buttons():
     
     # Ожидаемые кнопки в порядке от эталона (обновлено 2026-02-03)
     expected_buttons = [
+        ("top_models", "🔥 Топ модели"),
         ("fast_tools", "⚡ Бесплатные генерации"),
         ("gen_type:text-to-image", "🖼️ Текст → Фото"),
         ("gen_type:image-to-image", "🧩 Редактор фото"),

@@ -24,7 +24,7 @@ async def test_e2e_main_menu_click_through(harness):
     result = await harness.process_command("/start", user_id=user_id)
     assert result["success"]
 
-    for callback in ["check_balance", "show_models", "all_models", "help_menu", "support_contact"]:
+    for callback in ["check_balance", "top_models", "fast_tools", "referral_info", "change_language"]:
         result = await harness.process_callback(callback, user_id=user_id)
         assert result["success"]
         payload = _last_payload(result["outbox"])

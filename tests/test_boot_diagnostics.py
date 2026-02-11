@@ -49,7 +49,7 @@ async def test_boot_report_ok_minimal_env(monkeypatch):
     config = {
         "ADMIN_ID": "123456",
         "BOT_INSTANCE_ID": "partner-01",
-        "TELEGRAM_BOT_TOKEN": "TEST_TOKEN_PLACEHOLDER",
+        "TELEGRAM_BOT_TOKEN": "123456789:ABCDEFghijklmnopqrstuvwxyz1234",
         "WEBHOOK_BASE_URL": "https://example.com",
         "DATABASE_URL": "postgresql://example",
         "BOT_MODE": "polling",
@@ -65,7 +65,7 @@ async def test_boot_report_ok_minimal_env(monkeypatch):
 
     report = await boot_diagnostics.run_boot_diagnostics(config, storage=FakeStorage(), redis_client=FakeRedis())
 
-    assert report["result"] == boot_diagnostics.RESULT_READY
+    assert report["result"] == boot_diagnostics.RESULT_READY, f"critical_failures={report.get('critical_failures')}"
     assert report["sections"]["DATABASE"]["status"] == boot_diagnostics.STATUS_OK
     assert report["sections"]["REDIS"]["status"] == boot_diagnostics.STATUS_OK
 
@@ -97,7 +97,7 @@ async def test_boot_report_degraded_no_redis_no_kie(monkeypatch):
     config = {
         "ADMIN_ID": "123456",
         "BOT_INSTANCE_ID": "partner-01",
-        "TELEGRAM_BOT_TOKEN": "TEST_TOKEN_PLACEHOLDER",
+        "TELEGRAM_BOT_TOKEN": "123456789:ABCDEFghijklmnopqrstuvwxyz1234",
         "WEBHOOK_BASE_URL": "https://example.com",
         "DATABASE_URL": "postgresql://example",
         "BOT_MODE": "polling",
@@ -106,7 +106,7 @@ async def test_boot_report_degraded_no_redis_no_kie(monkeypatch):
 
     report = await boot_diagnostics.run_boot_diagnostics(config, storage=FakeStorage(), redis_client=None)
 
-    assert report["result"] == boot_diagnostics.RESULT_DEGRADED
+    assert report["result"] == boot_diagnostics.RESULT_DEGRADED, f"critical_failures={report.get('critical_failures')}"
     assert report["sections"]["REDIS"]["status"] == boot_diagnostics.STATUS_DEGRADED
     assert report["sections"]["AI"]["status"] == boot_diagnostics.STATUS_DEGRADED
 
