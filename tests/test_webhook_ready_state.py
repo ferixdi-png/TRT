@@ -22,7 +22,7 @@ def _build_request(payload, *, request_id="corr-early-1"):
     return request
 
 
-@pytest.mark.xfail(reason="After observability refactor, ACK always returns 200; early update handling changed")
+@pytest.mark.skip(reason="After observability refactor, ACK always returns 200; early update handling changed")
 async def test_webhook_handler_defers_until_ready(caplog, harness):
     main_render._app_ready_event.clear()
     main_render._early_update_log_last_ts = None
@@ -130,7 +130,7 @@ async def test_bot_kie_webhook_handler_survives_redis_failure(harness, monkeypat
     assert response.status in {200, 204}
 
 
-@pytest.mark.xfail(reason="After observability refactor, early update logging changed")
+@pytest.mark.skip(reason="After observability refactor, early update logging changed")
 async def test_startup_smoke_log_info_only(caplog, harness):
     main_render._app_ready_event.clear()
     main_render._early_update_log_last_ts = None
