@@ -5,6 +5,10 @@ window.C=[
 {id:'alex',name:'Алекс',brand:'',avatar:'А',instagram:{handle:'@alabai_ai',url:'https://www.instagram.com/alabai_ai'},youtube:{handle:'@AlabAi_ai',url:'https://www.youtube.com/@AlabAi_ai'}},
 {id:'alexey-sukaflex',name:'Алексей',brand:'Sukaflex',avatar:'А',instagram:{handle:'@sukaflex_',url:'https://www.instagram.com/sukaflex_/'},youtube:{handle:'@sukaflexx',url:'https://youtube.com/@sukaflexx'}},
 {id:'alexey-reel-estate',name:'Алексей',brand:'Reel Estate',avatar:'А',instagram:{handle:'@reel.estate.tv',url:'https://www.instagram.com/reel.estate.tv'},youtube:{handle:'@reel.estate.shorts',url:'https://www.youtube.com/@reel.estate.shorts'}},
-{id:'olga',name:'Ольга',brand:'',avatar:'О',instagram:{handle:'@o.la.doll',url:'https://www.instagram.com/o.la.doll'},youtube:{handle:'@O.la.Doll6',url:'https://www.youtube.com/@O.la.Doll6'}},
-{id:'inna',name:'Инна',brand:'',avatar:'И',instagram:{handle:'@reindeer.2851777',url:'https://www.instagram.com/reindeer.2851777'}}
+{id:'olga-doll',name:'Ольга',brand:'O.la.Doll',avatar:'О',instagram:{handle:'@o.la.doll',url:'https://www.instagram.com/o.la.doll'},youtube:{handle:'@O.la.Doll6',url:'https://www.youtube.com/@O.la.Doll6'}},
+{id:'inna',name:'Инна',brand:'',avatar:'И',instagram:{handle:'@reindeer.2851777',url:'https://www.instagram.com/reindeer.2851777'}},
+{id:'andrey',name:'Андрей',brand:'MKS Cosmos',avatar:'А',instagram:{handle:'@mkscosmos',url:'https://www.instagram.com/mkscosmos'},youtube:{handle:'@mempets',url:'https://youtube.com/@mempets'}},
+{id:'vitaliy',name:'Виталий',brand:'Vit 7774',avatar:'В',instagram:{handle:'@vit.7774',url:'https://www.instagram.com/vit.7774'},youtube:{handle:'@Vit-7774',url:'https://www.youtube.com/@Vit-7774'}},
+{id:'olga-channel',name:'Ольга',brand:'YouTube',avatar:'О',youtube:{handle:'UCgsitMwZFwFptYQsW_q07mg',url:'https://youtube.com/channel/UCgsitMwZFwFptYQsW_q07mg'}},
+{id:'alexey-smart',name:'Алексей',brand:'Alex Smart',avatar:'А',instagram:{handle:'@alex_smart71',url:'https://www.instagram.com/alex_smart71'},youtube:{handle:'@AlexSmart-71',url:'https://www.youtube.com/@AlexSmart-71'}}
 ];
