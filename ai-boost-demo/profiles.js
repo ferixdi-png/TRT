@@ -6,7 +6,7 @@ window.C=[
 {id:'alexey-sukaflex',name:'Алексей',brand:'Sukaflex',avatar:'А',instagram:{handle:'@sukaflex_',url:'https://www.instagram.com/sukaflex_/'},youtube:{handle:'@sukaflexx',url:'https://youtube.com/@sukaflexx'}},
 {id:'alexey-reel-estate',name:'Алексей',brand:'Reel Estate',avatar:'А',instagram:{handle:'@reel.estate.tv',url:'https://www.instagram.com/reel.estate.tv'},youtube:{handle:'@reel.estate.shorts',url:'https://www.youtube.com/@reel.estate.shorts'}},
 {id:'olga',name:'Ольга',brand:'O.la.Doll',avatar:'О',instagram:{handle:'@o.la.doll',url:'https://www.instagram.com/o.la.doll'},youtube:{handle:'UCgsitMwZFwFptYQsW_q07mg',url:'https://youtube.com/channel/UCgsitMwZFwFptYQsW_q07mg'}},
-{id:'inna',name:'Инна',brand:'',avatar:'И',instagram:{handle:'@reindeer.2851777',url:'https://www.instagram.com/reindeer.2851777'}},
+{id:'inna',name:'Инна',brand:'',avatar:'И',instagram:{handle:'@reindeer.2851777',url:'https://www.instagram.com/reindeer.2851777'},youtube:{handle:'@Улыбнемсядружно',url:'https://www.youtube.com/@%D0%A3%D0%BB%D1%8B%D0%B1%D0%BD%D0%B5%D0%BC%D1%81%D1%8F%D0%B4%D1%80%D1%83%D0%B6%D0%BD%D0%BE'}},
 {id:'andrey',name:'Андрей',brand:'MKS Cosmos',avatar:'А',instagram:{handle:'@mkscosmos',url:'https://www.instagram.com/mkscosmos'},youtube:{handle:'@mempets',url:'https://youtube.com/@mempets'}},
 {id:'vitaliy',name:'Виталий',brand:'Vit 7774',avatar:'В',instagram:{handle:'@vit.7774',url:'https://www.instagram.com/vit.7774'},youtube:{handle:'@Vit-7774',url:'https://www.youtube.com/@Vit-7774'}},
 {id:'alexey-smart',name:'Алексей',brand:'Alex Smart',avatar:'А',instagram:{handle:'@alex_smart71',url:'https://www.instagram.com/alex_smart71'},youtube:{handle:'@AlexSmart-71',url:'https://www.youtube.com/@AlexSmart-71'}}
